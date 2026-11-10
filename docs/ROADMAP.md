@@ -51,6 +51,7 @@ This is the brief the project started from.
 | The robot stops where you let go | Finishing every step on the middle of a tile was tried and rejected: a small thumb movement should not move a whole block. |
 | A turn takes the next opening ahead | Turning to the nearest opening sometimes sent the robot back the way it came. |
 | The pad can be matched to a player's thumb | Quick swipes lean, by an amount that differs from person to person. |
+| Match my thumb version 1 is kept, not deleted | Its document is `docs/MATCH-MY-THUMB-V1.md` and its code is on the branch `match-my-thumb-v1`. Do not delete that branch. |
 | Match my thumb tests its result and keeps the best of: the setting before, one lean, a lean per direction | Simulation showed a lean per direction alone is not a clear improvement, so each player's own test swipes decide. A change has to beat the setting already in use. |
 | Robots start at 2.55 tiles a second, about 69% of the original speed; each speed power-up adds 0.37 tiles a second, up to six | The game started too fast, so the speed was halved, then tuned in play-testing (+25%, +12.5%, −2.5%). Speed is something you earn by collecting power-ups. |
 | The menu's Swipe pad box has two clearly separate settings: Swipe length (Short, Medium, Long) and Swipe direction (Match my thumb) | Five unexplained levels were hard to choose between, and it was not clear whether Match my thumb overrode them. It does not. |

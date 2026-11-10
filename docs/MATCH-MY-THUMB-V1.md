@@ -1,6 +1,6 @@
 # Match my thumb, version 1
 
-> **This is the first version, kept for reference.** The game now uses [version 2](MATCH-MY-THUMB.md), which adds a lean per direction and a test round that keeps whichever setting reads you best. Version 1's code is preserved in the git tag [`match-my-thumb-v1`](https://github.com/codybakerxx/BomberBot/tree/match-my-thumb-v1). This page is as it was then, apart from this note and the picture paths. Its numbers, file names and functions describe version 1; the menu wording and walking speed have also changed since.
+> **This is the first version, kept for reference.** The game now uses [version 2](MATCH-MY-THUMB.md), which adds a lean per direction and a test round that keeps whichever setting reads you best. Version 1's code is preserved on the branch [`match-my-thumb-v1`](https://github.com/codybakerxx/BomberBot/tree/match-my-thumb-v1). This page is as it was then, apart from this note and the picture paths. Its numbers, file names and functions describe version 1; the menu wording and walking speed have also changed since.
 
 Match my thumb teaches the swipe pad how *your* swipes point. You make twelve swipes, it measures how far they lean away from straight, and from then on the pad reads your swipes with that lean allowed for.
 

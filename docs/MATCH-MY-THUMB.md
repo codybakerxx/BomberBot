@@ -8,7 +8,7 @@ Match my thumb teaches the swipe pad how *your* swipes point. You make twelve sw
   <img src="screenshots/match-result.png" alt="The result: three settings, each with how many test swipes it read right and its closest call" width="230">
 </p>
 
-This is version 2. Version 1 measured one lean and used it straight away, with no test. Version 1 is still described in [MATCH-MY-THUMB-V1.md](MATCH-MY-THUMB-V1.md), and its code is kept in the git tag [`match-my-thumb-v1`](https://github.com/codybakerxx/BomberBot/tree/match-my-thumb-v1).
+This is version 2. Version 1 measured one lean and used it straight away, with no test. Version 1 is still described in [MATCH-MY-THUMB-V1.md](MATCH-MY-THUMB-V1.md), and its code is kept on the branch [`match-my-thumb-v1`](https://github.com/codybakerxx/BomberBot/tree/match-my-thumb-v1). The branch [`match-my-thumb-v2`](https://github.com/codybakerxx/BomberBot/tree/match-my-thumb-v2) keeps the game as it was when version 2 arrived.
 
 ## The problem it solves
 
