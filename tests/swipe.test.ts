@@ -182,6 +182,17 @@ import { SwipePad, DEFAULT_TILT } from '../src/swipe';
   rest(200);
   assert.equal(got.length, 1);
 
+  // the pad reads each direction around its own aim when given one per direction
+  fresh(0);
+  stroke(120); // between left (180) and up (90), nearer up
+  assert.equal(pad.dir, 1);
+  fresh(0);
+  pad.aims = [0, 90, 270, 140, 0]; // left aimed 40 degrees clockwise, the others straight
+  stroke(120); // now nearer left's aim than up's (the border sits at 115)
+  assert.equal(pad.dir, 3);
+  stroke(270);
+  assert.equal(pad.dir, 2, 'and the other directions still read as before');
+
   // the menu setting scales the quiet zone
   fresh();
   pad.scale = 0.6;

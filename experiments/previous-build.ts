@@ -3,7 +3,10 @@
  * rework, kept only so the experiments can compare old against new.
  * Nothing in the game uses this file.
  */
-import { World, Player, Dir, DX, DY, FLOOR, BASE_SPEED, tileAt } from '../src/sim';
+import { World, Player, Dir, DX, DY, FLOOR, tileAt } from '../src/sim';
+
+/** walking speed at the time, in tiles per tick (it was halved later) */
+const PREVIOUS_SPEED = 0.062;
 
 const OPPOSITE: Dir[] = [0, 2, 1, 4, 3];
 
@@ -113,7 +116,7 @@ export class PreviousPad {
  * back. (No bombs are handled here; the experiments use empty arenas.)
  */
 export function previousMove(w: World, p: Player, dir: Dir): void {
-  const sp = BASE_SPEED;
+  const sp = PREVIOUS_SPEED;
   const dx = DX[dir];
   const dy = DY[dir];
   const tx = Math.round(p.x);

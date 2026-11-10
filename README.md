@@ -46,7 +46,7 @@ Power-ups are hidden under some bricks:
 | Boot | Run into a bomb to kick it sliding away |
 | Glove | Lift a bomb with B and throw it. A lifted bomb goes off after 3 seconds, even in your hands |
 
-If the pad sometimes reads your swipes as the wrong direction, open the menu and tap **Match my thumb**. It takes twelve swipes and about 20 seconds. [How it works](docs/MATCH-MY-THUMB.md).
+If the pad sometimes reads your swipes as the wrong direction, open the menu and tap **Match my thumb**. Twelve swipes measure how yours lean, eight more test the result, and it keeps whichever setting reads you best. It takes about 40 seconds. [How it works](docs/MATCH-MY-THUMB.md).
 
 The full rules are in [docs/GAME-RULES.md](docs/GAME-RULES.md).
 
@@ -74,7 +74,7 @@ More, including how to play your own build on your phone: [docs/HOW-TO.md](docs/
 src/
   sim.ts        the game rules: arena, movement, bombs, blasts, power-ups, who wins
   swipe.ts      the swipe pad: turns thumb movement into up, down, left or right
-  teach.ts      the maths behind Match my thumb
+  teach.ts      the maths behind Match my thumb: measuring, testing, choosing
   input.ts      keyboard and touch wiring
   render.ts     all the drawing
   audio.ts      sound effects
@@ -95,7 +95,8 @@ CLAUDE.md       notes for working on this project with Claude
 | [docs/HOW-TO.md](docs/HOW-TO.md) | Running, building, testing, changing things, sharing the game |
 | [docs/GAME-RULES.md](docs/GAME-RULES.md) | Every rule of play, with the numbers |
 | [docs/CONTROLS.md](docs/CONTROLS.md) | The touch layout, how the swipe pad reads a thumb, how turning works |
-| [docs/MATCH-MY-THUMB.md](docs/MATCH-MY-THUMB.md) | What Match my thumb measures and how the pad uses it |
+| [docs/MATCH-MY-THUMB.md](docs/MATCH-MY-THUMB.md) | What Match my thumb measures, how it tests the result, and how the pad uses it (version 2, in the game now) |
+| [docs/MATCH-MY-THUMB-V1.md](docs/MATCH-MY-THUMB-V1.md) | The first version of Match my thumb, kept for reference |
 | [docs/CODE-GUIDE.md](docs/CODE-GUIDE.md) | How the code is organised, file by file |
 | [docs/ROADMAP.md](docs/ROADMAP.md) | What is planned, and the decisions made so far |
 | [experiments/README.md](experiments/README.md) | The simulations behind the control tuning, and what they showed |

@@ -66,14 +66,14 @@ Plain-words version: [GAME-RULES.md](GAME-RULES.md).
 | `poll(t)` | Call regularly so it notices a thumb that has stopped moving |
 | `dir` | The direction it currently reads: 0 none, 1 up, 2 down, 3 left, 4 right |
 | `scale` | Size of the quiet zone (the menu setting) |
-| `tilt` | How far its four directions lean, in degrees clockwise |
+| `aims` | The screen angle each direction is read around (index 1 to 4). Setting `tilt` instead leans all four the same number of degrees clockwise. |
 | `onStroke` | Callback used by Match my thumb to measure swipes |
 
 Plain-words version: [CONTROLS.md](CONTROLS.md).
 
 ### `src/teach.ts`: Match my thumb maths
 
-Four small pure functions and a list: `leanOf` (how far one swipe leans), `summarise` (average a dozen), `tiltFor` (the lean the pad should use), and `TEACH_ORDER` (the directions asked for). Explained in [MATCH-MY-THUMB.md](MATCH-MY-THUMB.md).
+Small pure functions in three groups. Measuring: `leanOf` (how far one swipe leans) and `summarise` (average a dozen, overall and per direction). Building settings: `tiltFor` (the lean the pad should use), `singleAims` and `perDirectionAims`. Testing: `marginOf` (how far inside its quarter a swipe sits), `judge` (read the test swipes with a setting) and `pickBest`. Plus the two lists of directions asked for, `TEACH_ORDER` and `TEST_ORDER`. The shared aim maths (`STRAIGHT`, `uniformAims`, `aimScore`, `nearestDir`) lives in `swipe.ts`. Explained in [MATCH-MY-THUMB.md](MATCH-MY-THUMB.md).
 
 ### `src/input.ts`: keyboard and touch wiring
 
@@ -106,7 +106,7 @@ Everything that ties the game to the page:
 - the top bar (`drawHud`)
 - the menu and bot picker (`buildPicker`, `start`, `toMenu`), and the result panel (`finish`)
 - the D-pad settings (`settings`, `applySettings`)
-- the Match my thumb screen (`startTeach`, `teachStroke`, `finishTeach`)
+- the Match my thumb screen (`startTeach`, `teachStroke`, `finishLearning`, `finishTesting`, `closeTeach`)
 
 It holds no game rules.
 
@@ -152,8 +152,8 @@ Bundles `src/main.ts` with esbuild, pastes it into `src/page.html`, and writes `
 | File | Covers |
 |---|---|
 | `tests/rules.test.ts` | The arena, walking and stopping, bombs and blasts, power-ups, chain reactions, kicking, lifting and throwing, winning, turning at openings, repeatability from a seed, and 45,000 ticks of random play that must never leave a robot inside a block or jittering |
-| `tests/swipe.test.ts` | The pad: when a stroke starts, wiggles, drift and bounce-back ignored, turns and reverses mid-swipe, leaning swipes read correctly from every starting direction, the stroke reports Match my thumb relies on |
-| `tests/teach.test.ts` | Measuring a lean, averaging, rejecting scattered swipes, the three-quarters rule and its limits |
+| `tests/swipe.test.ts` | The pad: when a stroke starts, wiggles, drift and bounce-back ignored, turns and reverses mid-swipe, leaning swipes read correctly from every starting direction, the stroke reports Match my thumb relies on, a separate aim per direction |
+| `tests/teach.test.ts` | Measuring a lean, averaging, rejecting scattered swipes, the three-quarters rule and its limits, the two candidate settings, that a straight swipe always keeps 20° of room, judging test swipes, and choosing the winner |
 
 To add a check, copy a block in the nearest file and change what it sets up and what it asserts.
 

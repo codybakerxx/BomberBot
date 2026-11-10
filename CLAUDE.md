@@ -35,9 +35,10 @@ Do not undo these unless asked. The reasons are in `docs/ROADMAP.md` and `docs/C
 - Battle royale only. No story mode.
 - Controls: see-through swipe pad on the left, B above A on the right. Swipe from wherever the thumb is; keep it down to keep moving; lift to stop.
 - The robot stops where you let go. Whole-tile stepping was tried and rejected (`stepAssist` exists in `sim.ts` but stays off, with no menu setting).
-- A resting thumb has a quiet zone; small movements, slow drift and bounce-back are ignored.
+- A resting thumb has a quiet zone; small movements, slow drift and bounce-back are ignored. Its size is the menu's Swipe length: Short, Medium (default) or Long. Swipe length and Match my thumb are independent settings, and the menu says so.
 - A turn takes the next opening ahead. The robot never doubles back to one it has passed, beyond half a tile.
-- Swipe directions are read in a leaning frame: 15° by default, or measured by Match my thumb.
+- Swipe directions are read around a leaning aim per direction: 15° for all four by default. Match my thumb learns from 12 swipes, tests on 8 more, and keeps the best of the setting before, one lean, or a lean per direction.
+- Robots start at 2.55 tiles a second (`BASE_SPEED` 0.04250390625: the original speed halved, then tuned +25%, +12.5%, −2.5%). Each speed power-up adds 0.37 tiles a second (`SPEED_STEP` 0.0062), up to six. Kicked bombs slide at 0.14 tiles a tick, 30% slower than the original 0.2.
 - Kicking needs the boot. Lifting needs the glove. A lifted bomb has 3 seconds, keeps ticking, and the timer is set at the first lift only.
 - Robots are about one tile in size. Bricks and solid blocks fill their tile. Power-ups are a full tile of pulsing colour.
 

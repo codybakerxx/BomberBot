@@ -2,8 +2,9 @@
 Retakes the screenshots used in the documentation (docs/screenshots/).
 
 It opens the built game in a phone-sized browser window, drives it with
-simulated touches and key presses, and saves five pictures: the menu, a round
-in progress, the two Match my thumb screens, and the sideways layout.
+simulated touches and key presses, and saves the pictures: the menu and its
+Swipe pad box, a round in progress, the Match my thumb screens, and the
+sideways layout.
 
 This is optional tooling, not part of the game. It needs Python 3 with the
 "playwright" package and a Chrome or Chromium browser:
@@ -29,8 +30,10 @@ OUT = ROOT / "docs" / "screenshots"
 
 # screen angle of each direction (1 up, 2 down, 3 left, 4 right), anticlockwise from "right"
 ANGLE = {1: 90, 2: 270, 3: 180, 4: 0}
-# the order Match my thumb asks for (TEACH_ORDER in src/teach.ts)
-ORDER = [3, 1, 4, 2, 4, 3, 2, 1, 3, 2, 1, 4]
+REPORT_TEXT = None
+# the order Match my thumb asks for: twelve learning swipes, then eight test swipes
+# (TEACH_ORDER and TEST_ORDER in src/teach.ts)
+ORDER = [3, 1, 4, 2, 4, 3, 2, 1, 3, 2, 1, 4] + [2, 4, 1, 3, 3, 1, 4, 2]
 
 
 class Thumb:
@@ -89,8 +92,10 @@ async def main():
         # --- upright phone: menu
         context, page = await phone(browser, 393, 740)
         await page.screenshot(path=str(OUT / "menu.png"))
+        await page.locator(".tune").screenshot(path=str(OUT / "menu-settings.png"))
 
-        # --- Match my thumb: the prompt, then twelve swipes leaning 30 degrees clockwise
+        # --- Match my thumb: the prompt, then twenty swipes leaning about 30 degrees clockwise.
+        # Sideways swipes lean a little more than up and down ones, as many thumbs do.
         await page.tap("#matchStart")
         await page.wait_for_timeout(200)
         cdp = await context.new_cdp_session(page)
@@ -98,15 +103,25 @@ async def main():
         await thumb.down()
         await page.wait_for_timeout(200)
         await page.screenshot(path=str(OUT / "match-prompt.png"))
-        wobble = [5, -6, 3, -2, 7, -4, 0, 6, -7, 2, -3, 4]
-        for want, extra in zip(ORDER, wobble):
+        wobble = [5, -6, 3, -2, 7, -4, 0, 6, -7, 2, -3, 4, -5, 3, 6, -2, 4, -6, 1, -3]
+        extra_lean = {1: -6, 2: -6, 3: 6, 4: 6}
+        for i, (want, extra) in enumerate(zip(ORDER, wobble)):
             await thumb.drift_to(130, 600)
             await page.wait_for_timeout(220)
-            await thumb.stroke(ANGLE[want] - 30 + extra)
+            await thumb.stroke(ANGLE[want] - 30 - extra_lean[want] + extra)
             await page.wait_for_timeout(260)
+            if i == 12:
+                await page.screenshot(path=str(OUT / "match-test.png"))
         await thumb.up()
         await page.wait_for_timeout(200)
         await page.screenshot(path=str(OUT / "match-result.png"))
+        global REPORT_TEXT
+        REPORT_TEXT = await page.evaluate(
+            """() => {
+              const t = document.getElementById('teach'), c = t.querySelector('.teach-card');
+              return { text: c.innerText.replace(/\\n+/g, ' | '), panel: t.clientHeight, content: c.scrollHeight };
+            }"""
+        )
         await page.tap("#teachClose")
         await page.tap("#matchReset")  # leave the saved setting as standard
 
@@ -150,6 +165,8 @@ async def main():
         await context.close()
         await browser.close()
     print("saved", ", ".join(sorted(f.name for f in OUT.glob("*.png"))))
+    if os.environ.get("REPORT"):
+        print("result panel:", REPORT_TEXT)
 
 
 asyncio.run(main())

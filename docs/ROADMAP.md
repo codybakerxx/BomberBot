@@ -8,7 +8,7 @@ Each step is played on a phone before the next one starts.
 
 | Step | What | Status |
 |---|---|---|
-| 1 | **One level.** The arena, movement, bombs, blasts, bricks, power-ups and the touch controls. | Done, and it grew: kicking, lifting and throwing, and Match my thumb were added along the way. |
+| 1 | **One level.** The arena, movement, bombs, blasts, bricks, power-ups and the touch controls. | Done, and it grew: kicking, lifting and throwing, and Match my thumb (now version 2) were added along the way. |
 | 2 | **Computer players.** The other bots move, avoid blasts and fight back, so the game can be played alone. | Next |
 | 3 | **Round flow.** Last one standing wins, blocks fall to shrink the arena as time runs out, and a results screen. | Planned |
 | 4 | **Menus.** A proper character select, a colour picker, level select, and choosing which power-ups are in a custom game. | Planned |
@@ -51,6 +51,10 @@ This is the brief the project started from.
 | The robot stops where you let go | Finishing every step on the middle of a tile was tried and rejected: a small thumb movement should not move a whole block. |
 | A turn takes the next opening ahead | Turning to the nearest opening sometimes sent the robot back the way it came. |
 | The pad can be matched to a player's thumb | Quick swipes lean, by an amount that differs from person to person. |
+| Match my thumb tests its result and keeps the best of: the setting before, one lean, a lean per direction | Simulation showed a lean per direction alone is not a clear improvement, so each player's own test swipes decide. A change has to beat the setting already in use. |
+| Robots start at 2.55 tiles a second, about 69% of the original speed; each speed power-up adds 0.37 tiles a second, up to six | The game started too fast, so the speed was halved, then tuned in play-testing (+25%, +12.5%, −2.5%). Speed is something you earn by collecting power-ups. |
+| The menu's Swipe pad box has two clearly separate settings: Swipe length (Short, Medium, Long) and Swipe direction (Match my thumb) | Five unexplained levels were hard to choose between, and it was not clear whether Match my thumb overrode them. It does not. |
+| A kicked bomb slides 30% slower than at first (8.4 tiles a second instead of 12) | Asked for together with the slower walking. |
 | Kicking needs the boot, lifting needs the glove | They are power-ups to find, not abilities everyone starts with. |
 | A lifted bomb has 3 seconds and keeps ticking | The fuse does not pause in your hands. The 3 seconds start at the first lift only, so a bomb cannot be kept alive by lifting it again. |
 | Robots are about one tile in size, with a ring on the tile they stand on | So it is clear where the robot is relative to the blocks when hiding from a blast. |
@@ -59,6 +63,8 @@ This is the brief the project started from.
 
 ## Still open
 
+- **Match my thumb: separate settings for upright and sideways.** The thumb sweeps a different arc in each grip. Liked, not built yet.
+- **Swap sides.** Pad on the right and A and B on the left, for left-handed players. The standard lean would flip to 15° anticlockwise for that layout, and each side would keep its own match. Liked, not built yet; worth doing when a left-handed friend wants to play.
 - **Setting bombs off by remote.** B was also meant to detonate. How that should work has not been decided.
 - **The final colours.** The arena is in blues for now. The look is to be revisited.
 - **More arenas.** Only the one layout style exists.

@@ -76,7 +76,7 @@ Every number has a name. Change the value, then run `npm run check`.
 | How often each power-up appears | The percentages in `createWorld` | `src/sim.ts` |
 | How many bricks the arena starts with | `softDensity` default in `createWorld` (0.78) | `src/sim.ts` |
 | How far a thumb must move | The constants near the top | `src/swipe.ts` |
-| The five levels of the D-pad setting | `ZONE_LEVELS` | `src/main.ts` |
+| The three Swipe length choices and their descriptions | `ZONE_LEVELS` and `ZONE_WORDS` | `src/main.ts` |
 
 The meaning of each one is listed in [GAME-RULES.md](GAME-RULES.md) and [CONTROLS.md](CONTROLS.md).
 
@@ -167,7 +167,7 @@ python3 tools/screenshots.py
 | No on-screen controls | You are on a computer without a touch screen. That is intended: use the keyboard. |
 | No sound | Browsers stay silent until the first tap or key press. On some phones the game also goes quiet when the silent switch is on. |
 | The robot reads your swipes as the wrong direction | Run **Match my thumb** from the menu. See [MATCH-MY-THUMB.md](MATCH-MY-THUMB.md). |
-| The robot reacts to tiny thumb movements, or needs too big a swipe | Change **Ignore small thumb movements while holding** in the menu. |
+| The robot reacts to tiny thumb movements, or needs too big a swipe | Change **Swipe length** in the menu's Swipe pad box: Long ignores bigger movements, Short reacts to smaller ones. |
 | Your settings are gone | They are saved per browser, per device. A different browser, a private window or cleared site data starts fresh. |
 | You changed the code and nothing looks different | Run `npm run build` again, then reload the page. |
 | `npm run build` says the marker is missing | `src/page.html` must still contain `/*__BUNDLE__*/` inside its last `<script>` tag. That is where the code goes. |

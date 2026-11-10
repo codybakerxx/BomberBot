@@ -13,8 +13,20 @@ import { createWorld, step, World, PlayerInput, Dir, TICK_HZ, DEATH_TICKS } from
 import { COLORS, colorById, drawRobot, drawStatic, drawDynamic, drawItemIcon } from './render';
 import { Input } from './input';
 import { initAudio, sfx } from './audio';
-import { DEFAULT_TILT } from './swipe';
-import { TEACH_ORDER, leanOf, summarise, tiltFor } from './teach';
+import { DEFAULT_TILT, STRAIGHT, uniformAims } from './swipe';
+import {
+  TEACH_ORDER,
+  TEST_ORDER,
+  TestSwipe,
+  ThumbSummary,
+  judge,
+  leanOf,
+  perDirectionAims,
+  pickBest,
+  singleAims,
+  summarise,
+  tiltFor,
+} from './teach';
 
 /** Look up an element of src/page.html by its id. */
 const $ = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T;
@@ -36,14 +48,51 @@ try {
 }
 
 // D-pad feel, adjustable from the menu and remembered on this device under the key "controls2".
-// `zone` is the size of the quiet zone as a percentage (the five menu buttons Least to Most).
-const ZONE_LEVELS = [60, 80, 100, 125, 150];
-/** `lean` is how far this player's swipes lean clockwise, measured by Match my thumb; null until then. */
-const settings: { zone: number; lean: number | null } = { zone: 100, lean: null };
+// `zone` is the size of the quiet zone as a percentage: the three Swipe length buttons, Short, Medium and Long.
+const ZONE_LEVELS = [70, 100, 140];
+/** What each Swipe length choice means, shown under the buttons. */
+const ZONE_WORDS: Record<number, string> = {
+  70: 'Turns with a small swipe. Quickest to react, but a wobble of your thumb can turn you.',
+  100: 'Recommended. Turns with a medium swipe and ignores small wobbles.',
+  140: 'Turns only with a longer swipe. Best if the robot turns when you did not mean it to.',
+};
+
+/** The result of Match my thumb that is in use. */
+interface ThumbMatch {
+  /** one lean for all four directions, or a lean for each */
+  kind: 'single' | 'per';
+  /** the measured average lean, and per direction (index 1 to 4), for display */
+  lean: number;
+  by: number[];
+  /** what the pad uses: the screen angle each direction is read around (index 1 to 4) */
+  aims: number[];
+}
+/** `match` is null until Match my thumb has been run and kept: the pad then uses the standard lean. */
+const settings: { zone: number; match: ThumbMatch | null } = { zone: 100, match: null };
+
+/** Aims that are safe to use: each within the limits tiltFor allows of its straight direction. */
+function validAims(a: unknown): a is number[] {
+  if (!Array.isArray(a) || a.length !== 5) return false;
+  for (let d = 1; d <= 4; d++) {
+    const lean = (((STRAIGHT[d] - a[d] + 180) % 360) + 360) % 360 - 180;
+    if (typeof a[d] !== 'number' || !Number.isFinite(a[d]) || lean < -20.5 || lean > 25.5) return false;
+  }
+  return true;
+}
+
 try {
   const saved = JSON.parse(localStorage.getItem('controls2') ?? 'null');
-  if (saved && ZONE_LEVELS.includes(saved.zone)) settings.zone = saved.zone;
-  if (saved && typeof saved.lean === 'number' && Math.abs(saved.lean) <= 60) settings.lean = saved.lean;
+  if (saved && typeof saved.zone === 'number') {
+    // earlier versions had five levels (60, 80, 100, 125, 150): use the nearest of the three
+    settings.zone = ZONE_LEVELS.reduce((a, b) => (Math.abs(b - saved.zone) < Math.abs(a - saved.zone) ? b : a));
+  }
+  const sm = saved?.match;
+  if (sm && (sm.kind === 'single' || sm.kind === 'per') && validAims(sm.aims) && typeof sm.lean === 'number' && Array.isArray(sm.by)) {
+    settings.match = { kind: sm.kind, lean: sm.lean, by: sm.by, aims: sm.aims };
+  } else if (saved && typeof saved.lean === 'number' && Math.abs(saved.lean) <= 60) {
+    // saved by version 1 of Match my thumb: one measured lean
+    settings.match = { kind: 'single', lean: saved.lean, by: [0, saved.lean, saved.lean, saved.lean, saved.lean], aims: uniformAims(tiltFor(saved.lean)) };
+  }
 } catch {
   /* storage is optional */
 }
@@ -263,15 +312,21 @@ function buildPicker(): void {
 /** Push the D-pad settings into the swipe pad and the menu, and optionally save them. */
 function applySettings(save: boolean): void {
   input.pad.scale = settings.zone / 100;
-  input.pad.tilt = settings.lean === null ? DEFAULT_TILT : tiltFor(settings.lean);
-  $('matchState').textContent = settings.lean === null ? 'Swipe directions: standard' : 'Swipe directions: matched to your thumb';
-  $('matchReset').hidden = settings.lean === null;
+  input.pad.aims = settings.match ? [...settings.match.aims] : uniformAims(DEFAULT_TILT);
+  $('matchState').textContent = !settings.match
+    ? 'Standard, set for a typical left thumb. Match my thumb measures yours in about 40 seconds.'
+    : settings.match.kind === 'per'
+      ? 'Matched to your thumb, with a lean for each direction.'
+      : 'Matched to your thumb, with one lean for all four directions.';
+  $('matchReset').hidden = !settings.match;
+  $('optZoneDesc').textContent = ZONE_WORDS[settings.zone] ?? '';
   for (const b of document.querySelectorAll<HTMLElement>('#optZone button')) {
     b.setAttribute('aria-pressed', String(Number(b.dataset.v) === settings.zone));
   }
   if (!save) return;
   try {
-    localStorage.setItem('controls2', JSON.stringify(settings));
+    // `lean` is kept alongside for version 1 of the game, which reads only that
+    localStorage.setItem('controls2', JSON.stringify({ ...settings, lean: settings.match?.lean ?? null }));
   } catch {
     /* storage is optional */
   }
@@ -284,24 +339,42 @@ for (const b of document.querySelectorAll<HTMLElement>('#optZone button')) {
 }
 
 // ---------------------------------------------------------------- Match my thumb
-// Twelve prompted swipes measure how this player's swipes lean (teach.ts does the
-// maths). The panel covers only the arena so the swipe pad stays usable under it.
-// docs/MATCH-MY-THUMB.md explains the whole feature.
+// Twelve prompted swipes measure how this player's swipes lean; eight more test
+// the result. teach.ts does the maths. The panel covers only the arena so the
+// swipe pad stays usable under it. docs/MATCH-MY-THUMB.md explains the feature.
 
 const DIR_WORD = ['', 'Up', 'Down', 'Left', 'Right'];
 const ARROW_TURN = [0, -90, 90, 180, 0];
+
+/** learn: the twelve swipes. test: the eight. done: the result is showing. */
+let teachPhase: 'learn' | 'test' | 'done' = 'learn';
 let teachAt = 0;
-let teachSamples: { want: Dir; lean: number }[] = [];
+let learnSamples: { want: Dir; lean: number }[] = [];
+let testSwipes: TestSwipe[] = [];
+let teachSum: ThumbSummary | null = null;
+/** the three settings the test compares: the one in use before, one lean, a lean per direction */
+let candidates: { label: string; match: ThumbMatch | null; aims: number[] }[] = [];
+let chosen = 0;
+
+function teachOrder(): Dir[] {
+  return teachPhase === 'test' ? TEST_ORDER : TEACH_ORDER;
+}
 
 /** Show the next direction to swipe, with an optional note about the last attempt. */
 function teachPrompt(note = ''): void {
-  const want = TEACH_ORDER[teachAt];
-  $('teachStep').textContent = `Swipe ${teachAt + 1} of ${TEACH_ORDER.length}`;
+  const order = teachOrder();
+  const want = order[teachAt];
+  $('teachStep').textContent =
+    teachPhase === 'test' ? `Test swipe ${teachAt + 1} of ${order.length}` : `Swipe ${teachAt + 1} of ${order.length}`;
   $('teachWord').textContent = DIR_WORD[want];
   $('teachArrow').style.transform = `rotate(${ARROW_TURN[want]}deg)`;
-  $('teachArrow').style.visibility = 'visible';
+  $('teachArrow').style.display = ''; // an svg has no `hidden` property, so use display
   $('teachHint').textContent =
-    note || 'Keep your thumb on the pad and swipe the way you do when playing. If the arrow does not change, swipe a little further.';
+    note ||
+    (teachPhase === 'test'
+      ? 'Now a few more to test the result. Swipe the same quick way.'
+      : 'Keep your thumb on the pad and swipe the way you do when playing. If the arrow does not change, swipe a little further.');
+  $('teachChoices').hidden = true;
   $('teachNums').hidden = true;
   $('teachAgain').hidden = true;
   $('teachClose').textContent = 'Cancel';
@@ -309,8 +382,11 @@ function teachPrompt(note = ''): void {
 
 function startTeach(): void {
   mode = 'teach';
+  teachPhase = 'learn';
   teachAt = 0;
-  teachSamples = [];
+  learnSamples = [];
+  testSwipes = [];
+  teachSum = null;
   menu.hidden = true;
   result.hidden = true;
   teach.hidden = false;
@@ -319,8 +395,9 @@ function startTeach(): void {
 
 /** A swipe registered on the pad while matching. */
 function teachStroke(vx: number, vy: number): void {
-  if (mode !== 'teach' || teachAt >= TEACH_ORDER.length) return;
-  const want = TEACH_ORDER[teachAt];
+  if (mode !== 'teach' || teachPhase === 'done') return;
+  const order = teachOrder();
+  const want = order[teachAt];
   if (Math.hypot(vx, vy) < 20) {
     teachPrompt(`That one was very short. Swipe ${DIR_WORD[want].toLowerCase()} a little further.`);
     return;
@@ -330,42 +407,118 @@ function teachStroke(vx: number, vy: number): void {
     teachPrompt(`That read as a different direction. Swipe ${DIR_WORD[want].toLowerCase()} again.`);
     return;
   }
-  teachSamples.push({ want, lean });
+  if (teachPhase === 'learn') learnSamples.push({ want, lean });
+  else testSwipes.push({ want, vx, vy });
   teachAt++;
-  if (teachAt < TEACH_ORDER.length) teachPrompt();
-  else finishTeach();
+  if (teachAt < order.length) {
+    teachPrompt();
+    return;
+  }
+  if (teachPhase === 'learn') finishLearning();
+  else finishTesting();
 }
 
-/** All twelve swipes are in: work out the lean, apply and save it if they were consistent, show the numbers. */
-function finishTeach(): void {
-  const sum = summarise(teachSamples);
-  $('teachStep').textContent = '';
-  $('teachArrow').style.visibility = 'hidden';
-  if (sum.ok) {
-    settings.lean = sum.lean;
-    applySettings(true);
-    $('teachWord').textContent = 'Matched';
-    $('teachHint').textContent =
-      Math.abs(sum.lean) < 4
-        ? 'Your swipes are close to straight. The pad now reads them that way.'
-        : `Your swipes lean about ${Math.abs(sum.lean)}° ${sum.lean > 0 ? 'clockwise' : 'anticlockwise'} from straight. The pad now reads them that way.`;
-  } else {
-    $('teachWord').textContent = 'No match';
-    $('teachHint').textContent = 'Those swipes pointed too many different ways to learn from, so nothing was changed.';
+/** The twelve learning swipes are in: work out the two candidate settings, then start the test. */
+function finishLearning(): void {
+  const sum = summarise(learnSamples);
+  teachSum = sum;
+  if (!sum.ok) {
+    teachPhase = 'done';
+    showTeachEnd('No match', 'Those swipes pointed too many different ways to learn from, so nothing was changed.');
+    $('teachNums').textContent = `Spread ${sum.spread}°. Up to 30° can be used.`;
+    $('teachNums').hidden = false;
+    return;
   }
-  const nums = $('teachNums');
-  nums.textContent = `Left ${sum.by[3]}°, right ${sum.by[4]}°, up ${sum.by[1]}°, down ${sum.by[2]}°. Spread ${sum.spread}°. Pad lean ${input.pad.tilt}°.`;
-  nums.hidden = false;
+  const before = settings.match;
+  candidates = [
+    {
+      label: before ? 'Before (last match)' : 'Before (standard)',
+      match: before,
+      aims: before ? [...before.aims] : uniformAims(DEFAULT_TILT),
+    },
+    { label: 'One lean', match: { kind: 'single', lean: sum.lean, by: sum.by, aims: singleAims(sum) }, aims: singleAims(sum) },
+    {
+      label: 'A lean per direction',
+      match: { kind: 'per', lean: sum.lean, by: sum.by, aims: perDirectionAims(sum) },
+      aims: perDirectionAims(sum),
+    },
+  ];
+  teachPhase = 'test';
+  teachAt = 0;
+  testSwipes = [];
+  teachPrompt();
+}
+
+/** The eight test swipes are in: read them with each candidate and offer the best. */
+function finishTesting(): void {
+  teachPhase = 'done';
+  const verdicts = candidates.map((c) => judge(c.aims, testSwipes));
+  chosen = pickBest(verdicts);
+  const sum = teachSum!;
+  const leanWords =
+    Math.abs(sum.lean) < 4
+      ? 'Your swipes are close to straight.'
+      : `Your swipes lean about ${Math.abs(sum.lean)}° ${sum.lean > 0 ? 'clockwise' : 'anticlockwise'}.`;
+  showTeachEnd(
+    'Tested',
+    chosen === 0
+      ? `${leanWords} The setting you already had read your test swipes best, so it stays unless you pick another.`
+      : `${leanWords} The best result is selected. Tap another to use it instead.`,
+  );
+  const list = $('teachChoices');
+  list.textContent = '';
+  candidates.forEach((c, i) => {
+    const v = verdicts[i];
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'choice';
+    b.setAttribute('aria-pressed', String(i === chosen));
+    const name = document.createElement('span');
+    name.textContent = c.label;
+    const score = document.createElement('span');
+    score.className = 'score';
+    score.textContent = v.right === v.total ? `${v.right} of ${v.total} · closest ${Math.round(v.closest)}°` : `${v.right} of ${v.total}`;
+    b.append(name, score);
+    b.addEventListener('click', () => {
+      chosen = i;
+      for (const el of list.querySelectorAll('.choice')) el.setAttribute('aria-pressed', String(el === b));
+    });
+    list.append(b);
+  });
+  list.hidden = false;
+  $('teachNums').textContent = `Lean: left ${sum.by[3]}°, right ${sum.by[4]}°, up ${sum.by[1]}°, down ${sum.by[2]}°. Spread ${sum.spread}°.`;
+  $('teachNums').hidden = false;
+}
+
+/** The final panel: a title and a message, the arrow hidden, Try again and Done. */
+function showTeachEnd(title: string, text: string): void {
+  $('teachStep').textContent = '';
+  $('teachArrow').style.display = 'none';
+  $('teachWord').textContent = title;
+  $('teachHint').textContent = text;
+  $('teachChoices').hidden = true;
   $('teachAgain').hidden = false;
   $('teachClose').textContent = 'Done';
+}
+
+/** Done or Cancel: keep the chosen setting if a test has just finished, then back to the menu. */
+function closeTeach(): void {
+  if (teachPhase === 'done' && teachSum?.ok && candidates.length) {
+    const pick = candidates[chosen];
+    if (chosen !== 0) {
+      settings.match = pick.match;
+      applySettings(true);
+    }
+  }
+  toMenu();
 }
 
 input.pad.onStroke = teachStroke;
 $('matchStart').addEventListener('click', startTeach);
 $('teachAgain').addEventListener('click', startTeach);
-$('teachClose').addEventListener('click', () => toMenu());
+$('teachClose').addEventListener('click', closeTeach);
 $('matchReset').addEventListener('click', () => {
-  settings.lean = null;
+  settings.match = null;
   applySettings(true);
 });
 

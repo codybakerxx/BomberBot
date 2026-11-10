@@ -70,27 +70,41 @@ Whichever of up, down, left and right the leg points nearest to. Three details m
 
 - **The whole leg is judged**, not a few pixels of it. A first stroke that registered at 14 px is still being read until it is 36 px long. If the longer look clearly disagrees with the first read, the direction is corrected.
 - **The robot's current direction plays no part.** The same swipe always gives the same answer. (An earlier version favoured the axis the robot was already moving along, which made sideways swipes read as up or down.)
-- **"Nearest" is measured in a frame that leans.** A thumb pivots at its base, so quick swipes lean: with a left thumb, left drifts up and right drifts down. The pad's four directions lean 15° clockwise by default to allow for that, and [Match my thumb](MATCH-MY-THUMB.md) sets the lean to fit one player. The lean changes only which direction a stroke counts as. It never changes how far the thumb has to travel.
+- **"Nearest" is measured against aims that lean.** A thumb pivots at its base, so quick swipes lean: with a left thumb, left drifts up and right drifts down. Each direction has an *aim*, the screen angle its swipes are expected to point at, and a stroke counts as the direction it is aimed nearest to. By default all four aims lean 15° clockwise. [Match my thumb](MATCH-MY-THUMB.md) can replace that with one lean measured for the player, or a lean for each direction. The aims change only which direction a stroke counts as. They never change how far the thumb has to travel.
 
 ### Nothing is lost between frames
 
 The game reads the controls 60 times a second. A quick flick or a tap on A or B can begin and end between two of those readings. `src/input.ts` remembers any new direction or button press until the game has read it once, so even the shortest tap counts.
 
-## The setting in the menu
+## The settings in the menu
 
-**Ignore small thumb movements while holding** changes the size of the quiet zone. The sideways and reverse distances scale with it.
+The menu has a **Swipe pad** box (on touch screens only) with two separate settings.
 
-| Setting | Quiet zone | Sideways turn mid-swipe | Reverse mid-swipe |
-|---|---|---|---|
-| Least | 18 px | 14 px | 18 px |
-| Less | 24 px | 19 px | 24 px |
-| **Normal** | **30 px** | **24 px** | **30 px** |
-| More | 37.5 px | 30 px | 37.5 px |
-| Most | 45 px | 36 px | 45 px |
+<p align="center"><img src="screenshots/menu-settings.png" alt="The Swipe pad box: Swipe length with Short, Medium and Long, then Swipe direction with Match my thumb" width="300"></p>
 
-Choose a lower setting if turns feel slow to register, and a higher one if the robot reacts to movements you did not mean. On a phone, 5 to 6 px is about one millimetre.
+### Swipe length
 
-The setting, and the result of Match my thumb, are saved in the browser on that device. They do not travel with the game to another phone.
+How far you have to swipe to turn while your thumb is held down. It sets the size of the quiet zone; the sideways and reverse distances scale with it.
+
+| Choice | What it means | Quiet zone | Sideways turn mid-swipe | Reverse mid-swipe |
+|---|---|---|---|---|
+| Short | Turns with a small swipe. Quickest to react, but a wobble of your thumb can turn you. | 21 px | 17 px | 21 px |
+| **Medium** | Recommended. Turns with a medium swipe and ignores small wobbles. | **30 px** | **24 px** | **30 px** |
+| Long | Turns only with a longer swipe. Best if the robot turns when you did not mean it to. | 42 px | 34 px | 42 px |
+
+On a phone, 5 to 6 px is about one millimetre. The first swipe after touching down always needs only 14 px, whatever the choice, so starting off stays quick.
+
+The game used to offer five levels (Least, Less, Normal, More, Most). A setting saved with those is moved to the nearest of the three: Least and Less become Short, More and Most become Long.
+
+### Swipe direction
+
+Which of up, down, left and right each swipe counts as. It shows whether the pad is using the standard setting (15° for a typical left thumb) or one measured by [Match my thumb](MATCH-MY-THUMB.md), with the button to run it and, once matched, **Use standard** to go back.
+
+### How the two relate
+
+They are independent. Swipe length decides *when* a movement counts as a swipe; swipe direction decides *which way* it counts. Match my thumb never changes the swipe length, and changing the swipe length never undoes a match. The box says so in its last line.
+
+Both are saved in the browser on that device. They do not travel with the game to another phone.
 
 ## Turning in the maze
 
@@ -110,16 +124,16 @@ Every distance is a named constant at the top of `src/swipe.ts`.
 | Constant | Value | What it controls | Symptom it fixes |
 |---|---|---|---|
 | `START` | 14 px | Thumb travel before the first direction after touching down | Lower: starting feels sluggish. Higher: the robot sets off when you only rested your thumb. |
-| `QUIET` | 30 px | Radius of the quiet zone at Normal | Lower: turns need too much travel. Higher: small movements turn the robot. |
+| `QUIET` | 30 px | Radius of the quiet zone at Medium | Lower: turns need too much travel. Higher: small movements turn the robot. |
 | `TURN` | 0.8 | Sideways break needed mid-swipe, as a share of `QUIET` | Lower: "left, then down" in one motion is slow to turn. Higher: sloppy strokes cause turns. |
 | `REVISE_UNTIL` | 36 px | How long a stroke is still being read | Higher: more early mistakes get corrected, but corrections come later. |
 | `REVISE_MARGIN` | 0.2 | How clearly the longer look must disagree to overrule the first read | Lower: more corrections. Higher: fewer. |
 | `SETTLE_PX`, `SETTLE_MS` | 6 px, 120 ms | When a thumb counts as resting | Together they set the slowest movement that still counts as a stroke: about 50 px a second. |
-| `DEFAULT_TILT` | 15° | Lean used until Match my thumb has been run | See [MATCH-MY-THUMB.md](MATCH-MY-THUMB.md). |
+| `DEFAULT_TILT` | 15° | Lean of all four aims until Match my thumb has been run | See [MATCH-MY-THUMB.md](MATCH-MY-THUMB.md). |
 
-The five menu levels are `ZONE_LEVELS` in `src/main.ts` (60, 80, 100, 125 and 150 percent of `QUIET`).
+The three Swipe length choices are `ZONE_LEVELS` in `src/main.ts` (70, 100 and 140 percent of `QUIET`), with their descriptions in `ZONE_WORDS`.
 
-After changing anything here, run `npm test`. `tests/swipe.test.ts` replays made-up thumb paths through the pad and checks the results: wiggles ignored, drift ignored, bounce-back ignored, real swipes read, leaning swipes read correctly from every starting direction.
+After changing anything here, run `npm test`. `tests/swipe.test.ts` replays made-up thumb paths through the pad and checks the results: wiggles ignored, drift ignored, bounce-back ignored, real swipes read, leaning swipes read correctly from every starting direction, and a separate aim per direction honoured.
 
 ## How it got this way
 
@@ -129,5 +143,6 @@ The controls went through several rounds of play-testing on a phone. Each round 
 2. **Small movements were too sensitive.** Direction was judged from the last 14 px of movement, so a wiggle could flip it, and the rebound after a flick could reverse it. The quiet zone, the resting rule and the bounce-back rule came from this.
 3. **Whole-tile stepping was tried and removed.** Making every swipe finish on the middle of a tile was rejected in play-testing: a small movement should not move a whole block. The code for it is still in `sim.ts` (`stepAssist`) but it is switched off and has no setting.
 4. **"I go up instead of left."** Two causes were found. The robot doubled back to the nearest opening when a turn was swiped early, which the next-opening-ahead rule fixed. And sideways swipes were misread while the robot was moving up or down, which the unbiased, leaning read fixed. Match my thumb was added in the same round.
+5. **Match my thumb version 2.** A lean per direction and a test round were added. Simulation showed a lean per direction alone is roughly a wash, so the test round decides, on each player's own swipes, whether it is used.
 
 The simulations used to compare the old and new behaviour are in [`experiments/`](../experiments/README.md).

@@ -7,7 +7,25 @@
  * Run with: npm test
  */
 import assert from 'node:assert';
-import { createWorld, step, World, PlayerInput, Dir, FLOOR, SOFT, HARD, FUSE_TICKS, FLAME_TICKS, tileAt, makeRng } from '../src/sim';
+import {
+  createWorld,
+  step,
+  World,
+  PlayerInput,
+  Dir,
+  FLOOR,
+  SOFT,
+  HARD,
+  FUSE_TICKS,
+  FLAME_TICKS,
+  BASE_SPEED,
+  SPEED_STEP,
+  MAX_SPEED_ITEMS,
+  KICK_SPEED,
+  playerSpeed,
+  tileAt,
+  makeRng,
+} from '../src/sim';
 
 /** no direction, no buttons */
 const none: PlayerInput = { dir: 0, a: false, b: false };
@@ -15,6 +33,13 @@ const none: PlayerInput = { dir: 0, a: false, b: false };
 const run = (w: World, n: number, inp: PlayerInput = none): void => {
   for (let i = 0; i < n; i++) step(w, [inp]);
 };
+/**
+ * Many checks below were written when robots walked at 0.062 tiles a tick.
+ * ticks() scales a tick count from then to the current walking speed, so the
+ * robot covers the same distance whatever BASE_SPEED is.
+ */
+const ticks = (n: number): number => Math.round((n * 0.062) / BASE_SPEED);
+
 /** a two-player world with no bricks unless a density is given: player 0 top-left, player 1 bottom-right */
 const mk = (density = 0): World =>
   createWorld({ seed: 7, players: [{ colorId: 'gold' }, { colorId: 'blue' }], softDensity: density });
@@ -38,15 +63,15 @@ const mk = (density = 0): World =>
 // 2. movement: walk right along the top row, stop at the wall, exactly centred
 {
   const w = mk();
-  run(w, 600, { dir: 4, a: false, b: false });
+  run(w, ticks(600), { dir: 4, a: false, b: false });
   assert.equal(w.players[0].x, 13);
   assert.equal(w.players[0].y, 1);
   // pillars block: pressing down at column 2 slides to an open column instead of stopping
   const w2 = mk();
-  run(w2, 14, { dir: 4, a: false, b: false }); // x ≈ 1.87, in front of the pillar at (2,2)
+  run(w2, ticks(14), { dir: 4, a: false, b: false }); // x ≈ 1.87, in front of the pillar at (2,2)
   const x0 = w2.players[0].x;
   assert.ok(x0 > 1.5 && x0 < 2.4);
-  run(w2, 120, { dir: 2, a: false, b: false });
+  run(w2, ticks(120), { dir: 2, a: false, b: false });
   assert.ok(Number.isInteger(w2.players[0].x) && w2.players[0].x % 2 === 1, 'slid into an open column');
   assert.ok(w2.players[0].y > 2, 'and carried on down');
 }
@@ -59,9 +84,9 @@ const mk = (density = 0): World =>
   step(w, [{ dir: 0, a: false, b: false }]);
   step(w, [{ dir: 0, a: true, b: false }]);
   assert.equal(w.bombs.length, 1, 'only one bomb until an item is found');
-  run(w, 40, { dir: 4, a: false, b: false }); // walk off it
+  run(w, ticks(40), { dir: 4, a: false, b: false }); // walk off it
   assert.ok(w.players[0].x > 2);
-  run(w, 200, { dir: 3, a: false, b: false }); // try to walk back before/after blast
+  run(w, ticks(200), { dir: 3, a: false, b: false }); // try to walk back before/after blast
   // the blast (range 2) reaches x = 3 on the top row; walking back into it is fatal
   assert.equal(w.players[0].alive, false, 'walking back into your own blast kills you');
 }
@@ -69,7 +94,7 @@ const mk = (density = 0): World =>
   const w = mk();
   step(w, [{ dir: 0, a: true, b: false }]);
   // two tiles straight down is still inside the starting blast
-  run(w, 32, { dir: 2, a: false, b: false });
+  run(w, ticks(32), { dir: 2, a: false, b: false });
   assert.equal(Math.round(w.players[0].y), 3);
   run(w, FUSE_TICKS + FLAME_TICKS, none);
   // (1,3) is exactly range 2 below the bomb: still in the blast
@@ -79,8 +104,8 @@ const mk = (density = 0): World =>
 {
   const w = mk();
   step(w, [{ dir: 0, a: true, b: false }]);
-  run(w, 70, { dir: 2, a: false, b: false }); // down to row 3+
-  run(w, 60, { dir: 4, a: false, b: false }); // then right along row 3 or 5
+  run(w, ticks(70), { dir: 2, a: false, b: false }); // down to row 3+
+  run(w, ticks(60), { dir: 4, a: false, b: false }); // then right along row 3 or 5
   run(w, FUSE_TICKS + FLAME_TICKS + 5, none);
   assert.equal(w.players[0].alive, true, 'hiding round a corner is safe');
   assert.equal(w.players[0].activeBombs, 0);
@@ -95,14 +120,14 @@ const mk = (density = 0): World =>
   w.hidden.set(i, 'fire');
   w.tiles[1 * w.w + 4] = SOFT; // behind the first block: must survive
   step(w, [{ dir: 0, a: true, b: false }]);
-  run(w, 70, { dir: 2, a: false, b: false });
-  run(w, 60, { dir: 4, a: false, b: false });
+  run(w, ticks(70), { dir: 2, a: false, b: false });
+  run(w, ticks(60), { dir: 4, a: false, b: false });
   run(w, FUSE_TICKS + FLAME_TICKS + 5, none);
   assert.equal(w.tiles[i], FLOOR);
   assert.equal(w.tiles[1 * w.w + 4], SOFT, 'blast stops at the first block');
   assert.deepEqual(w.items.map((it) => it.kind), ['fire']);
   // go and fetch it
-  const goto = (dir: Dir, n: number): void => run(w, n, { dir, a: false, b: false });
+  const goto = (dir: Dir, n: number): void => run(w, ticks(n), { dir, a: false, b: false });
   goto(3, 80);
   goto(1, 80);
   goto(4, 60);
@@ -113,11 +138,11 @@ const mk = (density = 0): World =>
   const w = mk();
   w.players[0].bombsMax = 2;
   step(w, [{ dir: 0, a: true, b: false }]);
-  run(w, 34, { dir: 4, a: false, b: false }); // to about x = 3
+  run(w, ticks(34), { dir: 4, a: false, b: false }); // to about x = 3
   step(w, [{ dir: 4, a: true, b: false }]);
   assert.equal(w.bombs.length, 2);
-  run(w, 200, { dir: 4, a: false, b: false });
-  run(w, 60, { dir: 2, a: false, b: false });
+  run(w, ticks(200), { dir: 4, a: false, b: false });
+  run(w, ticks(60), { dir: 2, a: false, b: false });
   // first bomb goes at 150; the second (placed 35 ticks later) must chain right after
   assert.equal(w.bombs.length, 0, 'second bomb chained early');
 }
@@ -129,8 +154,8 @@ const mk = (density = 0): World =>
   w.players[0].x = target.x - 1;
   w.players[0].y = target.y;
   step(w, [{ dir: 0, a: true, b: false }]);
-  run(w, 60, { dir: 3, a: false, b: false });
-  run(w, 60, { dir: 1, a: false, b: false });
+  run(w, ticks(60), { dir: 3, a: false, b: false });
+  run(w, ticks(60), { dir: 1, a: false, b: false });
   run(w, FUSE_TICKS + 100, none);
   assert.equal(target.alive, false);
   assert.deepEqual(w.over, { winner: 0 });
@@ -157,9 +182,10 @@ const mk = (density = 0): World =>
     p.canKick = has;
     p.x = 5;
     step(w, [{ dir: 0, a: true, b: false }]);
-    run(w, 40, { dir: 4, a: false, b: false });
-    run(w, 40, { dir: 3, a: false, b: false });
-    run(w, 15, none);
+    w.bombs[0].fuse = 10_000; // this check is about kicking, not the fuse: at walking speed the round trip outlasts it
+    run(w, ticks(40), { dir: 4, a: false, b: false });
+    run(w, ticks(40), { dir: 3, a: false, b: false });
+    run(w, 40, none); // long enough for a slide of four tiles
     const b = w.bombs[0];
     if (has) {
       assert.equal(b.cx, 1, 'bomb slid left to the wall');
@@ -186,7 +212,7 @@ const mk = (density = 0): World =>
   step(w, [{ dir: 0, a: false, b: true }]);
   assert.ok(p.carrying, 'lifted the bomb under you');
   assert.equal(w.bombs[0].fuse, 179, 'three-second timer started');
-  run(w, 5, { dir: 4, a: false, b: false });
+  run(w, 5, { dir: 4, a: false, b: false }); // turn to face right (5 ticks, so the fuse drops by 5)
   assert.equal(w.bombs[0].fuse, 174, 'and it keeps ticking while carried');
   step(w, [{ dir: 0, a: false, b: true }]);
   assert.equal(p.carrying, 0);
@@ -219,8 +245,8 @@ const mk = (density = 0): World =>
   const q = w2.players[0];
   q.canGrab = true;
   step(w2, [{ dir: 0, a: true, b: false }]);
-  run(w2, 17, { dir: 4, a: false, b: false });
-  run(w2, 3, { dir: 3, a: false, b: false });
+  run(w2, ticks(17), { dir: 4, a: false, b: false });
+  run(w2, ticks(3), { dir: 3, a: false, b: false });
   step(w2, [{ dir: 0, a: false, b: true }]);
   assert.ok(q.carrying, 'lifted a bomb from the tile next to you');
   step(w2, [none]);
@@ -253,16 +279,16 @@ for (let seed = 1; seed <= 40; seed++) {
   const w0 = mk();
   step(w0, [right]);
   run(w0, 30, none);
-  assert.ok(Math.abs(w0.players[0].x - 1.062) < 1e-9, 'stops where you let go');
+  assert.ok(Math.abs(w0.players[0].x - (1 + BASE_SPEED)) < 1e-9, 'stops where you let go: one tick of walking');
   const on = (): World => createWorld({ seed: 7, players: [{ colorId: 'a' }, { colorId: 'b' }], softDensity: 0, stepAssist: true });
   const w = on();
   step(w, [right]);
-  run(w, 30, none);
+  run(w, ticks(30), none);
   assert.equal(w.players[0].x, 2);
   const w2 = on();
-  run(w2, 4, right);
+  run(w2, ticks(4), right);
   w2.flames.push({ cx: 2, cy: 1, ttl: 40, owner: 1, kind: 'c', tip: 0 });
-  run(w2, 12, none);
+  run(w2, ticks(12), none);
   assert.equal(w2.players[0].x, 1);
   assert.equal(w2.players[0].alive, true);
 }
@@ -319,7 +345,7 @@ for (let seed = 1; seed <= 40; seed++) {
     const p = w.players[0];
     w.tiles[3 * w.w + 3] = SOFT;
     while (p.y < 1.7) step(w, [hold(2)]);
-    run(w, 60, hold(3));
+    run(w, ticks(60), hold(3));
     assert.equal(p.y, 1);
     assert.ok(p.x < 3);
   }
@@ -328,7 +354,7 @@ for (let seed = 1; seed <= 40; seed++) {
     const w = mk();
     const p = w.players[0]; // column 1: the outer wall is on the left all the way down
     while (p.y < 1.3) step(w, [hold(2)]);
-    run(w, 60, hold(3));
+    run(w, ticks(60), hold(3));
     assert.equal(p.x, 1);
     assert.equal(p.y, 2);
     assert.equal(p.moving, false);
@@ -339,13 +365,13 @@ for (let seed = 1; seed <= 40; seed++) {
     const p = w.players[0];
     while (p.y < 1.7) step(w, [hold(2)]);
     step(w, [none]);
-    run(w, 60, hold(3));
+    run(w, ticks(60), hold(3));
     assert.equal(p.y, 1);
     const w2 = lane();
     const q = w2.players[0];
     while (q.y < 2.3) step(w2, [hold(2)]);
     step(w2, [none]);
-    run(w2, 60, hold(3));
+    run(w2, ticks(60), hold(3));
     assert.equal(q.y, 3);
   }
   // reversing is always immediate
@@ -394,4 +420,64 @@ for (let seed = 1; seed <= 40; seed++) {
       assert.ok(reversals <= 1, 'holding one direction never makes the robot jitter back and forth');
     }
   }
+}
+
+// 13. speed: about 69% of the original walking speed to start (halved, then 25% faster, 12.5% faster and 2.5% slower), each speed power-up adds 0.0062, kicks slide at 8.4 tiles a second
+{
+  const right: PlayerInput = { dir: 4, a: false, b: false };
+  assert.ok(Math.abs(BASE_SPEED - 0.031 * 1.25 * 1.125 * 0.975) < 1e-12, 'robots start at half the original 0.062 tiles a tick, plus 25%, plus 12.5%, less 2.5%');
+  const w = mk();
+  const p = w.players[0];
+  run(w, 60, right);
+  assert.ok(Math.abs(p.x - (1 + 60 * 0.04250390625)) < 1e-9, 'one second of walking covers about 2.55 tiles');
+
+  // speed power-ups laid along the top row: each one picked up adds SPEED_STEP, up to MAX_SPEED_ITEMS
+  const w2 = mk();
+  const q = w2.players[0];
+  for (let x = 2; x <= 9; x++) w2.items.push({ cx: x, cy: 1, kind: 'speed', age: 20 });
+  const seen: number[] = [playerSpeed(q)];
+  for (let i = 0; i < 2000 && q.x < 9; i++) {
+    step(w2, [right]);
+    if (playerSpeed(q) !== seen[seen.length - 1]) seen.push(playerSpeed(q));
+  }
+  assert.equal(q.speed, MAX_SPEED_ITEMS, 'eight picked up, six count');
+  assert.equal(seen.length, MAX_SPEED_ITEMS + 1, 'speed went up once per power-up until the limit');
+  for (let k = 0; k < seen.length; k++) assert.ok(Math.abs(seen[k] - (BASE_SPEED + k * SPEED_STEP)) < 1e-12, `step ${k}`);
+  assert.ok(Math.abs(SPEED_STEP - 0.0062) < 1e-12, 'each step adds 0.37 tiles a second');
+  assert.ok(Math.abs(playerSpeed(q) - (0.04250390625 + 6 * 0.0062)) < 1e-12, 'six take it to about 4.8 tiles a second');
+
+  // a kicked bomb slides 0.14 tiles a tick: 30% slower than the original 0.2
+  assert.ok(Math.abs(KICK_SPEED - 0.2 * 0.7) < 1e-12);
+  const w3 = mk();
+  const r3 = w3.players[0];
+  r3.canKick = true;
+  r3.x = 3;
+  step(w3, [{ dir: 0, a: true, b: false }]);
+  w3.bombs[0].fuse = 10_000;
+  run(w3, ticks(40), { dir: 3, a: false, b: false }); // step off to the left, then come back and kick it right
+  for (let i = 0; i < 400 && w3.bombs[0].slide === 0; i++) step(w3, [right]);
+  const b = w3.bombs[0];
+  assert.equal(b.slide, 4, 'kicked');
+  const x0 = b.x;
+  step(w3, [none]);
+  assert.ok(Math.abs(b.x - x0 - KICK_SPEED) < 1e-9, 'slides 0.14 tiles in a tick');
+  run(w3, 200, none);
+  assert.equal(b.cx, 13, 'and still slides all the way to the wall');
+
+  // at the starting speed you can still get clear of your first bomb: from the corner, two tiles right and one down
+  const w4 = mk();
+  const r4 = w4.players[0];
+  step(w4, [{ dir: 0, a: true, b: false }]);
+  let t = 1;
+  while (r4.x < 3) {
+    step(w4, [right]);
+    t++;
+  }
+  while (r4.y < 2) {
+    step(w4, [{ dir: 2, a: false, b: false }]);
+    t++;
+  }
+  assert.ok(t < FUSE_TICKS - 40, `safe with ${FUSE_TICKS - t} ticks to spare`);
+  run(w4, FUSE_TICKS + FLAME_TICKS, none);
+  assert.equal(r4.alive, true);
 }

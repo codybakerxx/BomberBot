@@ -212,14 +212,14 @@ export interface WorldConfig {
 export const FUSE_TICKS = 150; // a dropped bomb goes off after 2.5 s
 export const FLAME_TICKS = 30; // a blast stays for 0.5 s
 export const CHAIN_TICKS = 5; // a bomb caught in a blast goes off this soon after
-export const BASE_SPEED = 0.062; // walking speed, tiles per tick (3.7 tiles a second)
-export const SPEED_STEP = 0.008; // added by each speed power-up
-export const MAX_SPEED_ITEMS = 6;
+export const BASE_SPEED = 0.04250390625; // starting walking speed, tiles per tick (2.55 tiles a second)
+export const SPEED_STEP = 0.0062; // added by each speed power-up (0.37 tiles a second)
+export const MAX_SPEED_ITEMS = 6; // so six of them bring it to 0.0797 tiles a tick (4.8 tiles a second)
 export const MAX_BOMBS = 8;
 export const MAX_FIRE = 8;
 export const DEATH_TICKS = 50; // length of the knocked-out fade
 export const CARRY_FUSE_TICKS = 180; // 3 s from the first pick-up, and it keeps ticking
-export const KICK_SPEED = 0.2; // a kicked bomb slides at 12 tiles a second
+export const KICK_SPEED = 0.14; // a kicked bomb slides at 8.4 tiles a second
 export const THROW_TILES = 3; // a thrown bomb lands this many tiles away
 export const FLY_TICKS_PER_TILE = 7; // how long a thrown bomb takes over each tile
 

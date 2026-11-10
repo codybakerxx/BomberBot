@@ -19,13 +19,16 @@
  *    - Judged from the whole leg (never from a few pixels of it), by whichever
  *      of up, down, left and right it is nearest to. The robot's current
  *      direction plays no part, so the same swipe always gives the same answer.
- *    - "Nearest" is measured in the pad's own frame, which can lean away from
- *      the screen's. A thumb pivots at its base, so a quick sideways flick of
- *      the left thumb is an arc: left drifts up, right drifts down, up drifts
- *      right, down drifts left. Leaning the frame the same way puts those
- *      flicks in the middle of their quarter instead of on the border between
- *      two directions. The lean changes only which direction a stroke counts
- *      as, never how far the thumb has to travel.
+ *    - Each direction has an AIM: the screen angle its swipes are expected to
+ *      point at. A stroke counts as the direction whose aim it is nearest to,
+ *      so the border between two directions sits half way between their aims.
+ *      A thumb pivots at its base, so a quick sideways flick of the left thumb
+ *      is an arc: left drifts up, right drifts down, up drifts right, down
+ *      drifts left. Aiming each direction where the thumb really swipes puts
+ *      those flicks in the middle of their quarter instead of on a border.
+ *      By default all four aims lean the same 15 degrees; Match my thumb can
+ *      set one lean for all four, or a lean for each. The aims change only
+ *      which direction a stroke counts as, never how far the thumb travels.
  *
  * All distances are CSS pixels; on a phone 5 to 6 px is about a millimetre.
  */
@@ -42,13 +45,47 @@ const SETTLE_MS = 120; // ... for this long has come to rest
 /** Standard clockwise lean, in degrees, for a left thumb. */
 export const DEFAULT_TILT = 15;
 
+/** Screen angle of each direction, in degrees anticlockwise from "right" (index 1 up, 2 down, 3 left, 4 right). */
+export const STRAIGHT = [0, 90, 270, 180, 0];
+
+/** Aims for all four directions leaning the same `tilt` degrees clockwise. */
+export function uniformAims(tilt: number): number[] {
+  return STRAIGHT.map((a, d) => (d === 0 ? 0 : a - tilt));
+}
+
+/**
+ * How strongly a movement (vx right, vy down, in screen pixels) points along
+ * the aim of direction `d`: its length times the cosine of the angle between
+ * them. The direction with the highest score is the one it is nearest to.
+ */
+export function aimScore(aims: number[], d: Dir, vx: number, vy: number): number {
+  const a = (aims[d] * Math.PI) / 180;
+  return vx * Math.cos(a) - vy * Math.sin(a);
+}
+
+/** Which of the four directions a movement is nearest to, given each direction's aim. */
+export function nearestDir(aims: number[], vx: number, vy: number): Dir {
+  let best: Dir = 4;
+  for (const d of [3, 2, 1] as Dir[]) if (aimScore(aims, d, vx, vy) > aimScore(aims, best, vx, vy)) best = d;
+  return best;
+}
+
 export class SwipePad {
   /** current direction: 0 none, 1 up, 2 down, 3 left, 4 right */
   dir: Dir = 0;
   /** 1 = normal. Larger makes the quiet zone bigger (less sensitive). */
   scale = 1;
-  /** How far the pad's up, down, left and right lean clockwise from the screen's, in degrees. */
-  tilt = DEFAULT_TILT;
+  /** The screen angle each direction is read around (index 1 to 4). See `nearestDir`. */
+  aims: number[] = uniformAims(DEFAULT_TILT);
+
+  /** Shortcut: lean all four aims the same number of degrees clockwise. */
+  set tilt(t: number) {
+    this.aims = uniformAims(t);
+  }
+  /** The lean of the "right" aim; equal to the lean of all four when they lean the same. */
+  get tilt(): number {
+    return -this.aims[4];
+  }
   /**
    * Called once for each stroke that starts from a resting thumb or a fresh
    * touch, with the thumb's movement in screen pixels: as soon as the stroke is
@@ -202,18 +239,13 @@ export class SwipePad {
     this.pref = 0;
   }
 
-  /** How strongly a movement points in direction `d`, in the pad's leaning frame. */
+  /** How strongly a movement points in direction `d`, given the current aims. */
   private score(d: Dir, vx: number, vy: number): number {
-    const a = (this.tilt * Math.PI) / 180;
-    const fx = vx * Math.cos(a) + vy * Math.sin(a);
-    const fy = -vx * Math.sin(a) + vy * Math.cos(a);
-    return d === 4 ? fx : d === 3 ? -fx : d === 2 ? fy : -fy;
+    return aimScore(this.aims, d, vx, vy);
   }
 
   /** Which of the four directions a movement is nearest to. */
   private nearest(vx: number, vy: number): Dir {
-    let best: Dir = 4;
-    for (const d of [3, 2, 1] as Dir[]) if (this.score(d, vx, vy) > this.score(best, vx, vy)) best = d;
-    return best;
+    return nearestDir(this.aims, vx, vy);
   }
 }

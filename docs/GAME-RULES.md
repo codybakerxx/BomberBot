@@ -20,7 +20,8 @@ The game runs at a fixed 60 ticks a second. Times below are given in seconds wit
 *`movePlayer` in sim.ts. The touch and keyboard side is in [CONTROLS.md](CONTROLS.md).*
 
 - A robot moves up, down, left or right, one direction at a time, and stops the moment no direction is held. It does not finish the step.
-- Walking speed is 3.7 tiles a second. Each speed power-up adds about 0.5, up to six of them (6.6 tiles a second).
+- Robots start at 2.55 tiles a second. Each speed power-up adds 0.37 tiles a second, and up to six of them count, which brings a robot to 4.8 tiles a second, 1.88 times its starting speed.
+- At the starting speed, the quickest way clear of your own first bomb from a corner (two tiles along, one round the corner) takes 1.23 seconds of the bomb's 2.5.
 - The tile a robot **counts as standing on** is the one whose middle it is nearest to. The game draws a ring on yours. That tile decides where your bomb is dropped, whether a blast catches you and which power-up you pick up.
 - A robot fills its lane, so it can only go sideways where there is an opening beside it. Bricks and solid blocks block it. So does a bomb, except the one it is standing on, which it can walk off.
 
@@ -80,7 +81,7 @@ Every arena has at least one boot and one glove. If the dice give none, one is p
 *`movePlayer` and `moveBombs` in sim.ts*
 
 - You need the **boot**. Without it a bomb in your way just blocks you.
-- Walk into a bomb from the tile next to it and it slides away in that direction at 12 tiles a second.
+- Walk into a bomb from the tile next to it and it slides away in that direction at 8.4 tiles a second.
 - It keeps sliding until the next tile is not free, then stops in the middle of the last free tile. A solid block, a brick, another bomb or a robot stops it.
 - A bomb with something directly behind it cannot be kicked.
 - Its fuse keeps running while it slides.
@@ -114,8 +115,8 @@ All of these are named constants near the top of `src/sim.ts`. Changing one chan
 | Constant | Value | Meaning |
 |---|---|---|
 | `TICK_HZ` | 60 | Rule steps per second |
-| `BASE_SPEED` | 0.062 | Walking speed in tiles per tick (3.7 a second) |
-| `SPEED_STEP` | 0.008 | Extra speed per speed power-up |
+| `BASE_SPEED` | 0.04250390625 | Starting walking speed in tiles per tick (2.55 a second) |
+| `SPEED_STEP` | 0.0062 | Extra speed per speed power-up (0.37 a second) |
 | `MAX_SPEED_ITEMS` | 6 | Most speed power-ups that count |
 | `MAX_BOMBS` | 8 | Most bombs out at once |
 | `MAX_FIRE` | 8 | Longest blast, in tiles |
@@ -123,7 +124,7 @@ All of these are named constants near the top of `src/sim.ts`. Changing one chan
 | `FLAME_TICKS` | 30 | How long a blast and a burning brick last (0.5 s) |
 | `CHAIN_TICKS` | 5 | Delay before a bomb caught in a blast goes off |
 | `CARRY_FUSE_TICKS` | 180 | Fuse set by the first lift (3 s) |
-| `KICK_SPEED` | 0.2 | Sliding speed of a kicked bomb in tiles per tick (12 a second) |
+| `KICK_SPEED` | 0.14 | Sliding speed of a kicked bomb in tiles per tick (8.4 a second) |
 | `THROW_TILES` | 3 | How far a throw goes |
 | `FLY_TICKS_PER_TILE` | 7 | Time a thrown bomb takes over each tile |
 | `BACK_TOLERANCE` | 0.5 | How far past an opening a turn will still step back to it, in tiles |

@@ -12,11 +12,16 @@ They exist because the feel of touch controls cannot be checked from a desk. Eac
 npx tsx experiments/corridor-turns.ts
 npx tsx experiments/stroke-reading.ts
 npx tsx experiments/model-player.ts
+npx tsx experiments/match-v2.ts
 ```
 
 The "current" columns use the live code in `src/`, so they change whenever the controls change. The "previous" columns use a frozen copy of the older logic kept in `previous-build.ts`.
 
 The results below were recorded on 9 November 2026.
+
+The experiments above `match-v2.ts` were run before Match my thumb version 2. Version 2 changed only how a setting is chosen, not how a single lean reads swipes, and rerunning them gives the same numbers.
+
+The walking speed was changed later the same day (halved, then tuned +25%, +12.5% and −2.5%). `previous-build.ts` keeps the old speed, but the current rules walk at the new one, so rerunning `corridor-turns.ts` and `model-player.ts` now gives slightly different numbers. The conclusions hold, and the current build does a little better: in `model-player.ts`, 0.7%, 0.0% and 1.8% of turns wrong at leans of 0°, 20° and 35°.
 
 ## `corridor-turns.ts`: where does the robot turn?
 
@@ -79,6 +84,39 @@ What went wrong, at a lean of 0°:
 
 - Two separate faults produced the same complaint. With a thumb that does not lean, nearly every wrong turn in the previous build was the robot doubling back, and the new turning rule alone removes them. With a thumb that leans, most wrong turns were misread strokes, and the new pad removes those. Both changes were needed.
 - At small leans, what is left in the current build is mostly "wrong opening": the swipe came more than half a tile after the opening, so the robot took the next one. That is the rule working as intended. At a lean of 35° some misread strokes remain, which is the case Match my thumb is for.
+
+## `match-v2.ts`: a lean per direction, and letting a test choose
+
+Five model thumbs, from perfectly straight to ones whose four directions lean very differently. For each, Match my thumb is simulated 300 times (the prompted swipes are random draws, so each match comes out a little different) and every resulting setting is scored on fresh play swipes. In play, 70% of swipes are quick and lean fully; 30% are slow and lean a third as much.
+
+The first part compares a single lean (version 1) with a lean per direction built from 3 or 4 swipes each, pulled toward the overall lean by k imaginary swipes. With swipes scattering about 16°:
+
+| Model thumb | Standard | One lean (12 swipes) | Per direction, 3 each | Per direction, 3 each, k3 | Per direction, 4 each, k2 |
+|---|---|---|---|---|---|
+| Straight | 3.04% | 0.41% | 0.51% | 0.40% | 0.42% |
+| Even, 30° all round | 2.33% | 1.23% | 1.61% | 1.35% | 1.30% |
+| Sideways lean more | 2.70% | 2.61% | 2.90% | 2.54% | 2.72% |
+| Uneven (left 40°, down 10°) | 2.82% | 2.39% | 2.04% | 2.07% | 1.79% |
+| Mixed (left 35°, up −5°) | 3.34% | 3.81% | 4.03% | 3.83% | 3.67% |
+| **Average** | 2.85% | 2.09% | 2.22% | 2.04% | 1.98% |
+
+The second part adds a test round of 8 swipes that chooses between the setting before, one lean, and a lean per direction (3 each, pulled half way, as built). Ties in how many test swipes are read right are broken three ways:
+
+| Model thumb | One lean always | Per direction always | Test, tie by average room | Test, tie by closest call | Test, tie by expected misreads |
+|---|---|---|---|---|---|
+| Straight | 0.44% | 0.49% | 0.74% | 0.75% | 0.71% |
+| Even, 30° all round | 1.35% | 1.39% | 1.40% | 1.39% | 1.38% |
+| Sideways lean more | 2.56% | 2.65% | 2.45% | 2.48% | 2.43% |
+| Uneven | 2.54% | 2.00% | 2.14% | 2.16% | 2.10% |
+| Mixed | 3.86% | 3.95% | 3.56% | 3.54% | 3.56% |
+| **Average** | 2.15% | 2.10% | 2.06% | 2.06% | 2.04% |
+
+**What it showed.**
+
+- A lean per direction on its own is roughly a wash. It helps thumbs whose directions really differ ("uneven") and hurts the others, because a few swipes per direction measure less precisely than twelve averaged. Pulling each direction half way toward the overall lean removes most of that harm.
+- Letting a test choose gives the best average, by a small margin, and protects the thumbs any match would make worse ("mixed"). The cost is that it sometimes keeps the standard lean when a match was slightly better ("straight").
+- The three tie-breakers are within noise of each other. The game uses the closest call because it is the easiest to show on screen. (The average room was rejected for a reason the simulation does not show: moving a border only shifts room between neighbouring directions, so the average hardly changes and real settings often tie on it.)
+- With less scatter (about 10°) every setting reads 99.5% or more right and the same pattern holds; the full output is printed by the script.
 
 ## `previous-build.ts`
 

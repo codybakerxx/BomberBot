@@ -196,11 +196,18 @@
   }
   .check { display: flex; align-items: center; gap: 10px; min-height: 28px; }
   .check input { width: 22px; height: 22px; margin: 0; accent-color: var(--accent); }
-  .swipe { display: flex; flex-direction: column; gap: 6px; }
-  #optZone { display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; }
+  body:not(.touch) .tune { display: none; } /* the pad only exists on touch screens */
+  .opt { display: flex; flex-direction: column; gap: 6px; }
+  .opt + .opt { padding-top: 10px; border-top: 1px solid var(--line); }
+  .opt-title { margin: 0; font: 700 14px/1.2 var(--font-display); color: var(--ink); }
+  .opt-title span { font: 500 13px/1.2 var(--font-body); color: var(--ink-dim); }
+  .opt-title span::before { content: '· '; }
+  .opt-desc { margin: 0; font-size: 13px; line-height: 1.35; color: var(--ink-dim); min-height: 1.35em; }
+  .opt-note { margin: 0; font-size: 12px; line-height: 1.35; color: var(--ink-dim); }
+  #optZone { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; }
   #optZone button {
-    padding: 9px 0;
-    font: 500 12px/1 var(--font-body);
+    padding: 10px 0;
+    font: 500 14px/1 var(--font-body);
     color: var(--ink-dim);
     background: transparent;
     border: 1.5px solid var(--line);
@@ -209,8 +216,6 @@
   }
   #optZone button[aria-pressed="true"] { color: #14100a; background: var(--accent); border-color: var(--accent); font-weight: 700; }
   .match { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-  .match span { flex: 1 1 150px; color: var(--ink-dim); font-size: 13px; }
-  body:not(.touch) .match { display: none; }
   .mini {
     padding: 9px 12px;
     font: 700 12px/1 var(--font-display);
@@ -233,12 +238,31 @@
     overflow: hidden;
   }
   #teach[hidden] { display: none; }
-  .teach-card { display: flex; flex-direction: column; align-items: center; gap: 8px; max-width: 34ch; }
+  .teach-card { display: flex; flex-direction: column; align-items: center; gap: 8px; max-width: 36ch; }
   .teach-step { margin: 0; font: 700 12px/1 var(--font-display); letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-dim); }
   #teachArrow { width: 64px; height: 64px; fill: var(--accent); transition: transform 120ms; }
   #teach h2 { font-size: clamp(22px, 5.5vmin, 32px); }
   #teach .sub { font-size: 14px; line-height: 1.35; }
   .teach-nums { font-variant-numeric: tabular-nums; color: var(--ink) !important; }
+  #teachChoices { display: flex; flex-direction: column; gap: 6px; width: min(100%, 320px); }
+  #teachChoices[hidden] { display: none; }
+  .choice {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+    padding: 9px 12px;
+    font: 500 14px/1.2 var(--font-body);
+    color: var(--ink);
+    text-align: left;
+    background: var(--panel);
+    border: 1.5px solid var(--line);
+    border-radius: 10px;
+    cursor: pointer;
+  }
+  .choice .score { color: var(--ink-dim); font-size: 13px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .choice[aria-pressed="true"] { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+  .choice[aria-pressed="true"] .score { color: var(--accent); }
   #teach .row { justify-content: center; }
   @media (prefers-reduced-motion: reduce) { #teachArrow { transition: none; } }
   .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
@@ -261,9 +285,9 @@
   @media (max-height: 430px) {
     .card { gap: 8px; }
     .overlay { place-items: start center; }
-    .tune { flex-direction: row; align-items: center; gap: 16px; padding: 4px 12px 8px; }
-    .swipe { flex: 1; flex-direction: row; align-items: center; gap: 10px; }
-    #optZone { flex: 1; }
+    .tune { display: grid; grid-template-columns: 1fr 1fr; column-gap: 16px; row-gap: 6px; padding: 4px 12px 8px; }
+    .opt + .opt { padding-top: 0; border-top: 0; padding-left: 16px; border-left: 1px solid var(--line); }
+    .opt-note { grid-column: 1 / -1; }
     #menu .sub { display: none; }
     .bot span { display: none; }
     .bot canvas { max-width: 56px; }
@@ -293,22 +317,25 @@
     <p class="sub keys">Keyboard: arrow keys or WASD to move, Space to drop a bomb, Shift to lift and throw.</p>
     <div class="row"><button id="play" class="go" type="button">Play</button></div>
     <fieldset class="tune">
-      <legend>D-pad</legend>
-      <div class="swipe">
-        <span id="optZoneLabel">Ignore small thumb movements while holding</span>
-        <div id="optZone" role="group" aria-labelledby="optZoneLabel">
-          <button type="button" data-v="60">Least</button>
-          <button type="button" data-v="80">Less</button>
-          <button type="button" data-v="100">Normal</button>
-          <button type="button" data-v="125">More</button>
-          <button type="button" data-v="150">Most</button>
+      <legend>Swipe pad</legend>
+      <div class="opt">
+        <p class="opt-title" id="optZoneLabel">Swipe length <span>how far to swipe to turn while holding</span></p>
+        <div id="optZone" class="seg" role="group" aria-labelledby="optZoneLabel">
+          <button type="button" data-v="70">Short</button>
+          <button type="button" data-v="100">Medium</button>
+          <button type="button" data-v="140">Long</button>
+        </div>
+        <p class="opt-desc" id="optZoneDesc" aria-live="polite"></p>
+      </div>
+      <div class="opt">
+        <p class="opt-title">Swipe direction <span>which way each swipe counts</span></p>
+        <p class="opt-desc" id="matchState"></p>
+        <div class="match">
+          <button id="matchStart" class="mini" type="button">Match my thumb</button>
+          <button id="matchReset" class="mini" type="button" hidden>Use standard</button>
         </div>
       </div>
-      <div class="match">
-        <span id="matchState">Swipe directions: standard</span>
-        <button id="matchReset" class="mini" type="button" hidden>Reset</button>
-        <button id="matchStart" class="mini" type="button">Match my thumb</button>
-      </div>
+      <p class="opt-note">These are separate. Match my thumb only changes direction, never swipe length.</p>
     </fieldset>
   </div>
 </div>
@@ -319,6 +346,7 @@
     <svg id="teachArrow" viewBox="0 0 100 100" aria-hidden="true"><path d="M8 40h48V18l38 32-38 32V60H8z"/></svg>
     <h2 id="teachWord"></h2>
     <p class="sub" id="teachHint"></p>
+    <div id="teachChoices" role="group" aria-label="Swipe direction settings" hidden></div>
     <p class="sub teach-nums" id="teachNums" hidden></p>
     <div class="row">
       <button id="teachAgain" class="mini" type="button" hidden>Try again</button>
