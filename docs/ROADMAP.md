@@ -1,0 +1,76 @@
+# Roadmap
+
+Where BomberBot is going, what has been decided, and what is still open.
+
+## The plan in seven steps
+
+Each step is played on a phone before the next one starts.
+
+| Step | What | Status |
+|---|---|---|
+| 1 | **One level.** The arena, movement, bombs, blasts, bricks, power-ups and the touch controls. | Done, and it grew: kicking, lifting and throwing, and Match my thumb were added along the way. |
+| 2 | **Computer players.** The other bots move, avoid blasts and fight back, so the game can be played alone. | Next |
+| 3 | **Round flow.** Last one standing wins, blocks fall to shrink the arena as time runs out, and a results screen. | Planned |
+| 4 | **Menus.** A proper character select, a colour picker, level select, and choosing which power-ups are in a custom game. | Planned |
+| 5 | **Teams.** Team battles by colour. | Planned |
+| 6 | **Online.** Rooms for up to nine players. | Planned |
+| 7 | **Polish.** Final look, colours and sound, then putting it online for friends. | Planned |
+
+## What the finished game should have
+
+This is the brief the project started from.
+
+**Battle royale only.** No story mode.
+
+**Computer players** to play against alone.
+
+**Online play for up to nine players**, with starting places spread evenly:
+
+- 4 players: near the four corners
+- 5 players: the same, plus one in the middle
+- 6 players: the same, with two in the middle, spaced apart
+- 7 to 9 players: the arena gets bigger, and only gets smaller again as the falling blocks close it in
+
+**Team battles by colour.** The top of the screen shows which team is which. Uneven teams are allowed, and computer players can be added to even them out.
+
+**Changeable bot colours.** No two players in the same match can have the same colour.
+
+**Better menus** for choosing a character and a level.
+
+**Custom games** where you choose which power-ups are in play.
+
+## Decisions made so far
+
+| Decision | Why |
+|---|---|
+| The game is called **BomberBot** | Chosen on 9 November 2026. |
+| Original name, characters and art | It is inspired by Bomberman but is its own game. Nothing from Bomberman or from the reference project is copied. |
+| TypeScript and canvas, with no game engine | A 2D grid game does not need one, and the result is one small file. |
+| The rules are kept apart from drawing and input | So they can be tested without a browser and run on a server for online play. |
+| See-through swipe pad on the left, B above A on the right | From a hand-drawn wireframe. Swipe from wherever the thumb is, keep it down to keep moving. |
+| The robot stops where you let go | Finishing every step on the middle of a tile was tried and rejected: a small thumb movement should not move a whole block. |
+| A turn takes the next opening ahead | Turning to the nearest opening sometimes sent the robot back the way it came. |
+| The pad can be matched to a player's thumb | Quick swipes lean, by an amount that differs from person to person. |
+| Kicking needs the boot, lifting needs the glove | They are power-ups to find, not abilities everyone starts with. |
+| A lifted bomb has 3 seconds and keeps ticking | The fuse does not pause in your hands. The 3 seconds start at the first lift only, so a bomb cannot be kept alive by lifting it again. |
+| Robots are about one tile in size, with a ring on the tile they stand on | So it is clear where the robot is relative to the blocks when hiding from a blast. |
+| Bricks and solid blocks fill their whole tile | The classic look, drawn fresh. |
+| Power-ups are a full tile of pulsing colour with a dark icon | Easy to see at phone size. |
+
+## Still open
+
+- **Setting bombs off by remote.** B was also meant to detonate. How that should work has not been decided.
+- **The final colours.** The arena is in blues for now. The look is to be revisited.
+- **More arenas.** Only the one layout style exists.
+- **Where to host online play.** It needs a small server as well as the page.
+- **A licence** for this repository, if it is ever to be shared more widely.
+
+## How online play is expected to work
+
+Nothing is built yet. The intended shape:
+
+- A small Node.js server keeps one copy of each match and runs the same rules file the game already uses (`src/sim.ts`).
+- Friends join a room with a short code.
+- Each phone sends only its player's inputs and draws the world the server sends back, which keeps everyone in step.
+
+The rules were written with this in mind from the start: they use no browser features and no randomness of their own, and the same seed with the same inputs always gives the same match.

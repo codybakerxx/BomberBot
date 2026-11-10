@@ -1,0 +1,19 @@
+{
+  "name": "bomberbot",
+  "version": "0.1.0",
+  "private": true,
+  "description": "BomberBot: a top-down 2D bomber battle game for the browser, built for phones.",
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs",
+    "test": "tsx tests/index.ts",
+    "typecheck": "tsc --noEmit",
+    "check": "npm run typecheck && npm test && npm run build"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.6",
+    "esbuild": "^0.28.2",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2"
+  }
+}

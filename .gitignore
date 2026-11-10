@@ -1,0 +1,9 @@
+# installed packages (npm install recreates them)
+node_modules/
+
+# the built game (npm run build recreates it)
+dist/
+
+# editor and system clutter
+.DS_Store
+*.log

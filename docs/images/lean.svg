@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 680 436" role="img" aria-labelledby="t d">
+<title id="t">How a left thumb's quick swipes lean</title>
+<desc id="d">Left: the screen's own up, down, left and right. Right: the same four directions as a left thumb really swipes them, turned about 30 degrees clockwise, because the thumb pivots at its base in the bottom-left corner.</desc>
+<rect x="1" y="1" width="678" height="434" rx="14" fill="#0d1019" stroke="#2a3250" stroke-width="2"/>
+<text x="170.0" y="42.0" fill="#e8ecff" font-size="15" font-weight="600" text-anchor="middle" font-family="system-ui, -apple-system, Segoe UI, Helvetica, Arial, sans-serif">What the screen calls each direction</text>
+<line x1="170.0" y1="205.0" x2="275.0" y2="205.0" stroke="#8f9ac0" stroke-width="3" stroke-linecap="round" opacity="1"/><polygon points="275.0,205.0 265.1,209.8 265.1,200.2" fill="#8f9ac0" opacity="1"/>
+<text x="301.0" y="210.0" fill="#8f9ac0" font-size="15" font-weight="600" text-anchor="middle" font-family="system-ui, -apple-system, Segoe UI, Helvetica, Arial, sans-serif">right</text>
+<line x1="170.0" y1="205.0" x2="170.0" y2="100.0" stroke="#8f9ac0" stroke-width="3" stroke-linecap="round" opacity="1"/><polygon points="170.0,100.0 174.8,109.9 165.2,109.9" fill="#8f9ac0" opacity="1"/>
+<text x="170.0" y="79.0" fill="#8f9ac0" font-size="15" font-weight="600" text-anchor="middle" font-family="system-ui, -apple-system, Segoe UI, Helvetica, Arial, sans-serif">up</text>
+<line x1="170.0" y1="205.0" x2="65.0" y2="205.0" stroke="#8f9ac0" stroke-width="3" stroke-linecap="round" opacity="1"/><polygon points="65.0,205.0 74.9,200.2 74.9,209.8" fill="#8f9ac0" opacity="1"/>
+<text x="39.0" y="210.0" fill="#8f9ac0" font-size="15" font-weight="600" text-anchor="middle" font-family="system-ui, -apple-system, Segoe UI, Helvetica, Arial, sans-serif">left</text>
+<line x1="170.0" y1="205.0" x2="170.0" y2="310.0" stroke="#8f9ac0" stroke-width="3" stroke-linecap="round" opacity="1"/><polygon points="170.0,310.0 165.2,300.1 174.8,300.1" fill="#8f9ac0" opacity="1"/>
+<text x="170.0" y="341.0" fill="#8f9ac0" font-size="15" font-weight="600" text-anchor="middle" font-family="system-ui, -apple-system, Segoe UI, Helvetica, Arial, sans-serif">down</text>
+<circle cx="170" cy="205" r="5" fill="#8f9ac0"/>
+<text x="490.0" y="42.0" fill="#e8ecff" font-size="15" font-weight="600" text-anchor="middle" font-family="system-ui, -apple-system, Segoe UI, Helvetica, Arial, sans-serif">How a left thumb swipes them</text>
+<line x1="490.0" y1="205.0" x2="595.0" y2="205.0" stroke="#8f9ac0" stroke-width="2" stroke-linecap="round" opacity="0.28"/><polygon points="595.0,205.0 585.1,209.8 585.1,200.2" fill="#8f9ac0" opacity="0.28"/>
+<line x1="490.0" y1="205.0" x2="490.0" y2="100.0" stroke="#8f9ac0" stroke-width="2" stroke-linecap="round" opacity="0.28"/><polygon points="490.0,100.0 494.8,109.9 485.2,109.9" fill="#8f9ac0" opacity="0.28"/>
+<line x1="490.0" y1="205.0" x2="385.0" y2="205.0" stroke="#8f9ac0" stroke-width="2" stroke-linecap="round" opacity="0.28"/><polygon points="385.0,205.0 394.9,200.2 394.9,209.8" fill="#8f9ac0" opacity="0.28"/>
+<line x1="490.0" y1="205.0" x2="490.0" y2="310.0" stroke="#8f9ac0" stroke-width="2" stroke-linecap="round" opacity="0.28"/><polygon points="490.0,310.0 485.2,300.1 494.8,300.1" fill="#8f9ac0" opacity="0.28"/>
+<path d="M 407.0 178.0 A 210.1 210.1 0 0 1 555.0 263.5" fill="none" stroke="#5fd6ff" stroke-width="2" stroke-dasharray="5 6" opacity="0.7"/>
+<line x1="385" y1="387" x2="490" y2="205" stroke="#5fd6ff" stroke-width="2" stroke-dasharray="2 6" opacity="0.6"/>
+<circle cx="385" cy="387" r="7" fill="#5fd6ff"/>
+<text x="399.0" y="392.0" fill="#5fd6ff" font-size="13" font-weight="500" text-anchor="start" font-family="system-ui, -apple-system, Segoe UI, Helvetica, Arial, sans-serif">base of the thumb</text>
+<line x1="490.0" y1="205.0" x2="580.9" y2="257.5" stroke="#ffc56a" stroke-width="3" stroke-linecap="round" opacity="1"/><polygon points="580.9,257.5 570.0,256.7 574.7,248.4" fill="#ffc56a" opacity="1"/>
+<text x="603.4" y="275.5" fill="#ffc56a" font-size="15" font-weight="600" text-anchor="middle" font-family="system-ui, -apple-system, Segoe UI, Helvetica, Arial, sans-serif">right</text>
+<line x1="490.0" y1="205.0" x2="542.5" y2="114.1" stroke="#ffc56a" stroke-width="3" stroke-linecap="round" opacity="1"/><polygon points="542.5,114.1 541.7,125.0 533.4,120.3" fill="#ffc56a" opacity="1"/>
+<text x="555.5" y="96.6" fill="#ffc56a" font-size="15" font-weight="600" text-anchor="middle" font-family="system-ui, -apple-system, Segoe UI, Helvetica, Arial, sans-serif">up</text>
+<line x1="490.0" y1="205.0" x2="399.1" y2="152.5" stroke="#ffc56a" stroke-width="3" stroke-linecap="round" opacity="1"/><polygon points="399.1,152.5 410.0,153.3 405.3,161.6" fill="#ffc56a" opacity="1"/>
+<text x="376.6" y="144.5" fill="#ffc56a" font-size="15" font-weight="600" text-anchor="middle" font-family="system-ui, -apple-system, Segoe UI, Helvetica, Arial, sans-serif">left</text>
+<line x1="490.0" y1="205.0" x2="437.5" y2="295.9" stroke="#ffc56a" stroke-width="3" stroke-linecap="round" opacity="1"/><polygon points="437.5,295.9 438.3,285.0 446.6,289.7" fill="#ffc56a" opacity="1"/>
+<text x="424.5" y="323.4" fill="#ffc56a" font-size="15" font-weight="600" text-anchor="middle" font-family="system-ui, -apple-system, Segoe UI, Helvetica, Arial, sans-serif">down</text>
+<circle cx="490" cy="205" r="5" fill="#ffc56a"/>
+<path d="M 428.0 205.0 A 62 62 0 0 1 436.3 174.0" fill="none" stroke="#e8ecff" stroke-width="2"/>
+<text x="420.1" y="194.0" fill="#e8ecff" font-size="13" font-weight="500" text-anchor="end" font-family="system-ui, -apple-system, Segoe UI, Helvetica, Arial, sans-serif">lean</text>
+<text x="340.0" y="420.0" fill="#8f9ac0" font-size="13" font-weight="500" text-anchor="middle" font-family="system-ui, -apple-system, Segoe UI, Helvetica, Arial, sans-serif">Grey: straight on the screen.  Gold: a quick swipe, leaning clockwise.</text>
+</svg>
