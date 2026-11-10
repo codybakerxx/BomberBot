@@ -26,7 +26,8 @@
  *      is an arc: left drifts up, right drifts down, up drifts right, down
  *      drifts left. Aiming each direction where the thumb really swipes puts
  *      those flicks in the middle of their quarter instead of on a border.
- *      By default all four aims lean the same 15 degrees; Match my thumb can
+ *      By default all four aims lean the same 15 degrees (clockwise for a left
+ *      thumb, anticlockwise for a right thumb); Match my thumb can
  *      set one lean for all four, or a lean for each. The aims change only
  *      which direction a stroke counts as, never how far the thumb travels.
  *
@@ -42,8 +43,11 @@ const REVISE_MARGIN = 0.2; // how clearly a longer look must disagree before it 
 const SETTLE_PX = 6; // a thumb that stays within this ...
 const SETTLE_MS = 120; // ... for this long has come to rest
 
-/** Standard clockwise lean, in degrees, for a left thumb. */
+/** Standard clockwise lean, in degrees, for a left thumb. A right thumb leans the same amount the other way. */
 export const DEFAULT_TILT = 15;
+
+/** Which thumb steers: the pad sits on that side of the screen. */
+export type Hand = 'left' | 'right';
 
 /** Screen angle of each direction, in degrees anticlockwise from "right" (index 1 up, 2 down, 3 left, 4 right). */
 export const STRAIGHT = [0, 90, 270, 180, 0];
@@ -51,6 +55,15 @@ export const STRAIGHT = [0, 90, 270, 180, 0];
 /** Aims for all four directions leaning the same `tilt` degrees clockwise. */
 export function uniformAims(tilt: number): number[] {
   return STRAIGHT.map((a, d) => (d === 0 ? 0 : a - tilt));
+}
+
+/**
+ * The standard aims for a thumb that has not been matched. A thumb pivots at
+ * its own bottom corner of the screen, so the two are mirror images: a left
+ * thumb's quick swipes lean clockwise, a right thumb's anticlockwise.
+ */
+export function standardAims(hand: Hand): number[] {
+  return uniformAims(hand === 'right' ? -DEFAULT_TILT : DEFAULT_TILT);
 }
 
 /**

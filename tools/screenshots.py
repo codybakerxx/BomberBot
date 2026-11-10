@@ -3,7 +3,8 @@ Retakes the screenshots used in the documentation (docs/screenshots/).
 
 It opens the built game in a phone-sized browser window, drives it with
 simulated touches and key presses, and saves the pictures: the menu and its
-Swipe pad box, a round in progress, the Match my thumb screens, and the
+Controls tab (on Standard, and on My thumb), the right-thumb layout, the menu
+opened mid-round, a round in progress, the Match my thumb screens, and the
 sideways layout.
 
 This is optional tooling, not part of the game. It needs Python 3 with the
@@ -92,11 +93,14 @@ async def main():
         # --- upright phone: menu
         context, page = await phone(browser, 393, 740)
         await page.screenshot(path=str(OUT / "menu.png"))
-        await page.locator(".tune").screenshot(path=str(OUT / "menu-settings.png"))
+        await page.tap("#tabControls")
+        await page.wait_for_timeout(100)
+        await page.screenshot(path=str(OUT / "menu-controls.png"))
+        await page.locator("#paneControls").screenshot(path=str(OUT / "menu-settings.png"))
 
         # --- Match my thumb: the prompt, then twenty swipes leaning about 30 degrees clockwise.
         # Sideways swipes lean a little more than up and down ones, as many thumbs do.
-        await page.tap("#matchStart")
+        await page.tap("#dirMine")  # no match saved yet, so this starts the matching
         await page.wait_for_timeout(200)
         cdp = await context.new_cdp_session(page)
         thumb = Thumb(page, cdp, 130, 600)
@@ -123,7 +127,9 @@ async def main():
             }"""
         )
         await page.tap("#teachClose")
-        await page.tap("#matchReset")  # leave the saved setting as standard
+        await page.wait_for_timeout(150)
+        await page.locator("#paneControls").screenshot(path=str(OUT / "menu-settings-matched.png"))
+        await page.tap("#tabMain")
 
         # --- a round in progress: power-ups in the open, a blast along the top row
         await page.tap("#play")
@@ -155,6 +161,19 @@ async def main():
                 break
             await page.wait_for_timeout(10)
         await page.screenshot(path=str(OUT / "play.png"))
+        await context.close()
+
+        # --- right thumb steering: the controls mirrored
+        context, page = await phone(browser, 393, 740)
+        await page.tap("#tabControls")
+        await page.tap("#handRight")
+        await page.tap("#menuClose")  # closes the menu and starts a round
+        await page.wait_for_timeout(300)
+        await page.screenshot(path=str(OUT / "right-thumb.png"))
+        # --- and the menu as it looks when opened in the middle of a round
+        await page.tap("#menuBtn")
+        await page.wait_for_timeout(150)
+        await page.screenshot(path=str(OUT / "menu-paused.png"))
         await context.close()
 
         # --- the same game held sideways

@@ -481,3 +481,104 @@ for (let seed = 1; seed <= 40; seed++) {
   run(w4, FUSE_TICKS + FLAME_TICKS, none);
   assert.equal(r4.alive, true);
 }
+
+// 14. no walking back through a bomb: it is passable only while you still count as standing on its tile
+{
+  const right: PlayerInput = { dir: 4, a: false, b: false };
+  const left: PlayerInput = { dir: 3, a: false, b: false };
+  const drop = (x: number): World => {
+    const w = mk();
+    w.players[0].x = x;
+    step(w, [{ dir: 0, a: true, b: false }]);
+    w.bombs[0].fuse = 10_000; // these checks are about walking, not the fuse
+    return w;
+  };
+
+  // still on the bomb's tile: free to move about on it, in both directions
+  {
+    const w = drop(5);
+    const p = w.players[0];
+    while (p.x < 5.4) step(w, [right]);
+    assert.equal(Math.round(p.x), 5);
+    run(w, ticks(20), left);
+    assert.ok(p.x < 4.9, 'walked back over the bomb and off the other side');
+  }
+  // stepped onto the next tile, even by a hair: the bomb is now solid
+  {
+    const w = drop(5);
+    const p = w.players[0];
+    while (p.x < 5.5) step(w, [right]);
+    assert.equal(Math.round(p.x), 6, 'counts as standing on the next tile');
+    const x0 = p.x;
+    assert.ok(x0 < 5.6);
+    run(w, ticks(30), left);
+    assert.equal(p.x, x0, 'cannot move back toward the bomb at all');
+    assert.equal(p.moving, false);
+    assert.equal(w.bombs[0].cx, 5, 'and without the boot the bomb stays put');
+    run(w, 10, right);
+    assert.ok(p.x > x0, 'but can still walk away from it');
+  }
+  // the same up and down, and from the other side
+  {
+    const w = mk();
+    const p = w.players[0];
+    p.x = 1;
+    p.y = 5;
+    step(w, [{ dir: 0, a: true, b: false }]);
+    w.bombs[0].fuse = 10_000;
+    while (p.y > 4.5) step(w, [{ dir: 1, a: false, b: false }]);
+    while (p.y > 4.45) step(w, [{ dir: 1, a: false, b: false }]);
+    const y0 = p.y;
+    run(w, ticks(30), { dir: 2, a: false, b: false });
+    assert.equal(p.y, y0);
+  }
+  // nor can the bomb be got round by lining up with it from between two lanes
+  {
+    const w = drop(3);
+    const p = w.players[0];
+    while (p.x < 3.5) step(w, [right]); // on tile 4, leaning over tile 3; row 2 has a pillar under column 4
+    const x0 = p.x;
+    let furthestBack = x0;
+    for (let i = 0; i < ticks(60); i++) {
+      step(w, [{ dir: 2, a: false, b: false }]);
+      furthestBack = Math.min(furthestBack, p.x);
+    }
+    assert.equal(furthestBack, x0, 'pressing down never slides back onto the bomb tile to use its opening');
+    assert.equal(p.x, 5, 'it carries on to the next opening instead');
+    assert.ok(p.y > 1);
+    // and from a standstill, where the nearest opening would be the bomb's tile, it stays put
+    const w2 = drop(3);
+    const q = w2.players[0];
+    while (q.x < 3.5) step(w2, [right]);
+    step(w2, [none]);
+    const qx = q.x;
+    run(w2, ticks(30), { dir: 2, a: false, b: false });
+    assert.equal(q.x, qx);
+    assert.equal(q.y, 1);
+  }
+  // with the boot, pushing back into the bomb you have just stepped off kicks it away
+  {
+    const w = drop(5);
+    const p = w.players[0];
+    p.canKick = true;
+    while (p.x < 5.5) step(w, [right]);
+    step(w, [left]);
+    assert.equal(w.bombs[0].slide, 3, 'kicked');
+    run(w, 60, none);
+    assert.equal(w.bombs[0].cx, 1, 'slid to the wall');
+    run(w, ticks(40), left);
+    assert.ok(p.x < 5, 'and the way back is clear once it has gone');
+  }
+  // a bomb thrown onto your tile does not trap you: you can walk off it
+  {
+    const w = mk();
+    const p = w.players[0];
+    p.x = 7;
+    w.bombs.push({ id: 99, owner: 1, x: 7, y: 1, cx: 7, cy: 1, fuse: 10_000, range: 2, age: 0, state: 'ground', slide: 0, heldBy: -1, lifted: true, fromX: 0, fromY: 0, flyDir: 0, flyDist: 0, flyT: 0 });
+    run(w, ticks(40), right);
+    assert.ok(p.x > 8);
+    run(w, ticks(60), left);
+    assert.equal(p.x, 8, 'and then it blocks the way back');
+  }
+}
+

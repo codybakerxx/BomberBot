@@ -20,7 +20,8 @@ Working today:
 - Nine bot colours, drawn in code (no image files)
 - Bombs, blasts, chain reactions and five power-ups
 - Kicking bombs, and lifting and throwing them
-- Touch controls made for one thumb on each side, with a swipe pad that can be matched to your own thumb
+- Touch controls made for one thumb on each side, steered with the left or the right thumb, with a swipe pad that can be matched to your own thumb
+- A menu that pauses the round, with tabs for the main menu and the controls
 - Keyboard controls for playing on a computer
 - Sound effects
 
@@ -35,6 +36,7 @@ Blast the three target bots in the other corners without getting caught in a bla
 | Move | Swipe on the pad and keep your thumb down. Slide another way to turn. Lift to stop. | Arrow keys or W A S D |
 | Drop a bomb | **A** | Space |
 | Lift a bomb, then throw it | **B**, then **B** again (needs the glove) | Shift |
+| Pause and open the menu | **Menu**, then **✕** to go back | Escape |
 
 Power-ups are hidden under some bricks:
 
@@ -46,7 +48,7 @@ Power-ups are hidden under some bricks:
 | Boot | Run into a bomb to kick it sliding away |
 | Glove | Lift a bomb with B and throw it. A lifted bomb goes off after 3 seconds, even in your hands |
 
-If the pad sometimes reads your swipes as the wrong direction, open the menu and tap **Match my thumb**. Twelve swipes measure how yours lean, eight more test the result, and it keeps whichever setting reads you best. It takes about 40 seconds. [How it works](docs/MATCH-MY-THUMB.md).
+If the pad sometimes reads your swipes as the wrong direction, open the menu's **Controls** tab and tap **My thumb** to run Match my thumb. Twelve swipes measure how yours lean, eight more test the result, and it keeps whichever setting reads you best. It takes about 40 seconds, and you only do it once. The tab and the corner of the swipe pad show whether Standard or My thumb is on. [How it works](docs/MATCH-MY-THUMB.md).
 
 The full rules are in [docs/GAME-RULES.md](docs/GAME-RULES.md).
 

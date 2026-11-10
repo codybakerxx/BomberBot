@@ -359,11 +359,18 @@ function freeForBomb(world: World, cx: number, cy: number, players = true): bool
   return true;
 }
 
-/** Can this player not enter the tile? A bomb you are still standing on lets you walk off it. */
+/**
+ * Can this player not enter the tile? Blocks and bricks stop them, and so does
+ * a bomb, with one exception: a bomb on the tile the player counts as standing
+ * on (the one they just dropped, or one thrown onto them) does not hold them
+ * in. They can move about on that tile and walk off it. The moment they count
+ * as standing on the next tile, that bomb is solid to them like any other, so
+ * there is no walking back through it.
+ */
 function blocked(world: World, p: Player, cx: number, cy: number): boolean {
   if (tileAt(world, cx, cy) !== FLOOR) return true;
   const b = bombAt(world, cx, cy);
-  if (b && !(Math.abs(p.x - b.x) < 0.999 && Math.abs(p.y - b.y) < 0.999)) return true;
+  if (b && !(Math.round(p.x) === b.cx && Math.round(p.y) === b.cy)) return true;
   return false;
 }
 
@@ -458,8 +465,10 @@ function movePlayer(world: World, p: Player, dir: Dir): void {
       if (step > 0) newAlong = along > tAlong ? along : Math.min(newAlong, tAlong);
       else newAlong = along < tAlong ? along : Math.max(newAlong, tAlong);
       let kicked = false;
-      // walking into a bomb kicks it away in that direction
-      if (newAlong === tAlong) {
+      // Walking into a bomb kicks it away in that direction. "Into" means up against it:
+      // at the middle of this tile, or already leaning over toward the bomb's tile
+      // (which happens when the player has only just stepped off it).
+      if ((newAlong - tAlong) * step >= 0) {
         const bx = tx + dx;
         const by = ty + dy;
         const b = bombAt(world, bx, by);

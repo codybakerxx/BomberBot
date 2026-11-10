@@ -10,8 +10,10 @@
     cv        the arena (a canvas)
     hud       top-left strip: bombs, blast length, speed, boot and glove
     menuBtn   back to the menu
-    touch     on-screen controls: dzone (swipe pad, with the dpad cross inside it), btnA, btnB
-    menu      bot picker, Play, and the D-pad settings (optZone, matchState, matchStart, matchReset)
+    touch     on-screen controls: dzone (swipe pad, with the dpad cross and the padTag caption inside it), btnA, btnB
+    menu      two tabs and a close button (tabMain, tabControls, menuClose)
+                paneMain: bot picker, Play or Resume, New round
+                paneControls: Steering thumb (handLeft, handRight) and Swipe direction (dirStandard, dirMine, matchState, matchStart)
     teach     the Match my thumb panel, laid over the arena only
     result    the panel shown when a round ends
 -->
@@ -103,6 +105,26 @@
   body:not(.portrait) #btnB { right: 6px; top: 56px; width: calc(var(--side) - 12px); height: 24%; }
   body:not(.portrait) #btnA { right: 6px; bottom: 6px; width: calc(var(--side) - 12px); top: calc(56px + 24% + 8px); }
 
+  /* right thumb steers: the same layout mirrored, pad on the right, B over A on the left */
+  body.righty.portrait #dzone { left: auto; right: 0; }
+  body.righty.portrait #btnB, body.righty.portrait #btnA { right: auto; left: 0; }
+  body.righty:not(.portrait) #dzone { left: auto; right: 6px; }
+  body.righty:not(.portrait) #btnB, body.righty:not(.portrait) #btnA { right: auto; left: 6px; }
+  body.righty #padTag { left: auto; right: 14px; }
+
+  /* which swipe direction setting is in use, shown on the pad while playing */
+  #padTag {
+    position: absolute;
+    left: 14px;
+    bottom: 10px;
+    pointer-events: none;
+    font: 700 10px/1 var(--font-display);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: rgba(255, 255, 255, 0.32);
+  }
+  #padTag.mine { color: var(--accent); opacity: 0.8; }
+  #padTag.mine::before { content: '\2713\00a0'; }
   #dpad {
     position: absolute;
     left: 50%;
@@ -142,6 +164,39 @@
     gap: 14px;
     align-items: stretch;
   }
+  /* the menu hangs from the top, so its tabs stay put when switching between them */
+  #menu { place-items: start center; }
+  .menu-top { display: flex; align-items: stretch; gap: 10px; }
+  #tabs { flex: 1; display: grid; grid-template-columns: 1fr 1fr; gap: 4px; padding: 4px; background: var(--panel); border: 1.5px solid var(--line); border-radius: 12px; }
+  #tabs button {
+    padding: 10px 6px;
+    font: 700 13px/1 var(--font-display);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--ink-dim);
+    background: transparent;
+    border: 0;
+    border-radius: 8px;
+    cursor: pointer;
+  }
+  #tabs button[aria-selected="true"] { color: #14100a; background: var(--accent); }
+  #menuClose {
+    flex: 0 0 46px;
+    display: grid;
+    place-items: center;
+    padding: 0;
+    color: var(--ink);
+    background: var(--panel);
+    border: 1.5px solid var(--line);
+    border-radius: 12px;
+    cursor: pointer;
+  }
+  #menuClose svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2.6; stroke-linecap: round; }
+  .pane { display: flex; flex-direction: column; gap: 14px; }
+  .pane[hidden] { display: none; }
+  .go[hidden] { display: none; }
+  /* the Menu button and the top strip belong to the game screen, not the menu */
+  body.menu-open #menuBtn, body.menu-open #hud { visibility: hidden; }
   h1, h2 {
     margin: 0;
     font: 700 clamp(24px, 6vmin, 38px)/1.05 var(--font-display);
@@ -197,25 +252,46 @@
   .check { display: flex; align-items: center; gap: 10px; min-height: 28px; }
   .check input { width: 22px; height: 22px; margin: 0; accent-color: var(--accent); }
   body:not(.touch) .tune { display: none; } /* the pad only exists on touch screens */
-  .opt { display: flex; flex-direction: column; gap: 6px; }
-  .opt + .opt { padding-top: 10px; border-top: 1px solid var(--line); }
-  .opt-title { margin: 0; font: 700 14px/1.2 var(--font-display); color: var(--ink); }
-  .opt-title span { font: 500 13px/1.2 var(--font-body); color: var(--ink-dim); }
-  .opt-title span::before { content: '· '; }
-  .opt-desc { margin: 0; font-size: 13px; line-height: 1.35; color: var(--ink-dim); min-height: 1.35em; }
+  .opt-desc { margin: 0; font-size: 13px; line-height: 1.35; color: var(--ink-dim); }
+  .opt-state { margin: 0; font-size: 13px; line-height: 1.35; color: var(--ink); min-height: 2.7em; }
   .opt-note { margin: 0; font-size: 12px; line-height: 1.35; color: var(--ink-dim); }
-  #optZone { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; }
-  #optZone button {
-    padding: 10px 0;
-    font: 500 14px/1 var(--font-body);
+  .opt-note[hidden] { display: none; }
+  .switch { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  .switch button {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 3px;
+    padding: 10px 12px;
+    text-align: left;
     color: var(--ink-dim);
     background: transparent;
     border: 1.5px solid var(--line);
-    border-radius: 8px;
+    border-radius: 10px;
     cursor: pointer;
   }
-  #optZone button[aria-pressed="true"] { color: #14100a; background: var(--accent); border-color: var(--accent); font-weight: 700; }
-  .match { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .switch b { font: 700 15px/1.1 var(--font-display); color: var(--ink); }
+  .switch small { font: 500 12px/1.2 var(--font-body); }
+  .switch .on-tag {
+    display: none;
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    padding: 3px 6px;
+    font: 700 10px/1 var(--font-display);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--accent);
+    background: #14100a;
+    border-radius: 5px;
+  }
+  /* the setting in use: filled, with an ON tag */
+  .switch button[aria-pressed="true"] { color: #3a2c10; background: var(--accent); border-color: var(--accent); }
+  .switch button[aria-pressed="true"] b { color: #14100a; }
+  .switch button[aria-pressed="true"] .on-tag { display: block; }
+  .tune .mini { align-self: flex-start; }
+  .tune .mini[hidden] { display: none; }
   .mini {
     padding: 9px 12px;
     font: 700 12px/1 var(--font-display);
@@ -280,14 +356,17 @@
   }
   .go.quiet { color: var(--ink); background: transparent; border: 1.5px solid var(--line); }
   button:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
-  .keys { display: none; }
-  body:not(.touch) .keys { display: block; }
+  .keys { display: none; flex-direction: column; gap: 10px; }
+  body:not(.touch) .keys { display: flex; }
+  .keys h2 { font-size: 18px; }
   @media (max-height: 430px) {
     .card { gap: 8px; }
     .overlay { place-items: start center; }
-    .tune { display: grid; grid-template-columns: 1fr 1fr; column-gap: 16px; row-gap: 6px; padding: 4px 12px 8px; }
-    .opt + .opt { padding-top: 0; border-top: 0; padding-left: 16px; border-left: 1px solid var(--line); }
-    .opt-note { grid-column: 1 / -1; }
+    .tune { gap: 6px; padding: 4px 12px 8px; }
+    .pane { gap: 8px; }
+    #tabs button { padding: 7px 6px; }
+    .tune > .opt-desc { display: none; }
+    .opt-state { min-height: 0; }
     #menu .sub { display: none; }
     .bot span { display: none; }
     .bot canvas { max-width: 56px; }
@@ -304,6 +383,7 @@
     <div id="dpad" data-dir="0">
       <i class="up"></i><i class="down"></i><i class="left"></i><i class="right"></i><i class="hub"></i>
     </div>
+    <span id="padTag"></span>
   </div>
   <button id="btnB" class="tbtn" type="button" aria-label="B button, lift or throw a bomb">B</button>
   <button id="btnA" class="tbtn" type="button" aria-label="A button, drop bomb">A</button>
@@ -311,32 +391,52 @@
 
 <div id="menu" class="overlay">
   <div class="card">
-    <h1 class="wordmark">Bomber<span>Bot</span></h1>
-    <p class="sub">Pick your bot and blast the three targets. A drops a bomb. The boot lets you kick bombs. The glove lets B lift a bomb and throw it within 3 seconds.</p>
-    <div id="picker"></div>
-    <p class="sub keys">Keyboard: arrow keys or WASD to move, Space to drop a bomb, Shift to lift and throw.</p>
-    <div class="row"><button id="play" class="go" type="button">Play</button></div>
-    <fieldset class="tune">
-      <legend>Swipe pad</legend>
-      <div class="opt">
-        <p class="opt-title" id="optZoneLabel">Swipe length <span>how far to swipe to turn while holding</span></p>
-        <div id="optZone" class="seg" role="group" aria-labelledby="optZoneLabel">
-          <button type="button" data-v="70">Short</button>
-          <button type="button" data-v="100">Medium</button>
-          <button type="button" data-v="140">Long</button>
-        </div>
-        <p class="opt-desc" id="optZoneDesc" aria-live="polite"></p>
+    <div class="menu-top">
+      <div id="tabs" role="tablist" aria-label="Menu sections">
+        <button type="button" role="tab" id="tabMain" aria-controls="paneMain" aria-selected="true">Main menu</button>
+        <button type="button" role="tab" id="tabControls" aria-controls="paneControls" aria-selected="false">Controls</button>
       </div>
-      <div class="opt">
-        <p class="opt-title">Swipe direction <span>which way each swipe counts</span></p>
-        <p class="opt-desc" id="matchState"></p>
-        <div class="match">
-          <button id="matchStart" class="mini" type="button">Match my thumb</button>
-          <button id="matchReset" class="mini" type="button" hidden>Use standard</button>
-        </div>
+      <button type="button" id="menuClose" aria-label="Close the menu">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5l14 14M19 5L5 19"/></svg>
+      </button>
+    </div>
+
+    <section id="paneMain" class="pane" role="tabpanel" aria-labelledby="tabMain">
+      <h1 class="wordmark">Bomber<span>Bot</span></h1>
+      <p class="sub">Pick your bot and blast the three targets. A drops a bomb. The boot lets you kick bombs. The glove lets B lift a bomb and throw it within 3 seconds.</p>
+      <div id="picker"></div>
+      <div class="row">
+        <button id="play" class="go" type="button">Play</button>
+        <button id="newRound" class="go quiet" type="button" hidden>New round</button>
       </div>
-      <p class="opt-note">These are separate. Match my thumb only changes direction, never swipe length.</p>
-    </fieldset>
+    </section>
+
+    <section id="paneControls" class="pane" role="tabpanel" aria-labelledby="tabControls" hidden>
+      <fieldset class="tune">
+        <legend>Steering thumb</legend>
+        <p class="opt-desc">The swipe pad goes on this side, and A and B on the other.</p>
+        <div class="switch" role="group" aria-label="Steering thumb">
+          <button type="button" id="handLeft"><span class="on-tag">On</span><b>Left thumb</b><small>pad on the left</small></button>
+          <button type="button" id="handRight"><span class="on-tag">On</span><b>Right thumb</b><small>pad on the right</small></button>
+        </div>
+      </fieldset>
+      <fieldset class="tune">
+        <legend>Swipe direction</legend>
+        <p class="opt-desc">How the pad decides whether a swipe is up, down, left or right.</p>
+        <div class="switch" role="group" aria-label="Swipe direction setting">
+          <button type="button" id="dirStandard"><span class="on-tag">On</span><b>Standard</b><small id="dirStandardSub">typical left thumb</small></button>
+          <button type="button" id="dirMine"><span class="on-tag">On</span><b>My thumb</b><small id="dirMineSub">tap to set up</small></button>
+        </div>
+        <p class="opt-state" id="matchState" aria-live="polite"></p>
+        <button id="matchStart" class="mini" type="button" hidden>Match again</button>
+        <p class="opt-note" id="saveNote" hidden>This browser is not saving settings, so they last only until you close the game.</p>
+      </fieldset>
+      <div class="keys">
+        <h2>Keyboard</h2>
+        <p class="sub">Arrow keys or W A S D to move. Space drops a bomb. Shift lifts a bomb and throws it. Escape opens and closes the menu.</p>
+        <p class="sub">On a phone or tablet, this tab has the settings for the on-screen swipe pad.</p>
+      </div>
+    </section>
   </div>
 </div>
 
@@ -361,7 +461,7 @@
     <p id="resultText" class="sub"></p>
     <div class="row">
       <button id="again" class="go" type="button">Play again</button>
-      <button id="change" class="go quiet" type="button">Change bot</button>
+      <button id="change" class="go quiet" type="button">Menu</button>
     </div>
   </div>
 </div>

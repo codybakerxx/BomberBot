@@ -13,7 +13,7 @@
  * docs/MATCH-MY-THUMB.md explains it all in plain words.
  */
 import type { Dir } from './sim';
-import { STRAIGHT, nearestDir, uniformAims } from './swipe';
+import { Hand, STRAIGHT, nearestDir, uniformAims } from './swipe';
 
 /** The learning swipes, in the order they are asked for: each direction three times. */
 export const TEACH_ORDER: Dir[] = [3, 1, 4, 2, 4, 3, 2, 1, 3, 2, 1, 4];
@@ -68,14 +68,18 @@ export function summarise(samples: { want: Dir; lean: number }[]): ThumbSummary 
  * Not the whole of it: slower, deliberate swipes are straighter than quick
  * ones, and both have to land comfortably inside the right quarter. The limits
  * keep a perfectly straight swipe at least 20 degrees inside its own quarter.
+ *
+ * For a left thumb the limits are 25 degrees clockwise (the way it naturally
+ * leans) and 20 anticlockwise. For a right thumb they are mirrored.
  */
-export function tiltFor(lean: number): number {
-  return Math.max(-20, Math.min(25, Math.round(lean * 0.75)));
+export function tiltFor(lean: number, hand: Hand = 'left'): number {
+  const [lo, hi] = hand === 'right' ? [-25, 20] : [-20, 25];
+  return Math.max(lo, Math.min(hi, Math.round(lean * 0.75)));
 }
 
 /** Candidate 1: one lean for all four directions (Match my thumb version 1). */
-export function singleAims(sum: ThumbSummary): number[] {
-  return uniformAims(tiltFor(sum.lean));
+export function singleAims(sum: ThumbSummary, hand: Hand = 'left'): number[] {
+  return uniformAims(tiltFor(sum.lean, hand));
 }
 
 /**
@@ -84,8 +88,8 @@ export function singleAims(sum: ThumbSummary): number[] {
  * the overall average before use. That keeps most of a real difference
  * between directions while damping one stray swipe.
  */
-export function perDirectionAims(sum: ThumbSummary): number[] {
-  return STRAIGHT.map((a, d) => (d === 0 ? 0 : a - tiltFor((sum.by[d] + sum.lean) / 2)));
+export function perDirectionAims(sum: ThumbSummary, hand: Hand = 'left'): number[] {
+  return STRAIGHT.map((a, d) => (d === 0 ? 0 : a - tiltFor((sum.by[d] + sum.lean) / 2, hand)));
 }
 
 /** How far inside its own quarter a swipe sits under these aims: degrees to the nearest border, negative if misread. */

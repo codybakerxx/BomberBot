@@ -19,7 +19,7 @@ import {
   summarise,
   tiltFor,
 } from '../src/teach';
-import { STRAIGHT, uniformAims, nearestDir } from '../src/swipe';
+import { STRAIGHT, uniformAims, standardAims, nearestDir } from '../src/swipe';
 
 {
   // on screen, y grows downward: (-1, -0.7) is left and up
@@ -79,6 +79,30 @@ import { STRAIGHT, uniformAims, nearestDir } from '../src/swipe';
       assert.equal(nearestDir(aims, s.vx, s.vy), d);
       assert.ok(marginOf(aims, d, s.vx, s.vy) >= 20 - 1e-9, `straight ${d} has room`);
     }
+  }
+
+  // a right thumb is the mirror image: standard lean and limits the other way round
+  assert.deepEqual(standardAims('left'), uniformAims(15));
+  assert.deepEqual(standardAims('right'), uniformAims(-15));
+  assert.equal(tiltFor(40, 'right'), 20);
+  assert.equal(tiltFor(-40, 'right'), -25);
+  assert.equal(tiltFor(-20, 'right'), -15);
+  assert.deepEqual(singleAims(summary(-20, [0, -20, -20, -20, -20]), 'right'), uniformAims(-15));
+  for (const hand of ['left', 'right'] as const) {
+    for (let i = 0; i < 1000; i++) {
+      const by = [0, 1, 2, 3, 4].map(() => (r() - 0.5) * 140);
+      const aims = perDirectionAims(summary(Math.round((r() - 0.5) * 140), by), hand);
+      for (const d of [1, 2, 3, 4] as Dir[]) {
+        const s = swipe(d, 0);
+        assert.ok(marginOf(aims, d, s.vx, s.vy) >= 20 - 1e-9, `straight ${d} has room with a ${hand} thumb`);
+      }
+    }
+  }
+  // a right thumb's natural swipes (leaning 30 degrees anticlockwise) are read right by its standard aims, wrong-ish by the left's
+  for (const d of [1, 2, 3, 4] as Dir[]) {
+    const s = swipe(d, -30);
+    assert.equal(nearestDir(standardAims('right'), s.vx, s.vy), d);
+    assert.ok(marginOf(standardAims('right'), d, s.vx, s.vy) > marginOf(standardAims('left'), d, s.vx, s.vy) + 25);
   }
 
   // margins: a straight swipe right with the standard 15 degree lean is 30 degrees from the border with up

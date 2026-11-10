@@ -54,8 +54,12 @@ This is the brief the project started from.
 | Match my thumb version 1 is kept, not deleted | Its document is `docs/MATCH-MY-THUMB-V1.md` and its code is on the branch `match-my-thumb-v1`. Do not delete that branch. |
 | Match my thumb tests its result and keeps the best of: the setting before, one lean, a lean per direction | Simulation showed a lean per direction alone is not a clear improvement, so each player's own test swipes decide. A change has to beat the setting already in use. |
 | Robots start at 2.55 tiles a second, about 69% of the original speed; each speed power-up adds 0.37 tiles a second, up to six | The game started too fast, so the speed was halved, then tuned in play-testing (+25%, +12.5%, −2.5%). Speed is something you earn by collecting power-ups. |
-| The menu's Swipe pad box has two clearly separate settings: Swipe length (Short, Medium, Long) and Swipe direction (Match my thumb) | Five unexplained levels were hard to choose between, and it was not clear whether Match my thumb overrode them. It does not. |
+| Swipe length is fixed at Medium, with no menu setting | A choice of five levels, then three, was offered. Medium felt right in play-testing, so the choice was removed. |
+| The menu has a Standard / My thumb switch, with the side in use tagged On, and the swipe pad shows which is on during play | It was not obvious whether Match my thumb was active. Switching to Standard keeps the match so it can be switched back on. |
 | A kicked bomb slides 30% slower than at first (8.4 tiles a second instead of 12) | Asked for together with the slower walking. |
+| The menu pauses the round and can be closed with ✕; it has two tabs, Main menu and Controls | Opening the menu used to end the round. Control settings were crowding the main menu. |
+| Steering thumb: left (default) or right. The right-thumb layout is mirrored, its standard lean is 15° anticlockwise, and each thumb keeps its own match | So players can steer with whichever thumb they prefer. The two thumbs lean opposite ways, so they cannot share a setting. |
+| A bomb is passable only while the robot still counts as standing on its tile | Walking back and forth through a bomb after stepping off it felt wrong. Once on the next tile, it is solid. |
 | Kicking needs the boot, lifting needs the glove | They are power-ups to find, not abilities everyone starts with. |
 | A lifted bomb has 3 seconds and keeps ticking | The fuse does not pause in your hands. The 3 seconds start at the first lift only, so a bomb cannot be kept alive by lifting it again. |
 | Robots are about one tile in size, with a ring on the tile they stand on | So it is clear where the robot is relative to the blocks when hiding from a blast. |
@@ -65,7 +69,6 @@ This is the brief the project started from.
 ## Still open
 
 - **Match my thumb: separate settings for upright and sideways.** The thumb sweeps a different arc in each grip. Liked, not built yet.
-- **Swap sides.** Pad on the right and A and B on the left, for left-handed players. The standard lean would flip to 15° anticlockwise for that layout, and each side would keep its own match. Liked, not built yet; worth doing when a left-handed friend wants to play.
 - **Setting bombs off by remote.** B was also meant to detonate. How that should work has not been decided.
 - **The final colours.** The arena is in blues for now. The look is to be revisited.
 - **More arenas.** Only the one layout style exists.

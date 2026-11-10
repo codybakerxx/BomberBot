@@ -76,7 +76,6 @@ Every number has a name. Change the value, then run `npm run check`.
 | How often each power-up appears | The percentages in `createWorld` | `src/sim.ts` |
 | How many bricks the arena starts with | `softDensity` default in `createWorld` (0.78) | `src/sim.ts` |
 | How far a thumb must move | The constants near the top | `src/swipe.ts` |
-| The three Swipe length choices and their descriptions | `ZONE_LEVELS` and `ZONE_WORDS` | `src/main.ts` |
 
 The meaning of each one is listed in [GAME-RULES.md](GAME-RULES.md) and [CONTROLS.md](CONTROLS.md).
 
@@ -166,8 +165,11 @@ python3 tools/screenshots.py
 |---|---|
 | No on-screen controls | You are on a computer without a touch screen. That is intended: use the keyboard. |
 | No sound | Browsers stay silent until the first tap or key press. On some phones the game also goes quiet when the silent switch is on. |
-| The robot reads your swipes as the wrong direction | Run **Match my thumb** from the menu. See [MATCH-MY-THUMB.md](MATCH-MY-THUMB.md). |
-| The robot reacts to tiny thumb movements, or needs too big a swipe | Change **Swipe length** in the menu's Swipe pad box: Long ignores bigger movements, Short reacts to smaller ones. |
+| The robot reads your swipes as the wrong direction | On the menu's Controls tab, check **Steering thumb** is the thumb you steer with, then tap **My thumb** to run Match my thumb. See [MATCH-MY-THUMB.md](MATCH-MY-THUMB.md). |
+| You want the swipe pad on the right | On the menu's Controls tab, set **Steering thumb** to Right thumb. |
+| You opened the menu by mistake | Tap **✕** or **Resume**. The round was paused, not lost. |
+| The robot reacts to tiny thumb movements, or needs too big a swipe | Swipe length is fixed, with no menu setting. To change it for everyone, edit `QUIET` near the top of `src/swipe.ts` (see [CONTROLS.md](CONTROLS.md)). |
+| You cannot tell whether Match my thumb is on | On the menu's Controls tab, under Swipe direction, the side in use is filled in and tagged **On**. While playing, the corner of the swipe pad says **Standard swipes** or **✓ My thumb swipes**. |
 | Your settings are gone | They are saved per browser, per device. A different browser, a private window or cleared site data starts fresh. |
 | You changed the code and nothing looks different | Run `npm run build` again, then reload the page. |
 | `npm run build` says the marker is missing | `src/page.html` must still contain `/*__BUNDLE__*/` inside its last `<script>` tag. That is where the code goes. |

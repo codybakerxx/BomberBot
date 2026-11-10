@@ -23,7 +23,7 @@ The game runs at a fixed 60 ticks a second. Times below are given in seconds wit
 - Robots start at 2.55 tiles a second. Each speed power-up adds 0.37 tiles a second, and up to six of them count, which brings a robot to 4.8 tiles a second, 1.88 times its starting speed.
 - At the starting speed, the quickest way clear of your own first bomb from a corner (two tiles along, one round the corner) takes 1.23 seconds of the bomb's 2.5.
 - The tile a robot **counts as standing on** is the one whose middle it is nearest to. The game draws a ring on yours. That tile decides where your bomb is dropped, whether a blast catches you and which power-up you pick up.
-- A robot fills its lane, so it can only go sideways where there is an opening beside it. Bricks and solid blocks block it. So does a bomb, except the one it is standing on, which it can walk off.
+- A robot fills its lane, so it can only go sideways where there is an opening beside it. Bricks and solid blocks block it. So does a bomb, with one exception: a bomb on the tile the robot counts as standing on (the one it just dropped, or one thrown onto it) does not hold it in. It can move about on that tile and walk off. The moment it counts as standing on the next tile, that bomb is solid to it like any other, so there is no walking back through.
 
 ### Turning
 
@@ -81,7 +81,7 @@ Every arena has at least one boot and one glove. If the dice give none, one is p
 *`movePlayer` and `moveBombs` in sim.ts*
 
 - You need the **boot**. Without it a bomb in your way just blocks you.
-- Walk into a bomb from the tile next to it and it slides away in that direction at 8.4 tiles a second.
+- Walk into a bomb from the tile next to it and it slides away in that direction at 8.4 tiles a second. That includes pushing back into a bomb you have only just stepped off.
 - It keeps sliding until the next tile is not free, then stops in the middle of the last free tile. A solid block, a brick, another bomb or a robot stops it.
 - A bomb with something directly behind it cannot be kicked.
 - Its fuse keeps running while it slides.

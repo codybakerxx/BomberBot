@@ -65,7 +65,7 @@ Plain-words version: [GAME-RULES.md](GAME-RULES.md).
 | `press(x, y, t)`, `move(x, y, t)`, `release()` | Feed it the touch |
 | `poll(t)` | Call regularly so it notices a thumb that has stopped moving |
 | `dir` | The direction it currently reads: 0 none, 1 up, 2 down, 3 left, 4 right |
-| `scale` | Size of the quiet zone (the menu setting) |
+| `scale` | Scales the quiet zone and turn distances. Always 1 in the game: there is no menu setting for it. |
 | `aims` | The screen angle each direction is read around (index 1 to 4). Setting `tilt` instead leans all four the same number of degrees clockwise. |
 | `onStroke` | Callback used by Match my thumb to measure swipes |
 
@@ -104,8 +104,9 @@ Everything that ties the game to the page:
 - the fixed-rate loop (`frame`, `tick`)
 - sizing the arena and controls to the screen (`layout`)
 - the top bar (`drawHud`)
-- the menu and bot picker (`buildPicker`, `start`, `toMenu`), and the result panel (`finish`)
-- the D-pad settings (`settings`, `applySettings`)
+- the menu: its two tabs, opening and closing it, and pausing the round behind it (`showMenu`, `showTab`, `closeMenu`, `resume`, `start`, `toMenu`, and the flag `roundLive`)
+- the bot picker (`buildPicker`) and the result panel (`finish`)
+- the control settings: steering thumb and swipe direction (`settings`, `thumb`, `applySettings`)
 - the Match my thumb screen (`startTeach`, `teachStroke`, `finishLearning`, `finishTesting`, `closeTeach`)
 
 It holds no game rules.
@@ -114,7 +115,7 @@ It holds no game rules.
 
 The markup and all the styles. A comment at the top lists every element by id. `build.mjs` pastes the compiled code in at the `/*__BUNDLE__*/` marker.
 
-Two classes on `<body>` drive the layout: `touch` (show the on-screen controls) and `portrait` (phone held upright). `layout()` in `main.ts` sets both.
+Classes on `<body>` drive the layout: `touch` (show the on-screen controls) and `portrait` (phone held upright), both set by `layout()` in `main.ts`; `righty` (the right thumb steers, so the controls are mirrored), set by `applySettings()`; and `menu-open` (hide the Menu button and top strip), set by `showMenu()`.
 
 ### `build.mjs`: the build
 
