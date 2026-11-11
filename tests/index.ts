@@ -6,5 +6,6 @@
 import './rules.test';
 import './swipe.test';
 import './teach.test';
+import './bot.test';
 
 console.log('all checks passed');

@@ -59,7 +59,7 @@ export interface Player {
   /** position in tiles; always exactly on a tile centre in at least one of the two */
   x: number;
   y: number;
-  /** the way the robot is drawn facing, and the way a thrown bomb goes */
+  /** the way the robot looks: the direction last asked for. It is drawn facing this way, and a thrown bomb goes this way. */
   facing: Dir;
   /** true if the robot really moved on the last tick */
   moving: boolean;
@@ -68,8 +68,11 @@ export interface Player {
   /** which way the last real movement went on each axis (-1, 0, 1) */
   mvx: number;
   mvy: number;
-  /** direction of the last real movement (may differ from `facing` when blocked) */
+  /** direction of the last real movement (differs from `facing` when blocked, or while lining up for a turn) */
   heading: Dir;
+  /** the direction being asked for, and for how many ticks in a row (0 on the first) */
+  askDir: Dir;
+  askTicks: number;
   alive: boolean;
   /** ticks since being knocked out, for the fade-out (stops at DEATH_TICKS) */
   deadTicks: number;
@@ -210,11 +213,11 @@ export interface WorldConfig {
 // Times are in ticks (60 a second), distances in tiles.
 
 export const FUSE_TICKS = 150; // a dropped bomb goes off after 2.5 s
-export const FLAME_TICKS = 30; // a blast stays for 0.5 s
+export const FLAME_TICKS = 27; // a blast stays for 0.45 s (was 30: shortened a little in play-testing)
 export const CHAIN_TICKS = 5; // a bomb caught in a blast goes off this soon after
 export const BASE_SPEED = 0.04250390625; // starting walking speed, tiles per tick (2.55 tiles a second)
-export const SPEED_STEP = 0.0062; // added by each speed power-up (0.37 tiles a second)
-export const MAX_SPEED_ITEMS = 6; // so six of them bring it to 0.0797 tiles a tick (4.8 tiles a second)
+export const SPEED_STEP = 0.5 / TICK_HZ; // added by each speed power-up: 0.5 tiles a second (0.008333 a tick). Nothing else changes a robot's speed.
+export const MAX_SPEED_ITEMS = 6; // so six of them bring it to 0.0925 tiles a tick (5.55 tiles a second)
 export const MAX_BOMBS = 8;
 export const MAX_FIRE = 8;
 export const DEATH_TICKS = 50; // length of the knocked-out fade
@@ -303,6 +306,8 @@ export function createWorld(cfg: WorldConfig): World {
     mvx: 0,
     mvy: 0,
     heading: 2,
+    askDir: 0,
+    askTicks: 0,
     alive: true,
     deadTicks: 0,
     bombsMax: 1,
@@ -332,6 +337,25 @@ export function createWorld(cfg: WorldConfig): World {
     over: null,
     overCountdown: -1,
     stepAssist: cfg.stepAssist ?? false,
+  };
+}
+
+/**
+ * An independent copy of a world. Stepping the copy leaves the original
+ * untouched, which lets a CPU player try a move out before making it.
+ */
+export function cloneWorld(w: World): World {
+  return {
+    ...w,
+    tiles: w.tiles.slice(),
+    hidden: new Map(w.hidden),
+    players: w.players.map((p) => ({ ...p })),
+    bombs: w.bombs.map((b) => ({ ...b })),
+    flames: w.flames.map((f) => ({ ...f })),
+    burning: w.burning.map((b) => ({ ...b })),
+    items: w.items.map((i) => ({ ...i })),
+    events: [],
+    over: w.over ? { ...w.over } : null,
   };
 }
 
@@ -395,6 +419,15 @@ export function playerSpeed(p: Player): number {
 export const BACK_TOLERANCE = 0.5;
 
 /**
+ * Standing still on a tile where the way asked for is a block, the robot turns
+ * to look first. Only if the direction is still being asked for after this many
+ * ticks (0.15 s) does it set off for the opening on the next tile. So a quick
+ * swipe at a block turns the robot on the spot, and a held one still takes it
+ * round the block.
+ */
+export const LOOK_TICKS = 9;
+
+/**
  * Grid movement. Players travel along lanes: you can only go sideways where
  * there is an opening, so a turn asked for between openings has to be lined up.
  *
@@ -403,7 +436,11 @@ export const BACK_TOLERANCE = 0.5;
  *   if the tile it is standing on has the opening, turn there. Otherwise keep
  *   running the same way and take the next opening ahead. The robot never turns
  *   round to reach an opening behind it unless there is nothing ahead at all.
- * - Standing still between two lanes: step to the nearest one that is open.
+ * - Standing still between two lanes: step to the nearest one that is open. If
+ *   that means leaving the tile it is standing on, it turns to look first and
+ *   only sets off once the direction has been held for LOOK_TICKS.
+ *
+ * Whatever it does, it looks the way it was asked to go.
  */
 function movePlayer(world: World, p: Player, dir: Dir): void {
   const sp = playerSpeed(p);
@@ -452,9 +489,11 @@ function movePlayer(world: World, p: Player, dir: Dir): void {
       else if (canTurnAt(behind)) target = behind;
       else if (!isBlocked(tAlong, ahead)) target = ahead; // nowhere to turn: stop on the next tile
     } else {
+      // Standing still. Its own tile's lane first; the opening on the next tile only once
+      // the swipe has been held long enough to mean "go there" rather than "look there".
       const other = tAcross + Math.sign(off);
       if (canTurnAt(tAcross)) target = tAcross;
-      else if (canTurnAt(other)) target = other;
+      else if (canTurnAt(other) && p.askTicks >= LOOK_TICKS) target = other;
     }
     if (target !== null) newAcross = approach(across, target, sp);
   } else {
@@ -507,8 +546,10 @@ function movePlayer(world: World, p: Player, dir: Dir): void {
       p.heading = my > 0 ? 2 : 1;
     }
   }
-  // face the way the robot is actually walking; when it cannot move, the way it was asked to go
-  p.facing = moved ? p.heading : dir;
+  // Look the way it was asked to go, even while it is still walking along a lane to reach the
+  // opening, or shuffling sideways to line up with one, or stopped by a block. (It used to look
+  // the way it was walking, so between two blocks it could not be turned to look at either.)
+  p.facing = dir;
   p.moving = moved;
   if (moved) p.walk += sp * 5.2;
 }
@@ -790,6 +831,11 @@ export function step(world: World, inputs: (PlayerInput | undefined)[]): void {
       continue;
     }
     const inp = inputs[p.id];
+    const asked: Dir = inp ? inp.dir : 0;
+    if (asked !== p.askDir) {
+      p.askDir = asked;
+      p.askTicks = 0;
+    } else if (asked) p.askTicks++;
     if (inp && inp.dir) movePlayer(world, p, inp.dir);
     else if (world.stepAssist) coast(world, p);
     else p.moving = false;

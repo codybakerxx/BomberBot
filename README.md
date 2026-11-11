@@ -12,7 +12,7 @@ It is a personal project for playing with friends.
 
 ## Where it stands
 
-This is step 1 of 7: one test arena to get the feel of the game right before anything else is added.
+Steps 1 and 2 of 7 are built: one arena to get the feel of the game right, and CPU players to play it against.
 
 Working today:
 
@@ -21,15 +21,16 @@ Working today:
 - Bombs, blasts, chain reactions and five power-ups
 - Kicking bombs, and lifting and throwing them
 - Touch controls made for one thumb on each side, steered with the left or the right thumb, with a swipe pad that can be matched to your own thumb
+- Three CPU players at four levels: Beginner, Normal, Hard and Extreme
 - A menu that pauses the round, with tabs for the main menu and the controls
 - Keyboard controls for playing on a computer
 - Sound effects
 
-Not built yet: computer-controlled players (the three other bots stand still as targets), the shrinking arena, teams, and playing online. The plan is in [docs/ROADMAP.md](docs/ROADMAP.md).
+Not built yet: the shrinking arena, teams, and playing online. The plan is in [docs/ROADMAP.md](docs/ROADMAP.md).
 
 ## How to play
 
-Blast the three target bots in the other corners without getting caught in a blast yourself.
+Be the last bot standing. Three CPU players start in the other corners; choose how good they are under **CPU players** in the menu. Blast them without getting caught in a blast yourself.
 
 | | Phone | Computer |
 |---|---|---|
@@ -77,13 +78,14 @@ src/
   sim.ts        the game rules: arena, movement, bombs, blasts, power-ups, who wins
   swipe.ts      the swipe pad: turns thumb movement into up, down, left or right
   teach.ts      the maths behind Match my thumb: measuring, testing, choosing
+  bot.ts        the CPU players: how they dodge, dig, hunt and the four levels
   input.ts      keyboard and touch wiring
   render.ts     all the drawing
   audio.ts      sound effects
   main.ts       ties it together: game loop, menu, screen layout, settings
   page.html     the page's markup and styles
-tests/          automatic checks of the rules, the swipe pad and the thumb maths
-experiments/    simulations used to tune the controls (not part of the game)
+tests/          automatic checks of the rules, the swipe pad, the thumb maths and the CPU players
+experiments/    simulations used to tune the controls and measure the CPU players (not part of the game)
 tools/          a script that retakes the screenshots (optional)
 docs/           the documents listed below
 build.mjs       builds everything into one file
@@ -99,15 +101,16 @@ CLAUDE.md       notes for working on this project with Claude
 | [docs/CONTROLS.md](docs/CONTROLS.md) | The touch layout, how the swipe pad reads a thumb, how turning works |
 | [docs/MATCH-MY-THUMB.md](docs/MATCH-MY-THUMB.md) | What Match my thumb measures, how it tests the result, and how the pad uses it (version 2, in the game now) |
 | [docs/MATCH-MY-THUMB-V1.md](docs/MATCH-MY-THUMB-V1.md) | The first version of Match my thumb, kept for reference |
+| [docs/CPU-PLAYERS.md](docs/CPU-PLAYERS.md) | How the CPU players think, the four levels, and what has been measured |
 | [docs/CODE-GUIDE.md](docs/CODE-GUIDE.md) | How the code is organised, file by file |
 | [docs/ROADMAP.md](docs/ROADMAP.md) | What is planned, and the decisions made so far |
-| [experiments/README.md](experiments/README.md) | The simulations behind the control tuning, and what they showed |
+| [experiments/README.md](experiments/README.md) | The simulations behind the control tuning and the CPU player matches, and what they showed |
 
 ## How it is made
 
 - TypeScript, drawn on an HTML canvas. No game engine and no image or sound files.
 - The game rules are kept completely apart from drawing and input, so they can be tested without a browser and later run on a server for online play.
-- The build produces a single HTML file of about 43 KB.
+- The build produces a single HTML file of about 70 KB.
 - Directed and playtested by codybakerxx. The code is written with Claude, Anthropic's AI.
 
 ## Credits and notes

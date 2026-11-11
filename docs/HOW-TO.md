@@ -98,7 +98,11 @@ The screen layout adjusts to any size by itself.
 
 ### Change who is in the round
 
-`newWorld` in `src/main.ts` lists the players: you first, then the targets. There can be up to four for now, one per corner.
+`newWorld` in `src/main.ts` lists the players: you first, then the CPU players, and makes a `Bot` for each of those. There can be up to four players for now, one per corner.
+
+### Change how the CPU players play
+
+Each level is one line of settings in the `LEVELS` table at the top of `src/bot.ts`: how often it thinks, how soon it notices bombs, how hard it comes after players. [CPU-PLAYERS.md](CPU-PLAYERS.md) explains each setting and how to measure the effect of a change.
 
 ### Add or change a bot colour
 

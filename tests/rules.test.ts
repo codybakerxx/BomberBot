@@ -22,6 +22,8 @@ import {
   SPEED_STEP,
   MAX_SPEED_ITEMS,
   KICK_SPEED,
+  LOOK_TICKS,
+  TICK_HZ,
   playerSpeed,
   tileAt,
   makeRng,
@@ -443,8 +445,9 @@ for (let seed = 1; seed <= 40; seed++) {
   assert.equal(q.speed, MAX_SPEED_ITEMS, 'eight picked up, six count');
   assert.equal(seen.length, MAX_SPEED_ITEMS + 1, 'speed went up once per power-up until the limit');
   for (let k = 0; k < seen.length; k++) assert.ok(Math.abs(seen[k] - (BASE_SPEED + k * SPEED_STEP)) < 1e-12, `step ${k}`);
-  assert.ok(Math.abs(SPEED_STEP - 0.0062) < 1e-12, 'each step adds 0.37 tiles a second');
-  assert.ok(Math.abs(playerSpeed(q) - (0.04250390625 + 6 * 0.0062)) < 1e-12, 'six take it to about 4.8 tiles a second');
+  assert.ok(Math.abs(SPEED_STEP * TICK_HZ - 0.5) < 1e-12, 'each step adds 0.5 tiles a second');
+  assert.equal(FLAME_TICKS, 27, 'a blast stays for 0.45 seconds');
+  assert.ok(Math.abs(playerSpeed(q) - (0.04250390625 + 6 * 0.5 / 60)) < 1e-12, 'six take it to about 5.55 tiles a second');
 
   // a kicked bomb slides 0.14 tiles a tick: 30% slower than the original 0.2
   assert.ok(Math.abs(KICK_SPEED - 0.2 * 0.7) < 1e-12);
@@ -582,3 +585,108 @@ for (let seed = 1; seed <= 40; seed++) {
   }
 }
 
+
+// 15. the robot looks the way it is asked to go, even when a block is in the way or it has to line up first
+{
+  const go = (dir: Dir): PlayerInput => ({ dir, a: false, b: false });
+  /** a robot standing still at (x, y) in an empty arena */
+  const at = (x: number, y: number): World => {
+    const w = mk();
+    w.players[0].x = x;
+    w.players[0].y = y;
+    return w;
+  };
+
+  // In a sideways corridor with a pillar above and below (column 2, row 3), a little off the middle
+  // of the tile. Up and down are blocks. A quick swipe up or down turns the robot to look that way.
+  for (const dir of [1, 2] as Dir[]) {
+    const w = at(2.3, 3);
+    const p = w.players[0];
+    run(w, LOOK_TICKS, go(dir));
+    assert.equal(p.facing, dir, `looks ${dir === 1 ? 'up' : 'down'} at the block`);
+    assert.equal(p.x, 2.3, 'and a quick swipe does not move it at all');
+    assert.equal(p.y, 3);
+    assert.equal(p.moving, false);
+  }
+  // The same in an upright corridor with a pillar left and right (column 3, row 2).
+  for (const dir of [3, 4] as Dir[]) {
+    const w = at(3, 2.3);
+    const p = w.players[0];
+    run(w, LOOK_TICKS, go(dir));
+    assert.equal(p.facing, dir, `looks ${dir === 3 ? 'left' : 'right'} at the block`);
+    assert.equal(p.y, 2.3);
+    assert.equal(p.x, 3);
+  }
+  // Looking one way and then the other, each a quick swipe: still on the spot.
+  {
+    const w = at(2.3, 3);
+    const p = w.players[0];
+    run(w, LOOK_TICKS, go(1));
+    run(w, LOOK_TICKS, go(2));
+    assert.equal(p.facing, 2);
+    assert.equal(p.x, 2.3);
+  }
+  // The pause is only for leaving the tile. An opening on the tile it is standing on is taken at once.
+  {
+    const w = at(3, 2.8); // counts as standing on row 3, which is open to the left
+    const p = w.players[0];
+    step(w, [go(3)]);
+    assert.ok(p.moving && p.y > 2.8, 'steps down to line up on the first tick');
+  }
+  // And none while running: the turn is lined up without a pause.
+  {
+    const w = at(1.5, 3);
+    const p = w.players[0];
+    while (p.x < 2.3) step(w, [go(4)]);
+    const x0 = p.x;
+    step(w, [go(1)]);
+    assert.ok(p.x > x0, 'keeps running to the opening');
+  }
+  // Exactly on the middle of the tile it already did; it still does.
+  {
+    const w = at(2, 3);
+    run(w, 3, go(1));
+    assert.equal(w.players[0].facing, 1);
+    assert.equal(w.players[0].moving, false);
+  }
+  // Holding the swipe still takes it round the block: after the pause it walks to the next opening and goes through.
+  {
+    const w = at(2.3, 3);
+    const p = w.players[0];
+    run(w, LOOK_TICKS + 1, go(1));
+    assert.ok(p.moving && p.x > 2.3, 'sets off once the swipe has been held');
+    run(w, ticks(40), go(1));
+    assert.equal(p.x, 3, 'lined up with the opening at column 3');
+    assert.ok(p.y < 2.5, 'and went up through it');
+    assert.equal(p.facing, 1);
+  }
+  // Running down a lane and asked to turn before the opening: it looks the new way at once,
+  // keeps running to the opening, and turns there.
+  {
+    const w = at(1, 1);
+    const p = w.players[0];
+    while (p.y < 1.7) step(w, [go(2)]);
+    step(w, [go(4)]);
+    assert.equal(p.facing, 4, 'looks right straight away');
+    assert.ok(p.moving && p.heading === 2, 'while still running down');
+    run(w, ticks(60), go(4));
+    assert.equal(p.y, 3, 'took the opening at row 3');
+    assert.ok(p.x > 1.5);
+  }
+  // So a bomb can be thrown over a block from between two of them.
+  {
+    const w = at(2.3, 3);
+    const p = w.players[0];
+    p.canGrab = true;
+    step(w, [{ dir: 0, a: true, b: false }]);
+    step(w, [none]);
+    step(w, [{ dir: 0, a: false, b: true }]);
+    assert.ok(p.carrying, 'lifted the bomb');
+    step(w, [go(1)]);
+    step(w, [none]);
+    step(w, [{ dir: 0, a: false, b: true }]);
+    const b = w.bombs[0];
+    assert.equal(b.state, 'air');
+    assert.equal(b.flyDir, 1, 'thrown up, over the pillar');
+  }
+}

@@ -12,7 +12,7 @@
     menuBtn   back to the menu
     touch     on-screen controls: dzone (swipe pad, with the dpad cross and the padTag caption inside it), btnA, btnB
     menu      two tabs and a close button (tabMain, tabControls, menuClose)
-                paneMain: bot picker, Play or Resume, New round
+                paneMain: bot picker, CPU level (cpuLevels, cpuBlurb), Play or Resume, New round
                 paneControls: Steering thumb (handLeft, handRight) and Swipe direction (dirStandard, dirMine, matchState, matchStart)
     teach     the Match my thumb panel, laid over the arena only
     result    the panel shown when a round ends
@@ -290,6 +290,11 @@
   .switch button[aria-pressed="true"] { color: #3a2c10; background: var(--accent); border-color: var(--accent); }
   .switch button[aria-pressed="true"] b { color: #14100a; }
   .switch button[aria-pressed="true"] .on-tag { display: block; }
+  /* the CPU level: four short buttons in a row, shown with a keyboard too */
+  body:not(.touch) .tune.always { display: flex; }
+  .switch.four { grid-template-columns: repeat(4, 1fr); gap: 5px; }
+  .switch.four button { align-items: center; padding: 11px 2px; }
+  .switch.four b { font-size: 14px; }
   .tune .mini { align-self: flex-start; }
   .tune .mini[hidden] { display: none; }
   .mini {
@@ -403,8 +408,13 @@
 
     <section id="paneMain" class="pane" role="tabpanel" aria-labelledby="tabMain">
       <h1 class="wordmark">Bomber<span>Bot</span></h1>
-      <p class="sub">Pick your bot and blast the three targets. A drops a bomb. The boot lets you kick bombs. The glove lets B lift a bomb and throw it within 3 seconds.</p>
+      <p class="sub">Be the last bot standing. A drops a bomb. The boot kicks bombs. The glove lets B lift one and throw it within 3 seconds.</p>
       <div id="picker"></div>
+      <fieldset class="tune always">
+        <legend>CPU players</legend>
+        <div class="switch four" id="cpuLevels" role="group" aria-label="How good the three CPU players are"></div>
+        <p class="opt-desc" id="cpuBlurb"></p>
+      </fieldset>
       <div class="row">
         <button id="play" class="go" type="button">Play</button>
         <button id="newRound" class="go quiet" type="button" hidden>New round</button>

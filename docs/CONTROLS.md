@@ -31,7 +31,7 @@ The strip at the top left shows how many bombs you can have out, your blast leng
 ## The menu
 
 <p align="center">
-  <img src="screenshots/menu.png" alt="The menu's Main menu tab: the bot picker and Play" width="220">
+  <img src="screenshots/menu.png" alt="The menu's Main menu tab: the bot picker, the CPU level and Play" width="220">
   <img src="screenshots/menu-controls.png" alt="The menu's Controls tab: Steering thumb and Swipe direction" width="220">
   <img src="screenshots/menu-paused.png" alt="The menu opened in the middle of a round: Resume and New round" width="220">
 </p>
@@ -40,7 +40,7 @@ The menu has two tabs along the top and a close button (✕) beside them.
 
 | Tab | What is on it |
 |---|---|
-| **Main menu** | The bot picker, and **Play**. If a round is in progress: **Resume** and **New round**. |
+| **Main menu** | The bot picker, **CPU players** (Beginner, Normal, Hard or Extreme), and **Play**. If a round is in progress: **Resume** and **New round**. |
 | **Controls** | On a touch screen: **Steering thumb** and **Swipe direction** (both described below). On a computer: the keyboard keys. |
 
 Opening the menu during a round pauses it. Nothing is lost: the round waits behind the menu.
@@ -156,6 +156,10 @@ So you can swipe early for a turning that is coming up. The full list is under "
 
 One thing looks odd until you know why: if the robot is **standing still** between two openings and you swipe sideways, it first steps up or down to the nearest opening. It has to, because that is the only place it can go sideways from.
 
+The robot **looks** the way you swiped straight away, even at a block and even while it is still on its way to the opening.
+
+Between two blocks there is one more rule. A **quick swipe** at a block turns the robot to look at it and does not move it, which is how you aim a throw over a block. A swipe **held** for longer than 0.15 seconds sends it to the opening on the next tile and round the block, as before. The pause is `LOOK_TICKS` in `sim.ts`. It only applies when the robot is standing still and would have to leave its tile; a running robot, or one with an opening on its own tile, turns without any pause.
+
 ## Tuning it in the code
 
 Every distance is a named constant at the top of `src/swipe.ts`.
@@ -187,5 +191,6 @@ The controls went through several rounds of play-testing on a phone. Each round 
 7. **Right thumb steering.** The layout can be mirrored, with the standard lean mirrored too and a separate match kept for each thumb.
 8. **No walking back through a bomb.** A bomb used to stay passable for as long as the robot overlapped it at all. It now turns solid the moment the robot counts as standing on the next tile.
 9. **Match my thumb version 2.** A lean per direction and a test round were added. Simulation showed a lean per direction alone is roughly a wash, so the test round decides, on each player's own swipes, whether it is used.
+10. **Looking where you swipe.** The robot used to look the way it was walking. Between two blocks, a swipe at a block made it walk toward the nearest opening and look that way instead, so it could not be turned to face the block. It now looks the way it was asked to go, at once, and between two blocks a quick swipe only turns it: it sets off for the opening if the swipe is held for 0.15 seconds.
 
 The simulations used to compare the old and new behaviour are in [`experiments/`](../experiments/README.md).

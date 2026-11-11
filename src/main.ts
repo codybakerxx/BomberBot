@@ -10,6 +10,7 @@
  * It holds no game rules. Those are all in sim.ts.
  */
 import { createWorld, step, World, PlayerInput, Dir, TICK_HZ, DEATH_TICKS } from './sim';
+import { Bot, BotLevel, BOT_LEVELS, LEVELS, createBot, botInput } from './bot';
 import { COLORS, colorById, drawRobot, drawStatic, drawDynamic, drawItemIcon } from './render';
 import { Input } from './input';
 import { initAudio, sfx } from './audio';
@@ -46,6 +47,19 @@ try {
 } catch {
   /* storage is optional */
 }
+
+// How good the CPU players are, remembered on this device under the key "cpuLevel".
+let cpuLevel: BotLevel = 'normal';
+try {
+  const saved = localStorage.getItem('cpuLevel') as BotLevel | null;
+  if (saved && BOT_LEVELS.includes(saved)) cpuLevel = saved;
+} catch {
+  /* storage is optional */
+}
+/** The three CPU players of the current arena (players 1 to 3). */
+let bots: Bot[] = [];
+/** Whose blast caught you this round: a player id, or -1 if you are still in. */
+let blastedBy = -1;
 
 // Control settings, remembered on this device under the key "controls3".
 // (Swipe length is not a setting: the quiet zone is always the standard size, `QUIET` in swipe.ts.)
@@ -169,12 +183,15 @@ window.addEventListener('touchstart', showTouch, { passive: true, once: true });
 
 /** Start a fresh arena with a random seed. */
 function newWorld(): void {
-  // you, plus three practice targets in the other corners, all in different colours
+  // you, plus three CPU players in the other corners, all in different colours
   const others = COLORS.filter((c) => c.id !== myColor).slice(0, 3);
+  const seed = (Math.random() * 2 ** 31) | 0;
   world = createWorld({
-    seed: (Math.random() * 2 ** 31) | 0,
+    seed,
     players: [{ colorId: myColor }, ...others.map((c) => ({ colorId: c.id }))],
   });
+  bots = others.map((_, i) => createBot(i + 1, cpuLevel, seed));
+  blastedBy = -1;
   overShown = false;
   redrawStatic();
 }
@@ -278,24 +295,35 @@ function finish(title: string, text: string): void {
 
 /** One step of the game rules: read the input, advance the world, play its sounds, check for the end. */
 function tick(): void {
-  // player 0 is you; the other three have no input yet, so they stand still (CPU players come next)
+  // player 0 is you; players 1 to 3 are CPU players, which are asked for the same thing your controls give
   const inputs: (PlayerInput | undefined)[] = [input.state()];
+  for (const b of bots) inputs[b.id] = botInput(world, b);
   step(world, inputs);
+  const me = world.players[0];
   for (const e of world.events) {
     if (e.type === 'place') sfx.place();
     else if (e.type === 'explode') sfx.explode();
     else if (e.type === 'pickup') sfx.pickup();
     else if (e.type === 'kick' || e.type === 'throw') sfx.kick();
     else if (e.type === 'lift' || e.type === 'land') sfx.lift();
-    else if (e.type === 'death') sfx.death();
+    else if (e.type === 'death') {
+      sfx.death();
+      if (e.player === 0) {
+        // whose blast was it? the flame on your tile remembers who dropped the bomb
+        const f = world.flames.find((fl) => fl.cx === Math.round(me.x) && fl.cy === Math.round(me.y));
+        blastedBy = f ? f.owner : 0;
+      }
+    }
   }
   if (overShown) return;
-  const me = world.players[0];
-  if (world.over) {
-    if (world.over.winner === 0) finish('Arena cleared', 'All three targets are down.');
-    else finish('Draw', 'Nobody was left standing.');
-  } else if (!me.alive && me.deadTicks >= DEATH_TICKS) {
-    finish('You got blasted', 'Stand clear of your own bombs. The blast reaches two tiles at the start.');
+  if (world.over && world.over.winner === 0) {
+    finish('You win', 'Last bot standing. All three CPU players are out.');
+  } else if (!me.alive && (world.over || me.deadTicks >= DEATH_TICKS)) {
+    // out, whether or not the others went with you
+    const who = world.players[blastedBy];
+    const how = !who || who === me ? 'Caught in your own blast.' : `Caught in ${colorById(who.colorId).name}'s blast.`;
+    if (world.over && world.over.winner < 0) finish('Draw', `${how} Nobody was left standing.`);
+    else finish('You got blasted', how);
   }
 }
 
@@ -362,6 +390,36 @@ function buildPicker(): void {
     });
     grid.append(b);
   }
+}
+
+/** The four CPU level buttons in the menu. A change applies at once, to a paused round too. */
+function buildLevels(): void {
+  const row = $('cpuLevels');
+  for (const lv of BOT_LEVELS) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.id = `cpu-${lv}`;
+    const name = document.createElement('b');
+    name.textContent = LEVELS[lv].label;
+    b.append(name);
+    b.addEventListener('click', () => {
+      cpuLevel = lv;
+      for (const bot of bots) bot.level = lv;
+      try {
+        localStorage.setItem('cpuLevel', lv);
+      } catch {
+        /* storage is optional */
+      }
+      showLevel();
+    });
+    row.append(b);
+  }
+  showLevel();
+}
+
+function showLevel(): void {
+  for (const lv of BOT_LEVELS) $(`cpu-${lv}`).setAttribute('aria-pressed', String(lv === cpuLevel));
+  $('cpuBlurb').textContent = LEVELS[cpuLevel].blurb;
 }
 
 /** Push the control settings into the swipe pad, the screen layout, the menu and the pad's caption, and optionally save them. */
@@ -698,6 +756,7 @@ window.addEventListener('orientationchange', () => setTimeout(layout, 200));
 newWorld();
 layout();
 buildPicker();
+buildLevels();
 applySettings(false);
 showMenu('main');
 requestAnimationFrame(frame);
@@ -709,6 +768,12 @@ requestAnimationFrame(frame);
   },
   get mode() {
     return mode;
+  },
+  get bots() {
+    return bots;
+  },
+  get cpuLevel() {
+    return cpuLevel;
   },
   get pad() {
     return input.pad;

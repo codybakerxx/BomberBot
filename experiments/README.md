@@ -1,10 +1,10 @@
 # Experiments
 
-Simulations used to work out how the controls should behave. They are **not part of the game**: nothing in `src/` uses them, and deleting this folder would change nothing a player sees.
+Simulations used to work out how the controls should behave, and one script that plays the CPU players against each other. They are **not part of the game**: nothing in `src/` uses them, and deleting this folder would change nothing a player sees.
 
 They exist because the feel of touch controls cannot be checked from a desk. Each script replays made-up thumb movements through the real game code and counts what happens, so two versions of the controls can be compared on the same input.
 
-**These are models, not measurements.** The "thumb" is invented: its strokes lean, scatter and bounce back by amounts chosen to be plausible. The results show which design is better and roughly by how much. They do not say what any real player will experience. Play-testing on a phone has the final word.
+**The control experiments are models, not measurements.** The "thumb" is invented: its strokes lean, scatter and bounce back by amounts chosen to be plausible. The results show which design is better and roughly by how much. They do not say what any real player will experience. Play-testing on a phone has the final word.
 
 ## Running them
 
@@ -13,6 +13,9 @@ npx tsx experiments/corridor-turns.ts
 npx tsx experiments/stroke-reading.ts
 npx tsx experiments/model-player.ts
 npx tsx experiments/match-v2.ts
+npx tsx experiments/cpu-matches.ts          # about six minutes
+npx tsx experiments/cpu-matches.ts solo
+npx tsx experiments/cpu-matches.ts versus
 ```
 
 The "current" columns use the live code in `src/`, so they change whenever the controls change. The "previous" columns use a frozen copy of the older logic kept in `previous-build.ts`.
@@ -117,6 +120,37 @@ The second part adds a test round of 8 swipes that chooses between the setting b
 - Letting a test choose gives the best average, by a small margin, and protects the thumbs any match would make worse ("mixed"). The cost is that it sometimes keeps the standard lean when a match was slightly better ("straight").
 - The three tie-breakers are within noise of each other. The game uses the closest call because it is the easiest to show on screen. (The average room was rejected for a reason the simulation does not show: moving a border only shifts room between neighbouring directions, so the average hardly changes and real settings often tie on it.)
 - With less scatter (about 10°) every setting reads 99.5% or more right and the same pattern holds; the full output is printed by the script.
+
+## `cpu-matches.ts`: do the CPU players blast themselves, and are the levels in order?
+
+Unlike the scripts above this is a measurement, not a model: it plays whole matches with the real CPU players (`src/bot.ts`) under the real rules, with no screen, and counts how each one went out. Recorded on 10 November 2026, with a blast lasting 0.45 seconds and each speed power-up adding 0.45 tiles a second.
+
+| Run | What it plays |
+|---|---|
+| no argument | Four of the same level, 60 matches; then one of each level, 240 matches. Up to 3 minutes each. |
+| `solo` | Each level alone with a player who stands still, 40 arenas |
+| `versus` | Three of one level against one Beginner CPU player standing in for a slow, careless person, 80 matches |
+
+Four of the same level:
+
+| Level | Blasted itself | Shut in by a rival | Caught in a rival's blast | Still in at the end |
+|---|---|---|---|---|
+| Beginner | 0.0% | 1.3% | 19.6% | 79.2% |
+| Normal | 0.0% | 4.6% | 10.4% | 85.0% |
+| Hard | 0.0% | 7.9% | 9.2% | 82.9% |
+| Extreme | 0.0% | 9.2% | 12.1% | 78.8% |
+
+The other tables are in [docs/CPU-PLAYERS.md](../docs/CPU-PLAYERS.md).
+
+**What it showed.**
+
+- The first version checked only that a bomb left a way out. Alone, no bot ever blasted itself. Four together, about one in five went out to its own bomb (Normal 23%, Hard 20%, Extreme 25%). Replaying those matches showed every one of them standing trapped after another player's bomb had cut the route it planned. Checking, before pressing A, that no nearby player could shut the route brought "blasted itself" to zero.
+- The same replays found two plain bugs: Beginner never moved at all (its pause before setting off cancelled its own plan), and a bot could park on a spot too far away to attack from and stay there. Both showed up as numbers that looked too good: a Beginner that never blasted itself because it never dropped a bomb.
+- The levels come out in order for staying in the match. Hard and Extreme knock out about the same number of rivals.
+- "Shut in by a rival" and "blasted itself" are both a bot caught by its own blast. What separates them is in `shutIn` in the script, and it was drawn up from replays: a first, narrower test left four cases under "blasted itself", and each turned out to be a rival's later bomb cutting the way out or driving the bot back across its own bomb's lane. Replay any case that lands in "blasted itself" before believing either column.
+- CPU players seldom finish each other off inside 3 minutes. They dodge well. The shrinking arena planned for step 3 is what should end matches.
+
+What it cannot show is how they feel to play against. That needs a phone.
 
 ## `previous-build.ts`
 
