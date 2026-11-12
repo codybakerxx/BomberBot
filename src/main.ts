@@ -244,10 +244,18 @@ let scoreCells: { x: number; w: number }[] = [];
 /** How far down the scoreboard the middle of the heads is, in screen pixels. */
 let scoreMid = 0;
 
+/**
+ * The screen the last layout() was made for: its size, and how many of the device's pixels make one of the
+ * page's. If any of them changes, the canvases have to be made again (see keepSharp).
+ */
+let laidOut = { w: 0, h: 0, dpr: 0 };
 function layout(): void {
   const W = window.innerWidth;
   const H = window.innerHeight;
   const dpr = Math.min(window.devicePixelRatio || 1, 3);
+  const sharper = laidOut.dpr !== 0 && laidOut.dpr !== dpr;
+  laidOut = { w: W, h: H, dpr };
+  if (sharper) drawPicker();
   const portrait = H > W * 1.05;
   const isTouch = document.body.classList.contains('touch');
   document.body.classList.toggle('portrait', portrait);
@@ -509,6 +517,7 @@ let acc = 0;
 function frame(now: number): void {
   const dt = Math.min(0.1, (now - last) / 1000);
   last = now;
+  keepSharp();
   input.pad.poll(now); // notice a thumb that has stopped, in every mode
   if (mode === 'playing' || mode === 'over') {
     acc += dt;
@@ -546,11 +555,7 @@ function buildPicker(): void {
     b.style.setProperty('--glow', c.glow);
     b.setAttribute('aria-pressed', String(c.id === myColor));
     const cv = document.createElement('canvas');
-    const dpr = Math.min(window.devicePixelRatio || 1, 3);
-    cv.width = 96 * dpr;
-    cv.height = 108 * dpr;
-    const g = cv.getContext('2d')!;
-    drawRobot(g, cv.width / 2, cv.height * 0.95, (cv.height * 0.9) / -ROBOT.top, c, 2, 0, false); // nine tenths of the button's height
+    cv.dataset.color = c.id;
     const label = document.createElement('span');
     label.textContent = c.name;
     b.append(cv, label);
@@ -575,6 +580,30 @@ function buildPicker(): void {
     });
     grid.append(b);
   }
+  drawPicker();
+}
+
+/** Draw the robots on the bot buttons, sharp at the screen's present pixel density. */
+function drawPicker(): void {
+  const dpr = Math.min(window.devicePixelRatio || 1, 3);
+  for (const cv of $('picker').querySelectorAll('canvas')) {
+    cv.width = 96 * dpr;
+    cv.height = 108 * dpr;
+    const g = cv.getContext('2d')!;
+    drawRobot(g, cv.width / 2, cv.height * 0.95, (cv.height * 0.9) / -ROBOT.top, colorById(cv.dataset.color ?? ''), 2, 0, false); // nine tenths of the button's height
+  }
+}
+
+/**
+ * Keep the game sharp. Every canvas is made for the screen's size and pixel density when layout() runs. A
+ * phone can change its pixel density without telling the page it was resized: the Claude app, for one, can
+ * open a game page at the wrong density and correct it a moment later. A page laid out in that moment is
+ * blurry until it is laid out again, which on a phone may be never. So every frame checks, and lays the
+ * page out again if the screen is not the one it was made for. (Most of the time this is three comparisons.)
+ */
+function keepSharp(): void {
+  const dpr = Math.min(window.devicePixelRatio || 1, 3);
+  if (dpr !== laidOut.dpr || window.innerWidth !== laidOut.w || window.innerHeight !== laidOut.h) layout();
 }
 
 /** While a round is in play your colour cannot be changed: the bot buttons are switched off and a line says why. */
