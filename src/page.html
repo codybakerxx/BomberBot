@@ -58,6 +58,12 @@
     -webkit-tap-highlight-color: transparent;
   }
   #cv { position: fixed; display: block; }
+  /* TEMPORARY: what the page was told about the screen (see showDiag in main.ts) */
+  #diag {
+    position: fixed; left: 0; right: 0; top: 48px; z-index: 5; pointer-events: none;
+    font: 600 10px/1.2 var(--font-body); color: rgba(255,255,255,0.55); text-align: center; padding: 0 6px;
+  }
+  body:not(.portrait) #diag { top: auto; bottom: 2px; }
   /* the round timer. layout() in main.ts sets `left` to the middle of the screen (upright) or of the side column (sideways). */
   #timer {
     position: fixed;
@@ -443,6 +449,7 @@
 </head>
 <body>
 <canvas id="cv"></canvas>
+<div id="diag" aria-hidden="true"></div>
 <div id="timer" role="timer" aria-label="Time left in the round">1:30</div>
 <canvas id="score" role="img" aria-label="Rounds won"></canvas>
 <button id="menuBtn" type="button" aria-label="Menu"><i></i></button>

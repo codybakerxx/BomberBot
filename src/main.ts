@@ -245,6 +245,31 @@ let scoreCells: { x: number; w: number }[] = [];
 let scoreMid = 0;
 
 /**
+ * How many of the screen's pixels make one of the page's: what every canvas is drawn at. A phone at 3 can
+ * report more when its page is zoomed (an app's text-size setting can do that), and the canvases must
+ * follow it or they are stretched and blurry while the page's text stays sharp. It was capped at 3, which
+ * did exactly that. The cap of 4 is only there to keep the sprites' memory in bounds.
+ */
+const MAX_DENSITY = 4;
+function density(): number {
+  return Math.min(window.devicePixelRatio || 1, MAX_DENSITY);
+}
+
+/**
+ * TEMPORARY, while the owner tracks down a blurry arena: one line in the blank row over the arena saying
+ * what the page was told about the screen and what the arena was drawn at. Remove once that is settled.
+ */
+function showDiag(): void {
+  const el = $('diag');
+  const vv = window.visualViewport;
+  const raw = window.devicePixelRatio || 1;
+  const shown = canvas.getBoundingClientRect().width;
+  el.textContent =
+    `${+raw.toFixed(2)} / ${+density().toFixed(2)} · z ${vv ? +vv.scale.toFixed(2) : '-'} · ` +
+    `${window.innerWidth}×${window.innerHeight} · s ${screen.width} · ${canvas.width} in ${+shown.toFixed(1)}`;
+}
+
+/**
  * The screen the last layout() was made for: its size, and how many of the device's pixels make one of the
  * page's. If any of them changes, the canvases have to be made again (see keepSharp).
  */
@@ -252,10 +277,11 @@ let laidOut = { w: 0, h: 0, dpr: 0 };
 function layout(): void {
   const W = window.innerWidth;
   const H = window.innerHeight;
-  const dpr = Math.min(window.devicePixelRatio || 1, 3);
+  const dpr = density();
   const sharper = laidOut.dpr !== 0 && laidOut.dpr !== dpr;
   laidOut = { w: W, h: H, dpr };
   if (sharper) drawPicker();
+  requestAnimationFrame(showDiag);
   const portrait = H > W * 1.05;
   const isTouch = document.body.classList.contains('touch');
   document.body.classList.toggle('portrait', portrait);
@@ -585,7 +611,7 @@ function buildPicker(): void {
 
 /** Draw the robots on the bot buttons, sharp at the screen's present pixel density. */
 function drawPicker(): void {
-  const dpr = Math.min(window.devicePixelRatio || 1, 3);
+  const dpr = density();
   for (const cv of $('picker').querySelectorAll('canvas')) {
     cv.width = 96 * dpr;
     cv.height = 108 * dpr;
@@ -601,9 +627,14 @@ function drawPicker(): void {
  * blurry until it is laid out again, which on a phone may be never. So every frame checks, and lays the
  * page out again if the screen is not the one it was made for. (Most of the time this is three comparisons.)
  */
+let lastZoom = 1;
 function keepSharp(): void {
-  const dpr = Math.min(window.devicePixelRatio || 1, 3);
+  const dpr = density();
   if (dpr !== laidOut.dpr || window.innerWidth !== laidOut.w || window.innerHeight !== laidOut.h) layout();
+  else if (window.visualViewport && window.visualViewport.scale !== lastZoom) {
+    lastZoom = window.visualViewport.scale;
+    showDiag();
+  }
 }
 
 /** While a round is in play your colour cannot be changed: the bot buttons are switched off and a line says why. */
