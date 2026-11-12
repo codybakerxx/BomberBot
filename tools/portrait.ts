@@ -9,6 +9,7 @@
  * out at playing size.
  */
 import { colorById, drawRobot } from '../src/render';
+import { drawRobotTurned } from '../src/robot';
 
 /**
  * Called from tools/portraits.py: one robot on a transparent canvas, as a PNG data URL. `s` is the size of
@@ -19,5 +20,14 @@ import { colorById, drawRobot } from '../src/render';
   cv.width = Math.round(s * 1.2);
   cv.height = Math.round(s * 1.55);
   drawRobot(cv.getContext('2d')!, cv.width / 2, Math.round(s * 1.47), s, colorById(id), facing, 0, false, { noShadow: true });
+  return cv.toDataURL('image/png');
+};
+
+/** The same, turned part of the way round and seen from a little above (the robot's "isometric" view). */
+(window as unknown as { portraitTurned: (id: string, s: number) => string }).portraitTurned = (id, s) => {
+  const cv = document.createElement('canvas');
+  cv.width = Math.round(s * 1.5);
+  cv.height = Math.round(s * 1.7);
+  drawRobotTurned(cv.getContext('2d')!, cv.width / 2, Math.round(s * 1.45), s, colorById(id));
   return cv.toDataURL('image/png');
 };

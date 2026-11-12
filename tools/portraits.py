@@ -2,7 +2,7 @@
 Save large pictures of the robots as PNG files with transparent backgrounds,
 for title screens and other artwork. Not part of the game.
 
-    CHROME=/usr/bin/google-chrome python3 tools/portraits.py [out-folder] [--view front|back|right|left] [colour ...]
+    CHROME=/usr/bin/google-chrome python3 tools/portraits.py [out-folder] [--view front|back|right|left|iso] [colour ...]
 
 Needs Python with Playwright, Pillow, NumPy and SciPy, Chrome, and the
 project's own node_modules (for esbuild). With no colours named it does white,
@@ -52,7 +52,7 @@ async def main() -> None:
         i = args.index("--view")
         view = args[i + 1]
         del args[i : i + 2]
-    facing = {"front": 2, "back": 1, "right": 4, "left": 3}[view]
+    facing = {"front": 2, "back": 1, "right": 4, "left": 3, "iso": 0}[view]  # iso: turned and seen from a little above
     out = pathlib.Path(args[0] if args else "portraits")
     colours = args[1:] or ["white", "gold", "black", "pink"]
     out.mkdir(parents=True, exist_ok=True)
@@ -69,7 +69,7 @@ async def main() -> None:
             await page.set_content("<html><body></body></html>")
             await page.add_script_tag(path=str(bundle))
             for cid in colours:
-                url = await page.evaluate("([id, s, f]) => portrait(id, s, f)", [cid, SIZE, facing])
+                url = await page.evaluate("([id, s, f]) => (f ? portrait(id, s, f) : portraitTurned(id, s))", [cid, SIZE, facing])
                 im = outlined(Image.open(io.BytesIO(base64.b64decode(url.split(",")[1]))).convert("RGBA"))
                 box = im.getbbox()
                 box = (max(0, box[0] - PAD), max(0, box[1] - PAD), min(im.width, box[2] + PAD), min(im.height, box[3] + PAD))

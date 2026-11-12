@@ -101,9 +101,9 @@ const GLASS = 0.34; // the glass dome's radius in those units
 /**
  * Where the light bar would run seen from behind: a round arch over the back of the helmet (the owner asked
  * for it rounded). No bar is drawn there, by the owner's choice: this is only where the helmet's material
- * ends and the glass begins. It is worked out from SIDE_TRIM, so the two views show the same line on the same ball: where the side
- * view has the bar `x` towards the face and `y` down, the roundness of the helmet says how far out to the
- * side that point is, and that is where it is seen from behind.
+ * ends and the glass begins. It is worked out from SIDE_TRIM, so the two views show the same line on the
+ * same ball: where the side view has the bar `x` towards the face and `y` down, the roundness of the helmet
+ * says how far out to the side that point is, and that is where it is seen from behind.
  *
  * The top of the arch is where the side view's bar reaches the back of the helmet. From there to where the
  * bar starts down the side of the head (the end of SIDE_TRIM's second curve) it is one smooth quarter of an
@@ -164,10 +164,14 @@ const BACK_TRIM: [number, number][] = (() => {
   const left = half.slice(1).reverse().map(([x, y]): [number, number] => [-x, y]);
   return [...left, ...half];
 })();
-/** How far along the arch each of its points is, and its whole length. */
-const backAlong: number[] = BACK_TRIM.map(() => 0);
-for (let i = 1; i < BACK_TRIM.length; i++) backAlong[i] = backAlong[i - 1] + Math.hypot(BACK_TRIM[i][0] - BACK_TRIM[i - 1][0], BACK_TRIM[i][1] - BACK_TRIM[i - 1][1]);
-const backLength = backAlong[backAlong.length - 1];
+/** How far along a row of points each one is, measured from the first. */
+function lengthsAlong(pts: [number, number][]): number[] {
+  const out = pts.map(() => 0);
+  for (let i = 1; i < pts.length; i++) out[i] = out[i - 1] + Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]);
+  return out;
+}
+/** How far along the arch each of its points is. */
+const backAlong = lengthsAlong(BACK_TRIM);
 const ARM_SWEEP = 2.6; // how far round an arm goes when it is raised right up, in radians
 /**
  * A drawing with at least this many pixels to one of its units (a robot 500 pixels tall or more) gets the
@@ -490,8 +494,11 @@ interface Stance {
   arms: [number, number];
 }
 
-/** The helmet, centred on (hx, hy). `d` is 1 unless it is the side view of a robot facing left. */
-function helmet(k: Kit, view: 'front' | 'back' | 'side', d: number, hx: number, hy: number): void {
+/**
+ * The helmet, centred on (hx, hy). `d` is 1 unless it is the side view of a robot facing left. The turned
+ * view (artwork only) hands in the `path` its light bar takes, worked out for the way the robot is turned.
+ */
+function helmet(k: Kit, view: 'front' | 'back' | 'side' | 'turned', d: number, hx: number, hy: number, path: Pt[] = []): void {
   const { ctx, c, suit, edge } = k;
   // everything here is drawn at the size the helmet was designed at, brought down to its real size about its centre
   ctx.save();
@@ -511,14 +518,18 @@ function helmet(k: Kit, view: 'front' | 'back' | 'side', d: number, hx: number, 
   ctx.fill();
 
   const z = DOME0 / 0.34; // the helmet shapes of the first robot, at this dome's size
+  // the views whose bar is a row of points and not a curve: the points, and how far along the row each one is
+  const line = view === 'turned' ? path : BACK_TRIM;
+  const lineAlong = view === 'turned' ? lengthsAlong(path) : backAlong;
+  const lineLength = lineAlong[lineAlong.length - 1];
   // the top edge of the chin piece: the line where glass meets colour
   const trim = (): void => {
     if (view === 'side') {
       ctx.moveTo(hx + SIDE_TRIM[0][0][0] * z * d, hy + SIDE_TRIM[0][0][1] * z);
       for (const q of SIDE_TRIM) ctx.bezierCurveTo(hx + q[1][0] * z * d, hy + q[1][1] * z, hx + q[2][0] * z * d, hy + q[2][1] * z, hx + q[3][0] * z * d, hy + q[3][1] * z);
-    } else if (view === 'back') {
-      ctx.moveTo(hx + BACK_TRIM[0][0] * z, hy + BACK_TRIM[0][1] * z);
-      for (const q of BACK_TRIM) ctx.lineTo(hx + q[0] * z, hy + q[1] * z);
+    } else if (view === 'back' || view === 'turned') {
+      ctx.moveTo(hx + line[0][0] * z, hy + line[0][1] * z);
+      for (const q of line) ctx.lineTo(hx + q[0] * z, hy + q[1] * z);
     } else {
       ctx.moveTo(hx - 0.37 * z, hy - 0.04 * z);
       ctx.quadraticCurveTo(hx, hy + 0.53 * z, hx + 0.37 * z, hy - 0.04 * z);
@@ -533,13 +544,13 @@ function helmet(k: Kit, view: 'front' | 'back' | 'side', d: number, hx: number, 
         const q = sideTrimAt(i, t * SIDE_TRIM.length - i);
         return [hx + q[0] * z * d, hy + q[1] * z];
       }
-      if (view === 'back') {
-        // along the arch, by distance: its points are closer together near the top
-        const want = t * backLength;
+      if (view === 'back' || view === 'turned') {
+        // along the row of points, by distance: they are not evenly spaced
+        const want = t * lineLength;
         let i = 1;
-        while (i < BACK_TRIM.length - 1 && backAlong[i] < want) i++;
-        const v = (want - backAlong[i - 1]) / (backAlong[i] - backAlong[i - 1] || 1);
-        const q = lerp(BACK_TRIM[i - 1], BACK_TRIM[i], v);
+        while (i < line.length - 1 && lineAlong[i] < want) i++;
+        const v = (want - lineAlong[i - 1]) / (lineAlong[i] - lineAlong[i - 1] || 1);
+        const q = lerp(line[i - 1], line[i], v);
         return [hx + q[0] * z, hy + q[1] * z];
       }
       const u = 1 - t;
@@ -552,8 +563,10 @@ function helmet(k: Kit, view: 'front' | 'back' | 'side', d: number, hx: number, 
       return [-(b[1] - a[1]) / len, (b[0] - a[0]) / len];
     };
     // the chin piece is on the lower side of the trim (from the side, judged where the bar runs under the glass;
-    // from behind, at the top of the arch)
-    const side = normal(view === 'side' ? 0.85 : 0.5)[1] > 0 ? 1 : -1;
+    // from behind, at the top of the arch; turned, at the bar's lowest point)
+    let low = 0;
+    if (view === 'turned') line.forEach((q, i) => (low = q[1] > line[low][1] ? i : low));
+    const side = normal(view === 'side' ? 0.85 : view === 'turned' ? lineAlong[low] / lineLength : 0.5)[1] > 0 ? 1 : -1;
     const steps = view === 'front' ? 48 : 160;
     ctx.beginPath();
     for (let i = 0; i <= steps; i++) {
@@ -608,7 +621,7 @@ function helmet(k: Kit, view: 'front' | 'back' | 'side', d: number, hx: number, 
       ctx.beginPath();
       trim();
     }
-    if (view === 'side') {
+    if (view === 'side' || view === 'turned') {
       ctx.lineTo(hx + 0.5 * d, hy + 0.6);
       ctx.lineTo(hx - 0.6 * d, hy + 0.6);
       ctx.lineTo(hx - 0.6 * d, hy - 0.5);
@@ -671,7 +684,7 @@ function helmet(k: Kit, view: 'front' | 'back' | 'side', d: number, hx: number, 
     if (d > 0) ctx.arc(hx, hy, DOME0 - 0.082, -1.05, -0.3);
     else ctx.arc(hx, hy, DOME0 - 0.082, Math.PI + 0.3, Math.PI + 1.05);
     ctx.stroke();
-    if (view === 'front') {
+    if (view === 'front' || view === 'turned') {
       ctx.strokeStyle = 'rgba(255,255,255,0.52)';
       ctx.lineWidth = 0.036;
       ctx.beginPath();
@@ -933,8 +946,7 @@ function frontBack(k: Kit, back: boolean, a: Stance): void {
   ctx.lineTo(0.19, CREASE);
   ctx.stroke();
   ctx.restore();
-  // from the back: a line down the spine
-  if (back) seam(ctx, chestShape, [[0, -0.61], [0, -0.42]]);
+  // no line down the middle of the chest, front or back: the owner turned one down
   cast(ctx, chestShape, rimShape, 0.008, 0.045, 0.02, 0.6);
   for (const sg of [-1, 1]) cast(ctx, chestShape, padShape(sg), 0.01, 0.02, 0.012, 0.45);
   ink(ctx, chestShape, edge);
@@ -1105,6 +1117,430 @@ function sideView(k: Kit, d: number, a: Stance): void {
   const pad: Shape = () => oval(ctx, px, -0.582, 0.072, 0.057);
   glossy(ctx, pad, suit, edge, [px - 0.072, -0.639, px + 0.072, -0.525], { depth: 0.016, spots: [[px - 0.02, -0.593, 0.023, 0.0095, -0.5, 0.9]] });
   padPanel(ctx, pad, px, -0.582, 0.057, edge);
+  ctx.restore();
+}
+
+// ---------------------------------------------------------------- the turned view (artwork only)
+//
+// The robot turned part of the way round and seen from a little above: what a character sheet calls a
+// three-quarter or isometric view. The game never draws it (a robot there faces one of four ways); it is
+// for artwork, through drawRobotTurned and tools/portraits.py, and is left out of the game's build.
+//
+// Every piece is the same piece as in the front and side views, given its real depth: the front view says
+// how wide it is and the side view how deep, its outline is where those corners fall once the robot is
+// turned, and it gets the same finish. The details that lie on a piece's front or side (seams, the lines
+// across the pelvis, the lit soles) are the other views' own, laid on that face.
+
+const TURN = 0.8; // how far it is turned from facing the viewer, in radians (46°: close to the usual isometric 45°): its face toward the picture's right
+const TILT = 0.24; // how far above it the viewer is, in radians (14°)
+
+/** A point in the round: x to the picture's right when the robot faces the viewer, y down from the feet, z forward. */
+type Vec = [number, number, number];
+
+/** The outline of a set of points: the smallest shape with no dents that holds them all, in order round its edge. */
+function hullOf(pts: Pt[]): Pt[] {
+  const p = [...pts].sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+  const turn = (o: Pt, a: Pt, b: Pt): number => (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
+  const half = (list: Pt[]): Pt[] => {
+    const out: Pt[] = [];
+    for (const q of list) {
+      while (out.length >= 2 && turn(out[out.length - 2], out[out.length - 1], q) <= 0) out.pop();
+      out.push(q);
+    }
+    out.pop();
+    return out;
+  };
+  const all = half(p).concat(half([...p].reverse()));
+  // corners that all but touch would make a kink where the outline is rounded
+  return all.filter((q, i) => Math.hypot(q[0] - all[(i + 1) % all.length][0], q[1] - all[(i + 1) % all.length][1]) > 0.006);
+}
+
+/** A closed shape through `pts` with soft corners: each starts turning `r` before its point (less on a short edge). */
+function softPoly(ctx: Ctx, pts: Pt[], r: number): void {
+  const n = pts.length;
+  ctx.beginPath();
+  for (let i = 0; i < n; i++) {
+    const p = pts[i];
+    const a = pts[(i + n - 1) % n];
+    const b = pts[(i + 1) % n];
+    const la = Math.hypot(a[0] - p[0], a[1] - p[1]) || 1;
+    const lb = Math.hypot(b[0] - p[0], b[1] - p[1]) || 1;
+    const t = Math.min(r, la * 0.5, lb * 0.5);
+    const from: Pt = [p[0] + ((a[0] - p[0]) / la) * t, p[1] + ((a[1] - p[1]) / la) * t];
+    const to: Pt = [p[0] + ((b[0] - p[0]) / lb) * t, p[1] + ((b[1] - p[1]) / lb) * t];
+    if (i) ctx.lineTo(from[0], from[1]);
+    else ctx.moveTo(from[0], from[1]);
+    ctx.quadraticCurveTo(p[0], p[1], to[0], to[1]);
+  }
+  ctx.closePath();
+}
+
+/** The four corners of a piece of a limb from `a` to `b`: half as wide as `wa` at one end and `wb` at the other. */
+function limbCorners(a: Pt, b: Pt, wa: number, wb: number): Pt[] {
+  const len = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1;
+  const nx = -(b[1] - a[1]) / len;
+  const ny = (b[0] - a[0]) / len;
+  return [[a[0] + nx * wa, a[1] + ny * wa], [b[0] + nx * wb, b[1] + ny * wb], [b[0] - nx * wb, b[1] - ny * wb], [a[0] - nx * wa, a[1] - ny * wa]];
+}
+
+/**
+ * The light bar on a helmet turned by `yaw` and seen from `pitch` above, as a row of points from where it
+ * comes into sight at the back to where it goes out of sight round the front, in the units of SIDE_TRIM.
+ * SIDE_TRIM says where the bar is on one side of the ball; the other side is its mirror image, and the two
+ * meet at the back and at the front, so together they make a ring round the helmet. This is the part of
+ * that ring on the half of the ball facing the viewer.
+ */
+function turnedTrim(yaw: number, pitch: number): Pt[] {
+  const n = SIDE_TRIM.length;
+  const at = (t: number): [number, number] => {
+    const i = Math.min(n - 1, Math.floor(t * n));
+    return sideTrimAt(i, t * n - i);
+  };
+  const glass = (t: number): number => {
+    const [x, y] = at(t);
+    return GLASS * GLASS - x * x - y * y; // above 0 on the glass
+  };
+  // where the side view's bar comes onto the glass at the back, and where it leaves it at the front
+  const edge = (a: number, b: number): number => {
+    for (let i = 0; i < 40; i++) {
+      const m = (a + b) / 2;
+      if (glass(m) > 0 === glass(b) > 0) b = m;
+      else a = m;
+    }
+    return (a + b) / 2;
+  };
+  let first = 0;
+  while (first < 1 && glass(first) <= 0) first += 0.002;
+  let last = 1;
+  while (last > first && glass(last) <= 0) last -= 0.002;
+  const back = edge(first - 0.002, first);
+  const front = edge(last + 0.002, last);
+  const cy = Math.cos(yaw);
+  const sy = Math.sin(yaw);
+  const cp = Math.cos(pitch);
+  const sp = Math.sin(pitch);
+  const steps = 260;
+  const ring: { p: Pt; near: boolean }[] = [];
+  const add = (i: number, side: number): void => {
+    const t = back + (front - back) * (0.5 - 0.5 * Math.cos((Math.PI * i) / steps)); // closer together at both ends, where the ring turns fastest as seen
+    const [f, y] = at(t);
+    const out = Math.sqrt(Math.max(0, glass(t))) * side;
+    const toward = f * cy - out * sy;
+    ring.push({ p: [out * cy + f * sy, y * cp + toward * sp], near: toward * cp - y * sp > 0 });
+  };
+  for (let i = 0; i <= steps; i++) add(i, -1); // the side turned toward the viewer, back to front
+  for (let i = steps - 1; i >= 1; i--) add(i, 1); // the other side, front to back
+  // the longest stretch of the ring that is in sight
+  let best = 0;
+  let bestLen = 0;
+  for (let i = 0; i < ring.length; i++) {
+    if (!ring[i].near || ring[(i + ring.length - 1) % ring.length].near) continue;
+    let len = 0;
+    while (len < ring.length && ring[(i + len) % ring.length].near) len++;
+    if (len > bestLen) {
+      best = i;
+      bestLen = len;
+    }
+  }
+  const line: Pt[] = [];
+  for (let i = 0; i < bestLen; i++) line.push(ring[(best + i) % ring.length].p);
+  // carry each end on a little past the edge of the glass, so the bar is cut off by the edge and not square
+  const on = (a: Pt, b: Pt): Pt => {
+    const len = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1;
+    return [b[0] + ((b[0] - a[0]) / len) * 0.07, b[1] + ((b[1] - a[1]) / len) * 0.07];
+  };
+  if (line.length > 6) {
+    line.unshift(on(line[4], line[0]));
+    line.push(on(line[line.length - 5], line[line.length - 1]));
+  }
+  return line;
+}
+
+/** The robot turned (see above), standing still with its arms at its sides. */
+function turned(k: Kit): void {
+  const { ctx, suit, black, edge } = k;
+  const cy = Math.cos(TURN);
+  const sy = Math.sin(TURN);
+  const cp = Math.cos(TILT);
+  const sp = Math.sin(TILT);
+  /** Where a point in the round is seen. */
+  const pr = (p: Vec): Pt => [p[0] * cy + p[2] * sy, p[1] * cp + (p[2] * cy - p[0] * sy) * sp];
+  /** A solid piece with those corners: its outline as seen, its corners softened by `r`, and the box round it. */
+  const solid = (corners: Vec[], r: number): { shape: Shape; box: Box } => {
+    const h = hullOf(corners.map(pr));
+    return { shape: () => softPoly(ctx, h, r), box: boxOf(...h) };
+  };
+  /** The corners of a piece whose front is `face`, running from `z0` at its back to `z1` at its front (plus `lean` at each height). */
+  const slab = (face: Pt[], z0: number, z1: number, lean: (y: number) => number = () => 0): Vec[] => [
+    ...face.map(([x, y]): Vec => [x, y, z0 + lean(y)]),
+    ...face.map(([x, y]): Vec => [x, y, z1 + lean(y)]),
+  ];
+  /** Draw on the flat front of a piece, `z` forward: (x, y) there are the front view's own. */
+  const onFront = (z: number, draw: () => void): void => {
+    ctx.save();
+    ctx.transform(cy, -sy * sp, 0, cp, z * sy, z * cy * sp);
+    draw();
+    ctx.restore();
+  };
+  /** Draw on the flat side of a piece that faces the viewer, at `x`: (x, y) there are the side view's own, facing right. */
+  const onSide = (x: number, draw: () => void): void => {
+    ctx.save();
+    ctx.transform(sy, cy * sp, 0, cp, x * cy, -x * sy * sp);
+    draw();
+    ctx.restore();
+  };
+  const within = (shape: Shape, draw: () => void): void => {
+    ctx.save();
+    shape();
+    ctx.clip();
+    draw();
+    ctx.restore();
+  };
+  /** A piece on the far side of the body sits back a little. */
+  const sitBack = (shape: Shape): void =>
+    within(shape, () => {
+      ctx.fillStyle = 'rgba(0,0,10,0.2)';
+      ctx.fillRect(-3, -3, 6, 6);
+    });
+  /**
+   * The front of a boxy piece is turned away from the light, which falls from the left: a touch of shade over
+   * it, and a thin line of light down the corner where it meets the side that faces the light.
+   */
+  const corner = (shape: Shape, face: Vec[], ridge: Vec[], suitPiece: boolean): void =>
+    within(shape, () => {
+      ctx.beginPath();
+      face.map(pr).forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)));
+      ctx.closePath();
+      ctx.fillStyle = suitPiece ? `rgba(${SUIT_DIM},0.2)` : 'rgba(0,0,10,0.28)';
+      ctx.fill();
+      ctx.beginPath();
+      ridge.map(pr).forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)));
+      ctx.strokeStyle = suitPiece ? 'rgba(255,255,255,0.5)' : `rgba(${COOL},0.3)`;
+      ctx.lineWidth = 0.006;
+      ctx.stroke();
+    });
+  /** A groove that runs round a piece: across the side that faces the viewer, then across its front. */
+  const band = (shape: Shape, xl: number, xr: number, y: number, z0: number, z1: number, light?: string): void =>
+    seam(ctx, shape, [pr([xl, y, z0]), pr([xl, y, z1]), pr([xr, y, z1])], light);
+
+  const head = pr([0, HY, 0.015]);
+  const rimShape: Shape = () => dot(ctx, head[0], head[1], R);
+
+  // ---- the body's pieces, made first: some throw shadows on pieces drawn before them
+  const level = (y: number, half: number, zb: number, zf: number): Vec[] => [[-half, y, zb], [-half, y, zf], [half, y, zf], [half, y, zb]];
+  const waist = solid([...level(-0.44, 0.132, -0.105, 0.112), ...level(-0.385, 0.146, -0.114, 0.122)], 0.012);
+  const pelvis = solid([...level(-0.4, 0.152, -0.125, 0.13), ...level(-0.362, 0.172, -0.138, 0.144), ...level(-0.298, 0.066, -0.08, 0.085)], 0.016);
+  const chest = solid([...level(-0.602, 0.168, -0.118, 0.13), ...level(-0.53, 0.186, -0.138, 0.155), ...level(-0.424, 0.124, -0.098, 0.112)], 0.022);
+  const padAt = (sg: number): { shape: Shape; c: Pt; rx: number; ry: number } => {
+    const c = pr([sg * 0.247, -0.582, -0.005]);
+    const rx = Math.hypot(0.084 * cy, 0.072 * sy);
+    const ry = Math.hypot(0.057 * cp, Math.hypot(0.072 * cy, 0.084 * sy) * sp);
+    return { shape: () => oval(ctx, c[0], c[1], rx, ry), c, rx, ry };
+  };
+
+  /** One leg. `sg` is -1 for the one nearer the viewer, 1 for the other. */
+  const leg = (sg: number): void => {
+    const far = sg > 0;
+    const knee = solid(slab(flip([[0.075, -0.285], [0.172, -0.285], [0.172, -0.225], [0.075, -0.225]], sg), -0.045, 0.05), 0.012);
+    glossy(ctx, knee.shape, black, DARK, knee.box, JOINT);
+
+    const thighFace = flip([[0.045, -0.4], [0.168, -0.4], [0.181, -0.258], [0.07, -0.258]], sg);
+    const tx = Math.min(...thighFace.map((q) => q[0]));
+    const thigh = solid(slab(thighFace, -0.06, 0.062), 0.03);
+    glossy(ctx, thigh.shape, suit, edge, thigh.box, { spots: [[thigh.box[0] + 0.035, (thigh.box[1] + thigh.box[3]) / 2, 0.034, 0.008, Math.PI / 2, 0.85]] });
+    corner(thigh.shape, thighFace.map(([x, y]): Vec => [x, y, 0.062]), [[sg < 0 ? -0.168 : 0.045, -0.4, 0.062], [sg < 0 ? -0.181 : 0.07, -0.258, 0.062]], true);
+    cast(ctx, thigh.shape, pelvis.shape, 0.008, 0.026, 0.012, 0.6);
+    if (far) sitBack(thigh.shape);
+    ink(ctx, thigh.shape, edge);
+    void tx;
+
+    // the shin, with its knee plate coming to a point at the top
+    const shinFace = flip([[0.06, -0.268], [0.118, -0.292], [0.176, -0.268], [0.186, -0.12], [0.06, -0.12]], sg);
+    const sx0 = Math.min(...shinFace.map((q) => q[0]));
+    const sx1 = Math.max(...shinFace.map((q) => q[0]));
+    const shin = solid(slab(shinFace, -0.058, 0.064), 0.022);
+    glossy(ctx, shin.shape, suit, edge, shin.box, { spots: [[shin.box[0] + 0.035, (shin.box[1] + shin.box[3]) / 2 + 0.01, 0.04, 0.008, Math.PI / 2, 0.85]] });
+    corner(shin.shape, shinFace.map(([x, y]): Vec => [x, y, 0.064]), [[sx0, -0.268, 0.064], [sx0, -0.12, 0.064]], true);
+    within(shin.shape, () => {
+      onFront(0.064, () => seam(ctx, () => poly(ctx, shinFace, 0.02), [[sx0, -0.238], [sg * 0.118, -0.222], [sx1, -0.238]]));
+      onSide(sx0, () => seam(ctx, () => rr(ctx, -0.058, -0.3, 0.122, 0.2, 0.02), [[-0.07, -0.226], [0.02, -0.232], [0.07, -0.238]]));
+    });
+    if (far) sitBack(shin.shape);
+    ink(ctx, shin.shape, edge);
+
+    // the boot: a big round mound, with the lit stripe round its sole
+    const bx = sg * 0.146;
+    const ring = (y: number, half: number, zb: number, zf: number): Vec[] => [[bx - half, y, zb], [bx - half, y, zf], [bx + half, y, zf], [bx + half, y, zb]];
+    const boot = solid([...ring(-0.018, 0.125, -0.1, 0.155), ...ring(-0.075, 0.125, -0.1, 0.155), ...ring(-0.118, 0.098, -0.078, 0.122), ...ring(-0.142, 0.05, -0.04, 0.062)], 0.035);
+    glossy(ctx, boot.shape, black, DARK, boot.box, {
+      tint: COOL,
+      light: 0.3,
+      shade: 0.4,
+      rim: 0.65,
+      depth: 0.018,
+      sky: 0.9,
+      spots: [[boot.box[0] + 0.1, boot.box[1] + 0.03, 0.05, 0.01, 0.18, 0.7]],
+    });
+    corner(boot.shape, ring(-0.018, 0.125, 0.155, 0.155).concat(ring(-0.142, 0.125, 0.155, 0.155).reverse()), [[bx - 0.125, -0.02, 0.155], [bx - 0.125, -0.075, 0.155], [bx - 0.098, -0.118, 0.122]], false);
+    cast(ctx, boot.shape, shin.shape, 0.008, 0.03, 0.012, 0.7);
+    if (far) sitBack(boot.shape);
+    ink(ctx, boot.shape, DARK);
+    onSide(bx - 0.125, () => sole(k, -0.1, 0.255, 1));
+    onFront(0.155, () => sole(k, bx - 0.125, 0.25, 1));
+  };
+
+  /** One arm, hanging a little forward of straight down. */
+  const arm = (sg: number): void => {
+    const far = sg > 0;
+    const lean = (y: number): number => (y + 0.57) * 0.09;
+    // the ribbed joint under the shoulder
+    const j0: Pt = [sg * 0.268, -0.56];
+    const j1: Pt = [sg * 0.282, -0.495];
+    const ribbed = solid(slab(limbCorners(j0, j1, 0.044, 0.044), -0.04, 0.04, lean), 0.012);
+    glossy(ctx, ribbed.shape, black, DARK, ribbed.box, JOINT);
+    for (const t of [0.45, 0.7]) {
+      const m = lerp(j0, j1, t);
+      band(ribbed.shape, m[0] - 0.05, m[0] + 0.05, m[1], lean(m[1]) - 0.04, lean(m[1]) + 0.04, COOL);
+    }
+    ink(ctx, ribbed.shape, DARK);
+    // the wrist
+    const W: Pt = [sg * 0.314, -0.402];
+    const H: Pt = [sg * 0.32, -0.335];
+    const wrist = solid(slab(limbCorners(lerp(W, H, -0.2), lerp(W, H, 0.4), 0.04, 0.04), -0.036, 0.036, lean), 0.01);
+    glossy(ctx, wrist.shape, black, DARK, wrist.box, JOINT);
+    // the forearm
+    const f0: Pt = [sg * 0.286, -0.512];
+    const armFace = limbCorners(f0, W, 0.056, 0.066);
+    const forearm = solid(slab(armFace, -0.054, 0.054, lean), 0.026);
+    glossy(ctx, forearm.shape, suit, edge, forearm.box, { spots: [[forearm.box[0] + 0.036, (forearm.box[1] + forearm.box[3]) / 2, 0.034, 0.008, Math.PI / 2, 0.85]] });
+    const ax0 = (y: number): number => Math.min(...armFace.map((q) => q[0])) + (sg < 0 ? 0 : 0) + (y - y) * 0;
+    corner(forearm.shape, armFace.map(([x, y]): Vec => [x, y, lean(y) + 0.054]), [[f0[0] - 0.056, f0[1], lean(f0[1]) + 0.054], [W[0] - 0.066, W[1], lean(W[1]) + 0.054]], true);
+    void ax0;
+    const cuff = lerp(f0, W, 0.72);
+    band(forearm.shape, cuff[0] - 0.066, cuff[0] + 0.066, cuff[1], lean(cuff[1]) - 0.054, lean(cuff[1]) + 0.054);
+    if (far) sitBack(forearm.shape);
+    ink(ctx, forearm.shape, edge);
+    // the fist: the back of the hand, and four fingers curled under. No thumb.
+    const [hx, hy] = H;
+    const hz = lean(hy);
+    const fistFace: Pt[] = [[hx - 0.068, hy - 0.056], [hx + 0.068, hy - 0.056], [hx + 0.068, hy + 0.068], [hx - 0.068, hy + 0.068]];
+    const fist = solid(slab(fistFace, hz - 0.056, hz + 0.056), 0.034);
+    glossy(ctx, fist.shape, suit, edge, fist.box, { depth: 0.012, spots: [[fist.box[0] + 0.04, fist.box[1] + 0.028, 0.028, 0.008, 0.2, 0.85]] });
+    corner(fist.shape, fistFace.map(([x, y]): Vec => [x, y, hz + 0.056]), [[hx - 0.068, hy - 0.05, hz + 0.056], [hx - 0.068, hy + 0.06, hz + 0.056]], true);
+    within(fist.shape, () => {
+      onFront(hz + 0.056, () => {
+        const front: Shape = () => rr(ctx, hx - 0.068, hy - 0.056, 0.136, 0.124, [0.03, 0.03, 0.042, 0.042]);
+        seam(ctx, front, [[hx - 0.075, hy - 0.004], [hx, hy + 0.004], [hx + 0.075, hy - 0.004]]);
+        ctx.save();
+        front();
+        ctx.clip();
+        ctx.strokeStyle = edge;
+        ctx.lineWidth = 0.005;
+        ctx.beginPath();
+        for (const fx of [-0.034, 0, 0.034]) {
+          ctx.moveTo(hx + fx, hy + 0.012);
+          ctx.lineTo(hx + fx, hy + 0.08);
+        }
+        ctx.stroke();
+        const curl = ctx.createLinearGradient(0, hy + 0.01, 0, hy + 0.068);
+        curl.addColorStop(0, `rgba(${SUIT_DIM},0)`);
+        curl.addColorStop(1, `rgba(${SUIT_DIM},0.36)`);
+        ctx.fillStyle = curl;
+        ctx.fillRect(hx - 0.08, hy + 0.01, 0.16, 0.07);
+        ctx.restore();
+      });
+      onSide(hx - 0.068, () => seam(ctx, () => rr(ctx, hz - 0.056, hy - 0.056, 0.112, 0.124, [0.03, 0.03, 0.042, 0.042]), [[hz - 0.07, hy], [hz + 0.07, hy]]));
+    });
+    cast(ctx, fist.shape, forearm.shape, 0.004, 0.022, 0.01, 0.55);
+    if (far) sitBack(fist.shape);
+    ink(ctx, fist.shape, edge);
+  };
+
+  /** A shoulder: a rounded pad with a black panel set into the top. */
+  const shoulder = (sg: number): void => {
+    const pad = padAt(sg);
+    glossy(ctx, pad.shape, suit, edge, [pad.c[0] - pad.rx, pad.c[1] - pad.ry, pad.c[0] + pad.rx, pad.c[1] + pad.ry], { depth: 0.016, spots: [[pad.c[0] - 0.024, pad.c[1] - 0.006, 0.023, 0.0095, -0.5, 0.9]] });
+    if (sg > 0) cast(ctx, pad.shape, rimShape, 0.01, 0.04, 0.016, 0.5);
+    padPanel(ctx, pad.shape, pad.c[0] + 0.006, pad.c[1] + 0.024 * sp * 3, pad.ry, edge);
+  };
+  /** The black joint between a shoulder pad and the chest. */
+  const socket = (sg: number): void => {
+    const c = pr([sg * 0.196, -0.556, 0]);
+    const shape: Shape = () => dot(ctx, c[0], c[1], 0.04);
+    glossy(ctx, shape, black, DARK, [c[0] - 0.04, c[1] - 0.04, c[0] + 0.04, c[1] + 0.04], JOINT);
+    cast(ctx, shape, padAt(sg).shape, 0.006, 0.02, 0.01, 0.75);
+  };
+
+  // ---- from the far side of the body to the near side
+  arm(1);
+  leg(1);
+  leg(-1);
+
+  glossy(ctx, waist.shape, black, DARK, waist.box, { ...JOINT, spots: [[waist.box[0] + 0.07, waist.box[1] + 0.03, 0.05, 0.006, 0.2, 0.45]] });
+  band(waist.shape, -0.16, 0.16, -0.421, -0.11, 0.117, COOL);
+  band(waist.shape, -0.16, 0.16, -0.404, -0.112, 0.12, COOL);
+  cast(ctx, waist.shape, chest.shape, 0.006, 0.02, 0.01, 0.7);
+  ink(ctx, waist.shape, DARK);
+
+  glossy(ctx, pelvis.shape, black, DARK, pelvis.box, { tint: COOL, light: 0.28, shade: 0.4, rim: 0.6, depth: 0.014, sky: 0.9, spots: [[pelvis.box[0] + 0.06, pelvis.box[1] + 0.03, 0.04, 0.005, 0.25, 0.55]] });
+  // the three machined lines: across the front as in the front view, and carried round the side to meet them
+  within(pelvis.shape, () => {
+    onFront(0.137, () => pelvisLines(ctx, () => rr(ctx, -0.172, -0.42, 0.4, 0.2, 0), [-0.172, -0.362], [-0.066, -0.298], [0.066, -0.298], [0.225, -0.394]));
+    onSide(-0.172, () => pelvisLines(ctx, () => rr(ctx, -0.2, -0.42, 0.337, 0.2, 0), [-0.22, -0.385], [-0.08, -0.31], [0.06, -0.31], [0.137, -0.362]));
+  });
+  cast(ctx, pelvis.shape, waist.shape, 0.005, 0.016, 0.008, 0.6);
+  ink(ctx, pelvis.shape, DARK);
+
+  socket(1);
+
+  // ---- chest: a plate with a crease round its widest line; below the crease it turns away from the light
+  glossy(ctx, chest.shape, suit, edge, chest.box, { shade: 0.34, depth: 0.016 });
+  // no corner or edge down the chest: it would read as a line down the middle of the torso, which the owner turned down
+  within(chest.shape, () => {
+    const under: Pt[] = [pr([-0.186, -0.53, -0.138]), pr([-0.186, -0.53, 0.155]), pr([0.186, -0.53, 0.155]), pr([0.124, -0.424, 0.112]), pr([-0.124, -0.424, 0.112]), pr([-0.124, -0.424, -0.098])];
+    const facet = ctx.createLinearGradient(0, under[1][1], 0, under[4][1]);
+    facet.addColorStop(0, `rgba(${SUIT_DIM},0.14)`);
+    facet.addColorStop(1, `rgba(${SUIT_DIM},0.46)`);
+    ctx.fillStyle = facet;
+    ctx.beginPath();
+    under.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)));
+    ctx.closePath();
+    ctx.fill();
+    const crease = ctx.createLinearGradient(under[0][0], 0, under[2][0], 0);
+    crease.addColorStop(0, 'rgba(255,255,255,0.95)');
+    crease.addColorStop(0.6, 'rgba(255,255,255,0.45)');
+    crease.addColorStop(1, 'rgba(255,255,255,0.15)');
+    ctx.strokeStyle = crease;
+    ctx.lineWidth = 0.005;
+    ctx.beginPath();
+    under.slice(0, 3).forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)));
+    ctx.stroke();
+  });
+  cast(ctx, chest.shape, rimShape, 0.008, 0.045, 0.02, 0.6);
+  cast(ctx, chest.shape, padAt(1).shape, 0.01, 0.02, 0.012, 0.45);
+  ink(ctx, chest.shape, edge);
+
+  // the collar, between chest and helmet
+  const collar = solid([...level(-0.625, 0.095, -0.06, 0.076), ...level(-0.573, 0.095, -0.06, 0.076)], 0.014);
+  glossy(ctx, collar.shape, black, DARK, collar.box, JOINT);
+  cast(ctx, collar.shape, rimShape, 0, 0.02, 0.008, 0.7);
+
+  shoulder(1);
+  helmet(k, 'turned', 1, head[0], head[1], turnedTrim(TURN, TILT));
+  socket(-1);
+  arm(-1);
+  shoulder(-1);
+}
+
+/**
+ * Draw the robot turned and seen from a little above (see "the turned view"), standing on (x, y), for
+ * artwork. `s` is the size of one tile, as for drawRobot.
+ */
+export function drawRobotTurned(ctx: Ctx, x: number, y: number, s: number, c: BotColor): void {
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.scale(s * K, s * K);
+  turned(kitFor(ctx, c, false, false));
   ctx.restore();
 }
 
