@@ -50,6 +50,7 @@ The whole game as pure logic. No drawing, no sound, no browser calls, no `Math.r
 | `createWorld(config)` | Builds a fresh arena from a seed |
 | `cloneWorld(world)` | A separate copy of a world, which CPU players use to try a move before making it |
 | `step(world, inputs)` | Advances the world one tick. The only function the rest of the game calls during play. |
+| `ticksLeft(world)`, `blockLandTick(world, k)` | What the timer shows, and when each falling block lands |
 | `movePlayer` | Walking, lining up with openings, turning, kicking |
 | `placeBomb`, `useAction` | The A and B buttons |
 | `moveBombs` | Carried bombs follow, thrown bombs fly, kicked bombs slide |
@@ -85,7 +86,7 @@ Pure logic like the rules. Given the world, `botInput(world, bot)` returns one `
 
 | Part | What it is |
 |---|---|
-| `LEVELS` | The settings of the four levels, one line each |
+| `LEVELS` | The settings of the three levels, one line each |
 | `createBot(id, level, seed)` | Makes the memory for one CPU player |
 | `botInput(world, bot)` | What it presses this tick. Calls `flee` if its tile is going to be blasted, otherwise `calm`. |
 | `dangerMap` | For every tile, when a blast will be on it: chain reactions, bricks that will be gone, sliding and thrown bombs |
@@ -102,17 +103,36 @@ The `Input` class listens to the keyboard, the swipe pad area and the two button
 
 It also **latches**: a tap or flick that begins and ends between two ticks is remembered until the game has read it once, so nothing is missed.
 
+### `src/robot.ts`: the robot
+
+How one robot is drawn: from the front, the back and each side, standing, walking, with an arm raised, knocked out or as a ghost. The design was settled by the owner on a large front view; the back and side views were worked out from it. Read the note at the top of the file before changing a shape.
+
+| Name | What it is |
+|---|---|
+| `drawRobot` | Draws one robot, in any colour, facing any of four ways, mid-stride or still. The menu uses it too. |
+| `drawHead` | A robot's helmet on its own, for the scoreboard, with the crown if asked |
+| `Pose` | Ways to draw a robot other than standing or walking: jumping, arms up, leaning, crosses for eyes, a ghost, a crown, shrinking |
+| `ROBOT` | Where the robot's head, top and shoulders are, in tiles, and how big it is next to the size its wings and halo were first drawn for (`scale`): for whatever is drawn round one (crown, halo, wings, shield ring, a carried bomb) |
+| `warmRobots` | Makes robots' pictures ahead of the moment they are needed, a few each frame |
+
+**Sprites.** Drawing one robot takes a few hundred canvas calls, which is too many to make for four robots sixty times a second on a phone. So each robot is drawn once into a small picture of its own (a sprite) for each way it can look: colour, direction, one of 8 steps of the walk, how far each arm is raised. After that, drawing it is a single `drawImage`. Making a sprite takes a few thousandths of a second, so `warmSprites` in `render.ts` (called once a frame from `main.ts`) makes the ones a round will need a few at a time, before they are needed. A change of screen size makes new ones; when there are more than 700 they are all thrown away and made again as wanted.
+
+**Two levels of finish.** Every piece is lit, shaded, given a reflection and a highlight, and throws a shadow on the piece below. On a drawing with a robot over 500 pixels tall (artwork from `tools/portraits.py`) each piece is also rounded by soft shadow and light inside its edges. At playing size that would be less than a pixel, so it is left out. The soft version uses a canvas shadow to blur (`softly`), because the canvas blur filter is missing on iPhones; it has only been tried in Chrome.
+
 ### `src/render.ts`: drawing
 
-Everything on the canvas is drawn with shapes in code. There are no image files.
+Everything on the canvas is drawn with shapes in code. There are no image files. The robots are drawn by `robot.ts`; `render.ts` hands `drawRobot`, `drawHead` and `ROBOT` on, so the rest of the game finds all the drawing in one place.
 
 | Function | Draws |
 |---|---|
-| `drawRobot` | One robot, in any colour, facing any of four ways, mid-stride or still. The menu uses it too. |
 | `drawStatic` | Floor and solid blocks. Drawn once onto a hidden canvas and reused every frame. |
 | `drawDynamic` | Everything else, every frame: shadows, power-ups, bricks, the ring under your robot, bombs, blasts, robots, carried and flying bombs |
-| `drawItemIcon` | The five power-up icons. The top bar uses it too. |
-| `COLORS` | The nine bot colours. Only the coloured parts change; the black parts are shared. |
+| `drawItemIcon` | The seven power-up icons |
+| `winPose` | The winner's jump and dance, as a `Pose` |
+| `warmSprites` | Gets the robots' pictures ready ahead of need: everyone's walk, the burnt robot, the ghosts, the winner's dance |
+| `drawGhosts` | The ghosts of knocked-out robots, with wings and a halo, floating up to the top of the screen. Drawn on a layer of its own, because they leave the arena |
+| `drawStatus` | What is drawn over a robot: the shield ring, the ring flying off when a shield is used up, the skull over a cursed robot |
+| `COLORS` | The nine bot colours. Only the coloured parts change (the armour, the helmet's rim and chin piece, the lit soles); the black parts are shared. |
 
 ### `src/audio.ts`: sound
 
@@ -124,9 +144,11 @@ Everything that ties the game to the page:
 
 - the fixed-rate loop (`frame`, `tick`)
 - sizing the arena and controls to the screen (`layout`)
-- the top bar (`drawHud`)
-- the menu: its two tabs, opening and closing it, and pausing the round behind it (`showMenu`, `showTab`, `closeMenu`, `resume`, `start`, `toMenu`, and the flag `roundLive`)
-- the bot picker (`buildPicker`), the CPU level buttons (`buildLevels`) and the result panel (`finish`)
+- the round timer at the top (`drawTimer`)
+- the menu: its two tabs, opening and closing it, and pausing the round behind it (`showMenu`, `showTab`, `closeMenu`, `play`, `resume`, `watch`, `start`, and the flags `roundLive` and `overShown`)
+- the bot picker (`buildPicker`; `lockPicker` switches it off during a round; a round's colours are set in `newWorld` and nowhere else), the CPU level buttons (`buildLevels`) and the result panel (`finish`)
+- the layer the ghosts float up on (`ghosts`, placed by `layout`, drawn in `render`)
+- the scoreboard (`drawScore`; `layout` works out where its four places go), the count of rounds won (`wins`) and who wears the crown (`leader`), which last until the game is closed
 - the three CPU players of the round (`bots`, made in `newWorld`, asked for their input in `tick`)
 - the control settings: steering thumb and swipe direction (`settings`, `thumb`, `applySettings`)
 - the Match my thumb screen (`startTeach`, `teachStroke`, `finishLearning`, `finishTesting`, `closeTeach`)
@@ -154,7 +176,9 @@ Bundles `src/main.ts` with esbuild, pastes it into `src/page.html`, and writes `
 | `flames` | The tiles of blasts still burning |
 | `burning` | Bricks a blast has reached, about to become floor |
 | `items` | Power-ups lying in the open |
-| `events` | What happened this tick: place, kick, lift, throw, land, explode, pickup, death |
+| `events` | What happened this tick: place, kick, lift, throw, land, explode, pickup, shield, block (one landed), death (with what caused it and whose bomb) |
+| `roundTicks`, `shrinkTicks` | The length of the round and of the part of it in which blocks fall |
+| `shrinkOrder`, `shrinkNext`, `falling` | The tiles blocks will fall on, in order; how many have started; and the ones in the air now |
 | `over` | Null until the round is decided, then the winner or a draw |
 
 ## Rules to keep to
@@ -187,12 +211,12 @@ There are no automatic browser tests. The game has been checked in a phone-sized
 
 - [`experiments/`](../experiments/README.md) holds simulations used to decide how the controls should work, and the script that plays CPU players against each other. They are not part of the game and nothing depends on them.
 - `tools/screenshots.py` retakes the pictures in `docs/screenshots/`. It needs Python and a Chrome browser, and is optional.
+- `tools/portraits.py` saves large pictures of the robots as PNG files with transparent backgrounds, for title screens and other artwork: the robot exactly as the game draws it (`tools/portrait.ts` calls `drawRobot`), at a size where the soft finish shows, from the front or with `--view back`, `right` or `left`. Not part of the game.
 
 ## Where new features will go
 
 | Planned | Where it fits |
 |---|---|
-| Shrinking arena | New state in `World` and a new stage in `step`. |
 | More than four players, bigger arenas | `spawnPoints` and `createWorld` in `sim.ts`. The arena size is already a setting (`cols`, `rows`). |
 | Teams | A team field on `Player`, and the win check at the end of `step`. |
 | Online play | A small server runs `sim.ts` and is the authority. Each phone sends its `PlayerInput` and draws the world it is sent. The purity rules above are what make this possible. |

@@ -73,7 +73,9 @@ Every number has a name. Change the value, then run `npm run check`.
 |---|---|---|
 | Walking speed, bomb fuse, blast time, kick speed, throw distance, the 3-second carry timer | The constants near the top | `src/sim.ts` |
 | Starting bombs and blast length | `bombsMax` and `fire` in `createWorld` | `src/sim.ts` |
-| How often each power-up appears | The percentages in `createWorld` | `src/sim.ts` |
+| How long the timer runs before blocks fall, and how long they take | `ROUND_TICKS`, `SHRINK_TICKS`. For one round only, pass `roundTicks` to `createWorld` (0 = no timer) | `src/sim.ts` |
+| How often each power-up appears | `ITEM_CHANCE` near the top. Then run `npx tsx experiments/item-rarity.ts` and update the rarity table in GAME-RULES.md | `src/sim.ts` |
+| How long a shield or a curse lasts, and how slow a curse is | `SHIELD_TICKS`, `CURSE_TICKS`, `CURSE_SPEED` | `src/sim.ts` |
 | How many bricks the arena starts with | `softDensity` default in `createWorld` (0.78) | `src/sim.ts` |
 | How far a thumb must move | The constants near the top | `src/swipe.ts` |
 
@@ -116,11 +118,12 @@ The black parts of the robot are the same for every colour and are set once, as 
 ### Add a power-up
 
 1. `src/sim.ts`: add its name to `ItemKind`.
-2. `src/sim.ts`, `createWorld`: give it a share of the percentages.
+2. `src/sim.ts`, `ITEM_CHANCE`: add it at the end of the list with its chance. Run `npx tsx experiments/item-rarity.ts` to see what that chance comes to per arena, and put the numbers in the rarity table in GAME-RULES.md.
 3. `src/sim.ts`, `applyItem`: say what picking it up does. If it needs a new ability, add a field to `Player` and set its starting value in `createWorld`.
 4. `src/render.ts`: give it a colour in `ITEM_COLOR` and draw its icon in `drawItemIcon`.
-5. `src/main.ts`, `drawHud`: show it in the top bar if the player should see they have it.
-6. `tests/rules.test.ts`: add a check that it does what it should.
+5. If everyone should see that a robot has it (as with the shield and the curse), draw it on the robot in `drawStatus` in `src/render.ts`. There is no strip of collected power-ups any more.
+6. `src/bot.ts`, `itemWorth`: say how much the CPU players want it. If it is one to keep away from, see how `dodgeCurse` is handled.
+7. `tests/rules.test.ts`: add a check that it does what it should.
 
 ### Change a sound
 

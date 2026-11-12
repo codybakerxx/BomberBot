@@ -37,7 +37,7 @@ export const SOFT = 2;
  * Power-ups: one more bomb at a time, a longer blast, faster walking,
  * the boot (kick bombs) and the glove (lift and throw bombs).
  */
-export type ItemKind = 'bomb' | 'fire' | 'speed' | 'kick' | 'grab';
+export type ItemKind = 'bomb' | 'fire' | 'speed' | 'kick' | 'grab' | 'shield' | 'curse';
 
 /**
  * What one player is asking for on one tick. Buttons are sent as "held or
@@ -74,7 +74,7 @@ export interface Player {
   askDir: Dir;
   askTicks: number;
   alive: boolean;
-  /** ticks since being knocked out, for the fade-out (stops at DEATH_TICKS) */
+  /** ticks since being knocked out, for the knocked-out animation (stops at DEATH_TICKS) */
   deadTicks: number;
   /** how many bombs this player may have out at once */
   bombsMax: number;
@@ -87,6 +87,12 @@ export interface Player {
   /** power-ups: kick bombs by running into them, lift and throw with B */
   canKick: boolean;
   canGrab: boolean;
+  /** ticks of shield left: while above 0 the next blast is survived (and uses the shield up) */
+  shieldTicks: number;
+  /** ticks left in which blasts do no harm, just after a shield has been used up */
+  graceTicks: number;
+  /** ticks of curse left: while above 0 the robot walks at CURSE_SPEED times the starting speed */
+  curseTicks: number;
   /** button states on the previous tick, to notice a fresh press */
   prevA: boolean;
   prevB: boolean;
@@ -166,7 +172,22 @@ export type GameEvent =
   | { type: 'land' }
   | { type: 'explode' }
   | { type: 'pickup'; player: number; kind: ItemKind }
-  | { type: 'death'; player: number };
+  /** a shield took a blast for this player and is used up */
+  | { type: 'shield'; player: number }
+  /** a falling block has landed on this tile, which is now a solid block */
+  | { type: 'block'; cx: number; cy: number }
+  /**
+   * `cause` says what knocked the player out: a blast, or a falling block.
+   * `by` is the player whose bomb made the blast, or -1 for a block.
+   */
+  | { type: 'death'; player: number; cause: 'blast' | 'block'; by: number };
+
+/** A block on its way down. It lands, and turns its tile solid, when `world.tick` reaches `landAt`. */
+export interface FallingBlock {
+  cx: number;
+  cy: number;
+  landAt: number;
+}
 
 /** The whole state of a match. Everything the rules know is in here. */
 export interface World {
@@ -184,6 +205,16 @@ export interface World {
   items: Item[];
   /** ticks played so far */
   tick: number;
+  /** what the timer counts down from, in ticks. Blocks start to fall when it reaches 0. 0 = no timer and no falling blocks. */
+  roundTicks: number;
+  /** the blocks take this many ticks to fall, starting when the timer reaches 0 */
+  shrinkTicks: number;
+  /** the tiles blocks will fall on, in order: round the edge and inward, stopping short of the square kept open in the middle. Fixed for the whole round. */
+  shrinkOrder: number[];
+  /** how many of those have started falling */
+  shrinkNext: number;
+  /** blocks in the air right now */
+  falling: FallingBlock[];
   nextBombId: number;
   /** what happened on the latest tick (cleared at the start of each one) */
   events: GameEvent[];
@@ -205,6 +236,8 @@ export interface WorldConfig {
   players: { colorId: string }[];
   /** share of open tiles that start as bricks, 0 to 1. Default 0.78. */
   softDensity?: number;
+  /** what the timer counts down from, in ticks. Default ROUND_TICKS (1 minute 30). 0 = no timer and no falling blocks. */
+  roundTicks?: number;
   /** see World.stepAssist. Default false. */
   stepAssist?: boolean;
 }
@@ -219,8 +252,39 @@ export const BASE_SPEED = 0.04250390625; // starting walking speed, tiles per ti
 export const SPEED_STEP = 0.5 / TICK_HZ; // added by each speed power-up: 0.5 tiles a second (0.008333 a tick). Nothing else changes a robot's speed.
 export const MAX_SPEED_ITEMS = 6; // so six of them bring it to 0.0925 tiles a tick (5.55 tiles a second)
 export const MAX_BOMBS = 8;
+
+/**
+ * The chance that a brick hides each power-up. A brick hides at most one, so
+ * these add up to the share of bricks that hide anything (48%). The order
+ * matters only for which random numbers give which power-up; keep new ones at
+ * the end so arenas made from old seeds keep their first five kinds in place.
+ * What these chances come to per arena is measured in docs/GAME-RULES.md.
+ */
+export const ITEM_CHANCE: [ItemKind, number][] = [
+  ['bomb', 0.15],
+  ['fire', 0.15],
+  ['speed', 0.11],
+  ['kick', 0.025], // rare. Every arena still gets at least one: see createWorld
+  ['grab', 0.025], // likewise
+  ['shield', 0.01], // very rare: in about half of arenas
+  ['curse', 0.01], // very rare: in about half of arenas
+];
+export const SHIELD_TICKS = 30 * TICK_HZ; // a shield that is not used wears off after 30 s
+export const SHIELD_GRACE_TICKS = 30; // after a shield takes a blast, blasts do no harm for 0.5 s: long enough for that blast to clear
+export const CURSE_TICKS = 8 * TICK_HZ; // a curse lasts 8 s
+export const CURSE_SPEED = 0.85; // while cursed a robot walks at 85% of the starting speed, whatever speed power-ups it has
+export const ROUND_TICKS = 90 * TICK_HZ; // the timer counts down 1 minute 30 unless told otherwise; then the blocks start to fall (it was 2 minutes)
+export const SHRINK_TICKS = 50 * TICK_HZ; // once the timer reaches 0 the blocks take 50 seconds to fall (a minute at first; made 20% faster)
+export const FALL_TICKS = 38; // a falling block is in the air, over its shadow, for 0.63 s before it lands (0.75 s at first; made 20% faster)
+export const START_FIRE = 1; // a blast reaches one tile each way until a flame power-up is picked up (it was 2)
 export const MAX_FIRE = 8;
-export const DEATH_TICKS = 50; // length of the knocked-out fade
+/**
+ * The falling blocks leave a square this many tiles across open in the middle
+ * of the arena, for whoever is left to fight it out in.
+ */
+export const KEEP_OPEN = 5;
+export const DEATH_TICKS = 90; // length of the knocked-out animation (1.5 s)
+export const GHOST_TICKS = 300; // `deadTicks` goes on counting this far (5 s), so the ghost can be drawn floating all the way off the top of the screen
 export const CARRY_FUSE_TICKS = 180; // 3 s from the first pick-up, and it keeps ticking
 export const KICK_SPEED = 0.14; // a kicked bomb slides at 8.4 tiles a second
 export const THROW_TILES = 3; // a thrown bomb lands this many tiles away
@@ -278,12 +342,15 @@ export function createWorld(cfg: WorldConfig): World {
       if (border || pillar) tiles[i] = HARD;
       else if (!safe.has(i) && rng() < density) {
         tiles[i] = SOFT;
-        const r = rng();
-        if (r < 0.11) hidden.set(i, 'bomb');
-        else if (r < 0.22) hidden.set(i, 'fire');
-        else if (r < 0.3) hidden.set(i, 'speed');
-        else if (r < 0.35) hidden.set(i, 'kick');
-        else if (r < 0.4) hidden.set(i, 'grab');
+        // one random number per brick decides what, if anything, it hides (ITEM_CHANCE)
+        let r = rng();
+        for (const [kind, chance] of ITEM_CHANCE) {
+          if (r < chance) {
+            hidden.set(i, kind);
+            break;
+          }
+          r -= chance;
+        }
       }
     }
   }
@@ -295,6 +362,7 @@ export function createWorld(cfg: WorldConfig): World {
     if (empty.length) hidden.set(empty[Math.floor(rng() * empty.length)], kind);
   }
 
+  const roundTicks = Math.max(0, Math.floor(cfg.roundTicks ?? ROUND_TICKS));
   const players: Player[] = cfg.players.map((p, id) => ({
     id,
     colorId: p.colorId,
@@ -311,11 +379,14 @@ export function createWorld(cfg: WorldConfig): World {
     alive: true,
     deadTicks: 0,
     bombsMax: 1,
-    fire: 2,
+    fire: START_FIRE,
     speed: 0,
     activeBombs: 0,
     canKick: false,
     canGrab: false,
+    shieldTicks: 0,
+    graceTicks: 0,
+    curseTicks: 0,
     prevA: false,
     prevB: false,
     carrying: 0,
@@ -332,12 +403,130 @@ export function createWorld(cfg: WorldConfig): World {
     burning: [],
     items: [],
     tick: 0,
+    roundTicks,
+    shrinkTicks: SHRINK_TICKS,
+    shrinkOrder: roundTicks > 0 ? spiral(w, h).filter((i) => tiles[i] !== HARD && !keptOpen(w, h, i)) : [],
+    shrinkNext: 0,
+    falling: [],
     nextBombId: 1,
     events: [],
     over: null,
     overCountdown: -1,
     stepAssist: cfg.stepAssist ?? false,
   };
+}
+
+/**
+ * Every tile inside the outer wall, in the order blocks fall on them: along
+ * the top row from the top-left corner, down the right side, back along the
+ * bottom, up the left side, then the same one ring further in, and so on to
+ * the middle. (createWorld then leaves out the pillars and the square that
+ * is kept open.)
+ */
+function spiral(w: number, h: number): number[] {
+  const out: number[] = [];
+  for (let r = 1; ; r++) {
+    const x0 = r;
+    const y0 = r;
+    const x1 = w - 1 - r;
+    const y1 = h - 1 - r;
+    if (x0 > x1 || y0 > y1) break;
+    for (let x = x0; x <= x1; x++) out.push(y0 * w + x);
+    for (let y = y0 + 1; y <= y1; y++) out.push(y * w + x1);
+    if (y1 > y0) for (let x = x1 - 1; x >= x0; x--) out.push(y1 * w + x);
+    if (x1 > x0) for (let y = y1 - 1; y > y0; y--) out.push(y * w + x0);
+  }
+  return out;
+}
+
+/** Is this tile in the square in the middle of the arena that the falling blocks leave open? */
+export function keptOpen(w: number, h: number, i: number): boolean {
+  const half = (KEEP_OPEN - 1) / 2;
+  const x = i % w;
+  const y = Math.floor(i / w);
+  return Math.abs(x - (w - 1) / 2) <= half && Math.abs(y - (h - 1) / 2) <= half;
+}
+
+/**
+ * The tick on which block number `k` of `world.shrinkOrder` lands. They land
+ * The first starts to fall the moment the timer reaches 0, so it lands
+ * FALL_TICKS later. The rest follow at an even pace, the last one landing
+ * `shrinkTicks` after the timer reached 0.
+ */
+export function blockLandTick(world: World, k: number): number {
+  const n = world.shrinkOrder.length;
+  const pace = n > 1 ? (world.shrinkTicks - FALL_TICKS) / (n - 1) : 0;
+  return world.roundTicks + FALL_TICKS + Math.round(k * pace);
+}
+
+/** Ticks left on the round timer (never below 0). Infinity if the round has no time limit. */
+export function ticksLeft(world: World): number {
+  return world.roundTicks > 0 ? Math.max(0, world.roundTicks - world.tick) : Infinity;
+}
+
+/**
+ * Start blocks falling when their time comes, and land the ones that are due.
+ * A landing block turns its tile into a solid block for good. Whatever was on
+ * the tile is gone: a brick and anything under it, a power-up, a bomb (it does
+ * not go off), a blast. A robot standing on the tile is knocked out, shield or
+ * no shield. A robot or bomb on the next tile that was leaning over this one is
+ * pushed back onto the middle of its own tile.
+ */
+function fallBlocks(world: World): void {
+  const n = world.shrinkOrder.length;
+  // (once the round is decided no more blocks start to fall; the ones in the air still land)
+  while (!world.over && world.shrinkNext < n && world.tick >= blockLandTick(world, world.shrinkNext) - FALL_TICKS) {
+    const i = world.shrinkOrder[world.shrinkNext];
+    world.falling.push({ cx: i % world.w, cy: Math.floor(i / world.w), landAt: blockLandTick(world, world.shrinkNext) });
+    world.shrinkNext++;
+  }
+  if (!world.falling.length || world.falling[0].landAt > world.tick) return;
+  for (const f of world.falling) {
+    if (f.landAt > world.tick) continue;
+    const { cx, cy } = f;
+    const i = cy * world.w + cx;
+    world.tiles[i] = HARD;
+    world.hidden.delete(i);
+    world.items = world.items.filter((it) => it.cx !== cx || it.cy !== cy);
+    world.flames = world.flames.filter((fl) => fl.cx !== cx || fl.cy !== cy);
+    world.burning = world.burning.filter((b) => b.cx !== cx || b.cy !== cy);
+    for (const b of [...world.bombs]) {
+      if (b.state !== 'ground') continue;
+      if (b.cx === cx && b.cy === cy) {
+        world.bombs.splice(world.bombs.indexOf(b), 1);
+        const o = world.players[b.owner];
+        if (o) o.activeBombs = Math.max(0, o.activeBombs - 1);
+      } else if (Math.abs(b.x - cx) < 1 && Math.abs(b.y - cy) < 1) {
+        b.x = b.cx;
+        b.y = b.cy;
+        b.slide = 0;
+      }
+    }
+    const under: Player[] = [];
+    for (const p of world.players) {
+      if (!p.alive) continue;
+      const px = Math.round(p.x);
+      const py = Math.round(p.y);
+      if (px === cx && py === cy && world.over && world.over.winner === p.id) {
+        // the round is decided and this is the winner: the block leaves it be
+      } else if (px === cx && py === cy) {
+        p.alive = false;
+        p.moving = false;
+        under.push(p);
+        world.events.push({ type: 'death', player: p.id, cause: 'block', by: -1 });
+      } else if (Math.abs(p.x - cx) < 1 && Math.abs(p.y - cy) < 1) {
+        if (px !== cx) p.x = px;
+        if (py !== cy) p.y = py;
+      }
+    }
+    world.events.push({ type: 'block', cx, cy });
+    // The last robot standing wins even if a block gets it a moment after the others went.
+    // (Several under the same block went together: that is left to end as a draw.)
+    if (!world.over && under.length === 1 && world.players.length > 1 && !world.players.some((p) => p.alive)) {
+      world.over = { winner: under[0].id };
+    }
+  }
+  world.falling = world.falling.filter((f) => f.landAt > world.tick);
 }
 
 /**
@@ -354,6 +543,7 @@ export function cloneWorld(w: World): World {
     flames: w.flames.map((f) => ({ ...f })),
     burning: w.burning.map((b) => ({ ...b })),
     items: w.items.map((i) => ({ ...i })),
+    falling: w.falling.map((f) => ({ ...f })),
     events: [],
     over: w.over ? { ...w.over } : null,
   };
@@ -406,6 +596,7 @@ function approach(v: number, target: number, step: number): number {
 
 /** This player's walking speed in tiles per tick. */
 export function playerSpeed(p: Player): number {
+  if (p.curseTicks > 0) return BASE_SPEED * CURSE_SPEED;
   return BASE_SPEED + SPEED_STEP * p.speed;
 }
 
@@ -810,6 +1001,8 @@ function applyItem(p: Player, kind: ItemKind): void {
   else if (kind === 'fire') p.fire = Math.min(MAX_FIRE, p.fire + 1);
   else if (kind === 'kick') p.canKick = true;
   else if (kind === 'grab') p.canGrab = true;
+  else if (kind === 'shield') p.shieldTicks = SHIELD_TICKS; // a second one only starts the 30 s again
+  else if (kind === 'curse') p.curseTicks = CURSE_TICKS; // likewise
   else p.speed = Math.min(MAX_SPEED_ITEMS, p.speed + 1);
 }
 
@@ -819,7 +1012,8 @@ function applyItem(p: Player, kind: ItemKind): void {
  * Advance the world by one tick. `inputs[id]` may be missing: that player
  * stands still. Order within a tick: players move and press buttons, bombs
  * move and count down, due bombs go off, blasts and burning bricks fade,
- * players are checked against blasts and power-ups, then the match result.
+ * falling blocks land, players are checked against blasts and power-ups,
+ * then the match result.
  */
 export function step(world: World, inputs: (PlayerInput | undefined)[]): void {
   world.events.length = 0;
@@ -827,9 +1021,12 @@ export function step(world: World, inputs: (PlayerInput | undefined)[]): void {
 
   for (const p of world.players) {
     if (!p.alive) {
-      if (p.deadTicks < DEATH_TICKS) p.deadTicks++;
+      if (p.deadTicks < GHOST_TICKS) p.deadTicks++;
       continue;
     }
+    if (p.shieldTicks > 0) p.shieldTicks--;
+    if (p.graceTicks > 0) p.graceTicks--;
+    if (p.curseTicks > 0) p.curseTicks--;
     const inp = inputs[p.id];
     const asked: Dir = inp ? inp.dir : 0;
     if (asked !== p.askDir) {
@@ -879,16 +1076,29 @@ export function step(world: World, inputs: (PlayerInput | undefined)[]): void {
   world.burning = world.burning.filter((b) => b.ttl > 0);
   for (const it of world.items) it.age++;
 
+  // the round timer: blocks start to fall, and land
+  if (world.roundTicks > 0) fallBlocks(world);
+
   // players against flames and items
   for (const p of world.players) {
     if (!p.alive) continue;
     const cx = Math.round(p.x);
     const cy = Math.round(p.y);
-    if (world.flames.some((f) => f.cx === cx && f.cy === cy)) {
-      p.alive = false;
-      p.moving = false;
-      world.events.push({ type: 'death', player: p.id });
-      continue;
+    const flame = world.flames.find((f) => f.cx === cx && f.cy === cy);
+    // (once the round is decided, nothing more can happen to the winner)
+    if (flame && !(world.over && world.over.winner === p.id)) {
+      if (p.graceTicks > 0) {
+        // its shield has just taken this blast
+      } else if (p.shieldTicks > 0) {
+        p.shieldTicks = 0;
+        p.graceTicks = SHIELD_GRACE_TICKS;
+        world.events.push({ type: 'shield', player: p.id });
+      } else {
+        p.alive = false;
+        p.moving = false;
+        world.events.push({ type: 'death', player: p.id, cause: 'blast', by: flame.owner });
+        continue;
+      }
     }
     const i = world.items.findIndex((it) => it.cx === cx && it.cy === cy);
     if (i >= 0) {

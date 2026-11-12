@@ -13,9 +13,11 @@ npx tsx experiments/corridor-turns.ts
 npx tsx experiments/stroke-reading.ts
 npx tsx experiments/model-player.ts
 npx tsx experiments/match-v2.ts
-npx tsx experiments/cpu-matches.ts          # about six minutes
+npx tsx experiments/cpu-matches.ts          # about fifteen minutes
 npx tsx experiments/cpu-matches.ts solo
 npx tsx experiments/cpu-matches.ts versus
+npx tsx experiments/cpu-matches.ts alone
+npx tsx experiments/item-rarity.ts
 ```
 
 The "current" columns use the live code in `src/`, so they change whenever the controls change. The "previous" columns use a frozen copy of the older logic kept in `previous-build.ts`.
@@ -123,22 +125,24 @@ The second part adds a test round of 8 swipes that chooses between the setting b
 
 ## `cpu-matches.ts`: do the CPU players blast themselves, and are the levels in order?
 
-Unlike the scripts above this is a measurement, not a model: it plays whole matches with the real CPU players (`src/bot.ts`) under the real rules, with no screen, and counts how each one went out. Recorded on 10 November 2026, with a blast lasting 0.45 seconds and each speed power-up adding 0.45 tiles a second.
+Unlike the scripts above this is a measurement, not a model: it plays whole rounds with the real CPU players (`src/bot.ts`) under the real rules, timer and falling blocks included, with no screen, and counts how each one went out. Recorded on 11 November 2026.
 
 | Run | What it plays |
 |---|---|
-| no argument | Four of the same level, 60 matches; then one of each level, 240 matches. Up to 3 minutes each. |
-| `solo` | Each level alone with a player who stands still, 40 arenas |
-| `versus` | Three of one level against one Beginner CPU player standing in for a slow, careless person, 80 matches |
+| no argument | Four of the same level, 60 rounds; then one of each of the three levels, 180 rounds |
+| `versus` | Three of one level against one Beginner CPU player standing in for a slow, careless person, 80 rounds |
+| `alone` | Each level alone for a whole round: does it reach the square the blocks leave open |
+| `solo` | Each level alone with a player who stands still, 40 arenas of 3 minutes, with the timer off |
+
+A round goes on until someone wins, so these runs give up 2 minutes after the blocks stop (4 minutes 20 in, now that the timer is 1 minute 30 and the blocks take 50 seconds) and count the round as not decided.
 
 Four of the same level:
 
-| Level | Blasted itself | Shut in by a rival | Caught in a rival's blast | Still in at the end |
-|---|---|---|---|---|
-| Beginner | 0.0% | 1.3% | 19.6% | 79.2% |
-| Normal | 0.0% | 4.6% | 10.4% | 85.0% |
-| Hard | 0.0% | 7.9% | 9.2% | 82.9% |
-| Extreme | 0.0% | 9.2% | 12.1% | 78.8% |
+| Level | Blasted itself | Shut in by a rival | Caught in a rival's blast | Under a block, early | Under a block, in the last 15 s of them | Won | Rounds drawn | Not decided |
+|---|---|---|---|---|---|---|---|---|
+| Beginner | 0.0% | 0.8% | 57.9% | 2.5% | 5.0% | 16.7% | 0 of 60 | 20 of 60 |
+| Normal | 0.0% | 22.1% | 43.8% | 1.7% | 8.3% | 24.2% | 2 of 60 | 0 of 60 |
+| Hard | 0.0% | 34.2% | 41.3% | 0.4% | 2.1% | 20.4% | 9 of 60 | 2 of 60 |
 
 The other tables are in [docs/CPU-PLAYERS.md](../docs/CPU-PLAYERS.md).
 
@@ -146,11 +150,28 @@ The other tables are in [docs/CPU-PLAYERS.md](../docs/CPU-PLAYERS.md).
 
 - The first version checked only that a bomb left a way out. Alone, no bot ever blasted itself. Four together, about one in five went out to its own bomb (Normal 23%, Hard 20%, Extreme 25%). Replaying those matches showed every one of them standing trapped after another player's bomb had cut the route it planned. Checking, before pressing A, that no nearby player could shut the route brought "blasted itself" to zero.
 - The same replays found two plain bugs: Beginner never moved at all (its pause before setting off cancelled its own plan), and a bot could park on a spot too far away to attack from and stay there. Both showed up as numbers that looked too good: a Beginner that never blasted itself because it never dropped a bomb.
-- The levels come out in order for staying in the match. Hard and Extreme knock out about the same number of rivals.
-- "Shut in by a rival" and "blasted itself" are both a bot caught by its own blast. What separates them is in `shutIn` in the script, and it was drawn up from replays: a first, narrower test left four cases under "blasted itself", and each turned out to be a rival's later bomb cutting the way out or driving the bot back across its own bomb's lane. Replay any case that lands in "blasted itself" before believing either column.
-- CPU players seldom finish each other off inside 3 minutes. They dodge well. The shrinking arena planned for step 3 is what should end matches.
+- With one of each level in a round, the levels come out in order and well apart: Hard won 63% of those rounds, Normal 31%, Beginner 2%.
+- "Shut in by a rival" and "blasted itself" are both a bot caught by its own blast. What separates them is in `shutIn` in the script, and it was drawn up from replays. Each time a case has landed under "blasted itself" it has been replayed. Some were the test being too narrow (most lately: a rival's bomb dropped on the same tick, one thrown onto the way out, and a rival's kicked bomb setting the bot's own off early). Two were real faults in the CPU players (standing still after a shield was used up; refusing a safe tile because a block was due on it later) and were fixed. Replay any case that lands there before believing either column.
+- Before the timer, CPU players seldom finished each other off. The first timer closed the whole arena by 0:00, and about half of rounds were draws: the bots left all reached the last tile and went under the same block. Now a 5 by 5 square is left open and the round goes on in it. The blocks now start when the timer reaches 0:00 rather than a minute before. Draws are rare and most rounds are settled in the square, but at first between a sixth and a half were still going 2 minutes after the blocks stopped (Normal 32 of 60).
+- Normal and Hard now press once they are in the square after 0:00 (`squareBold`). Not decided fell to 0 of 60 for Normal and 2 of 60 for Hard, and "shut in by a rival" rose (Normal 3.8% to about 20%), which is the risk they now take. Beginner does not press and still leaves about a third of rounds undecided.
 
 What it cannot show is how they feel to play against. That needs a phone.
+
+## `item-rarity.ts`: how many of each power-up is in an arena?
+
+Builds 20,000 arenas with the real `createWorld` and counts what the bricks hide. It turns the chances in `ITEM_CHANCE` into what a player meets. Recorded on 10 November 2026:
+
+| Power-up | Chance under each brick | Average in an arena | Arenas with at least one | Arenas with two or more |
+|---|---|---|---|---|
+| Bomb | 15% | 11.8 | 100% | 100% |
+| Flame | 15% | 11.8 | 100% | 100% |
+| Speed | 11% | 8.7 | 100% | 100% |
+| Boot | 2.5% | 2.1 | 100% | 59% |
+| Glove | 2.5% | 2.1 | 100% | 59% |
+| Shield | 1% | 0.8 | 54% | 19% |
+| Curse | 1% | 0.8 | 54% | 19% |
+
+An arena has about 79 bricks, and about 38 hide something. This counts what is hidden, not what gets picked up: blasts destroy power-ups lying in the open, and some bricks are never broken.
 
 ## `previous-build.ts`
 

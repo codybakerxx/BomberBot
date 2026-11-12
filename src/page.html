@@ -8,7 +8,9 @@
 
   What is on the page, by element id:
     cv        the arena (a canvas)
-    hud       top-left strip: bombs, blast length, speed, boot and glove
+    timer     the countdown, centred at the top (beside the arena when the phone is sideways)
+    score     the scoreboard: four heads, two each side of the timer, each with the rounds it has won beside it
+    result    the panel shown when you are out or the round is decided; it never covers the arena
     menuBtn   back to the menu
     touch     on-screen controls: dzone (swipe pad, with the dpad cross and the padTag caption inside it), btnA, btnB
     menu      two tabs and a close button (tabMain, tabControls, menuClose)
@@ -56,20 +58,73 @@
     -webkit-tap-highlight-color: transparent;
   }
   #cv { position: fixed; display: block; }
-  #hud { position: fixed; top: 7px; left: 8px; width: 232px; height: 32px; background: rgba(13, 16, 25, 0.8); border: 1px solid var(--line); border-radius: 10px; }
+  /* the round timer. layout() in main.ts sets `left` to the middle of the screen (upright) or of the side column (sideways). */
+  #timer {
+    position: fixed;
+    top: 4px;
+    transform: translateX(-50%);
+    min-width: 76px;
+    padding: 6px 12px 5px;
+    text-align: center;
+    font: 700 22px/1 var(--font-display);
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.06em;
+    color: var(--ink);
+    background: rgba(13, 16, 25, 0.8);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+  }
+  /* the scoreboard: four heads with their wins beside them. layout() in main.ts places and sizes it. */
+  #score { position: fixed; pointer-events: none; }
+  /* the layer the ghosts of knocked-out robots float up on: as wide as the arena, from the top of the screen to the arena's bottom edge. layout() places it. */
+  #ghosts { position: fixed; top: 0; pointer-events: none; }
+  body.menu-open #ghosts { visibility: hidden; }
+  /* the result of a round: a panel that leaves the arena in view. layout() places it. */
+  #result { position: fixed; inset: 0; pointer-events: none; }
+  #result[hidden] { display: none; }
+  #resultCard {
+    position: fixed;
+    pointer-events: auto;
+    gap: 10px;
+    padding: 14px 14px 16px;
+    background: rgba(13, 16, 25, 0.94);
+    border: 1.5px solid var(--line);
+    border-radius: 14px;
+    text-align: center;
+  }
+  #resultCard h2 { margin: 0; }
+  #resultCard .sub { margin: 0; }
+  #resultCard .sub[hidden] { display: none; }
+  body:not(.portrait) #resultCard .row { flex-direction: column; align-items: stretch; }
+  body:not(.portrait) #resultCard .go { flex: 0 0 auto; padding: 10px 12px; }
+  #timer.hurry { color: var(--accent); border-color: rgba(255, 197, 106, 0.5); }
+  #timer.done { color: #ff5a6e; border-color: rgba(255, 90, 110, 0.6); }
+  #timer.last { color: #ff5a6e; border-color: rgba(255, 90, 110, 0.6); animation: timer-pulse 1s steps(2, jump-none) infinite; }
+  @keyframes timer-pulse { from { background: rgba(13, 16, 25, 0.8); } to { background: rgba(120, 20, 36, 0.8); } }
+  @media (prefers-reduced-motion: reduce) { #timer.last { animation: none; } }
 
+  /* the menu button: three bars, kept narrow so the scoreboard has room beside the timer */
   #menuBtn {
     position: fixed;
     top: 6px;
-    right: 10px;
-    padding: 9px 14px;
-    font: 700 13px/1 var(--font-display);
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
+    right: 8px;
+    width: 38px;
+    height: 34px;
+    padding: 0;
+    display: grid;
+    place-items: center;
     color: var(--ink);
     background: rgba(255, 255, 255, 0.08);
     border: 1px solid rgba(255, 255, 255, 0.25);
     border-radius: 10px;
+  }
+  #menuBtn i {
+    display: block;
+    width: 16px;
+    height: 2px;
+    border-radius: 1px;
+    background: currentColor;
+    box-shadow: 0 -5px 0 currentColor, 0 5px 0 currentColor;
   }
 
   /* ---------- touch controls: see-through panels, laid out like the wireframe ---------- */
@@ -94,14 +149,17 @@
   }
   .tbtn.on { background: rgba(255, 255, 255, 0.3); color: #fff; }
 
-  /* upright: swipe pad fills the left two thirds, B over A on the right */
-  body.portrait #touch { top: var(--ctl-top); left: 8px; right: 8px; bottom: 10px; }
+  /* upright: swipe pad fills the left two thirds, B over A on the right.
+     The controls start one block lower than they used to, to leave a free line under the top bar
+     (--info-row, set by layout() in main.ts). The pad and A are shorter by that block. B is not:
+     its height is worked out from the height the controls had before, so it only moved down. */
+  body.portrait #touch { top: var(--ctl-top); left: 8px; right: 8px; bottom: 10px; --b-height: calc((100% + var(--info-row, 0px)) * 0.22 - 4px); }
   body.portrait #dzone { left: 0; top: 0; bottom: 0; width: calc(66% - 4px); }
-  body.portrait #btnB { right: 0; top: 0; width: calc(34% - 4px); height: calc(22% - 4px); }
-  body.portrait #btnA { right: 0; bottom: 0; width: calc(34% - 4px); height: calc(78% - 4px); }
+  body.portrait #btnB { right: 0; top: 0; width: calc(34% - 4px); height: var(--b-height); }
+  body.portrait #btnA { right: 0; bottom: 0; width: calc(34% - 4px); top: calc(var(--b-height) + 8px); }
 
   /* sideways: pad down the left edge, B over A down the right edge */
-  body:not(.portrait) #dzone { left: 6px; bottom: 6px; top: 18%; width: calc(var(--side) - 8px); }
+  body:not(.portrait) #dzone { left: 6px; bottom: 6px; top: max(18%, 88px); width: calc(var(--side) - 8px); }
   body:not(.portrait) #btnB { right: 6px; top: 56px; width: calc(var(--side) - 12px); height: 24%; }
   body:not(.portrait) #btnA { right: 6px; bottom: 6px; width: calc(var(--side) - 12px); top: calc(56px + 24% + 8px); }
 
@@ -110,13 +168,14 @@
   body.righty.portrait #btnB, body.righty.portrait #btnA { right: auto; left: 0; }
   body.righty:not(.portrait) #dzone { left: auto; right: 6px; }
   body.righty:not(.portrait) #btnB, body.righty:not(.portrait) #btnA { right: auto; left: 6px; }
-  body.righty #padTag { left: auto; right: 14px; }
 
   /* which swipe direction setting is in use, shown on the pad while playing */
   #padTag {
     position: absolute;
-    left: 14px;
+    left: 0;
+    right: 0;
     bottom: 10px;
+    text-align: center;
     pointer-events: none;
     font: 700 10px/1 var(--font-display);
     letter-spacing: 0.1em;
@@ -196,7 +255,7 @@
   .pane[hidden] { display: none; }
   .go[hidden] { display: none; }
   /* the Menu button and the top strip belong to the game screen, not the menu */
-  body.menu-open #menuBtn, body.menu-open #hud { visibility: hidden; }
+  body.menu-open #menuBtn, body.menu-open #timer, body.menu-open #score { visibility: hidden; }
   h1, h2 {
     margin: 0;
     font: 700 clamp(24px, 6vmin, 38px)/1.05 var(--font-display);
@@ -225,6 +284,10 @@
   .bot canvas { width: 100%; max-width: 72px; height: auto; }
   body.portrait .bot canvas { max-width: 62px; }
   body.portrait .bot { padding: 4px 2px 6px; }
+  /* during a round the colours are fixed: the picker shows yours and cannot be pressed */
+  .bot:disabled { opacity: 0.35; }
+  .bot[aria-pressed="true"]:disabled { opacity: 1; }
+  #pickerNote { margin: 8px 0 0; text-align: center; font-size: 13px; color: var(--ink-dim, #aab0c6); }
   .bot[aria-pressed="true"] {
     color: var(--ink);
     border-color: var(--glow);
@@ -290,11 +353,11 @@
   .switch button[aria-pressed="true"] { color: #3a2c10; background: var(--accent); border-color: var(--accent); }
   .switch button[aria-pressed="true"] b { color: #14100a; }
   .switch button[aria-pressed="true"] .on-tag { display: block; }
-  /* the CPU level: four short buttons in a row, shown with a keyboard too */
+  /* the CPU level: three short buttons in a row, shown with a keyboard too */
   body:not(.touch) .tune.always { display: flex; }
-  .switch.four { grid-template-columns: repeat(4, 1fr); gap: 5px; }
-  .switch.four button { align-items: center; padding: 11px 2px; }
-  .switch.four b { font-size: 14px; }
+  .switch.levels { grid-template-columns: repeat(3, 1fr); gap: 6px; }
+  .switch.levels button { align-items: center; padding: 11px 2px; }
+  .switch.levels b { font-size: 15px; }
   .tune .mini { align-self: flex-start; }
   .tune .mini[hidden] { display: none; }
   .mini {
@@ -380,8 +443,10 @@
 </head>
 <body>
 <canvas id="cv"></canvas>
-<canvas id="hud" aria-label="Your bombs, blast length, speed and power-ups"></canvas>
-<button id="menuBtn" type="button">Menu</button>
+<div id="timer" role="timer" aria-label="Time left in the round">1:30</div>
+<canvas id="score" role="img" aria-label="Rounds won"></canvas>
+<button id="menuBtn" type="button" aria-label="Menu"><i></i></button>
+<canvas id="ghosts" aria-hidden="true"></canvas>
 
 <div id="touch">
   <div id="dzone">
@@ -410,9 +475,10 @@
       <h1 class="wordmark">Bomber<span>Bot</span></h1>
       <p class="sub">Be the last bot standing. A drops a bomb. The boot kicks bombs. The glove lets B lift one and throw it within 3 seconds.</p>
       <div id="picker"></div>
+      <p id="pickerNote" class="note" hidden>Your colour is set for this round. You can change it between rounds.</p>
       <fieldset class="tune always">
         <legend>CPU players</legend>
-        <div class="switch four" id="cpuLevels" role="group" aria-label="How good the three CPU players are"></div>
+        <div class="switch levels" id="cpuLevels" role="group" aria-label="How good the three CPU players are"></div>
         <p class="opt-desc" id="cpuBlurb"></p>
       </fieldset>
       <div class="row">
@@ -465,12 +531,12 @@
   </div>
 </div>
 
-<div id="result" class="overlay" hidden>
-  <div class="card">
+<div id="result" hidden>
+  <div class="card" id="resultCard">
     <h2 id="resultTitle"></h2>
     <p id="resultText" class="sub"></p>
     <div class="row">
-      <button id="again" class="go" type="button">Play again</button>
+      <button id="again" class="go" type="button">Next round</button>
       <button id="change" class="go quiet" type="button">Menu</button>
     </div>
   </div>

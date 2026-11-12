@@ -16,7 +16,7 @@ How the game is controlled, how the swipe pad turns a moving thumb into a direct
   <img src="screenshots/sideways.png" alt="Phone held sideways: swipe pad down the left edge, B over A down the right edge" width="430">
 </p>
 
-On a phone held upright the arena sits at the top and the controls fill everything below it:
+On a phone held upright the top bar comes first (the scoreboard and the timer are in it), then a blank line one block high, then the arena, and the controls fill everything below it:
 
 - **Swipe pad:** two thirds of the width. The cross in the middle only shows which direction is being read. It is not a button and you do not need to touch it.
 - **B:** on the other side, at the top. Lifts a bomb, then throws it (needs the glove).
@@ -26,29 +26,37 @@ Which side the pad is on is a setting, **Steering thumb**. With *Left thumb* (th
 
 Held sideways, the pad runs down one edge and B and A down the other, either side of the arena. The panels are see-through.
 
-The strip at the top left shows how many bombs you can have out, your blast length, your speed, and whether you hold the boot and the glove. **Menu** is at the top right.
+The **scoreboard** is in the top bar: four heads, two on each side of the timer, each with the rounds that player has won to its right, and a crown on whoever is in the lead (see [GAME-RULES.md](GAME-RULES.md)). The two pairs are placed to match: the same room is left clear at the far left as the menu button takes at the far right. Held sideways, the four sit in a row under the timer, over the column beside the arena.
+
+The line under the top bar is blank, kept for information to come. It is exactly as tall as one block of the arena (`INFO_ROWS` in `layout()` in `main.ts`). The scoreboard was in it at first, with the numbers under the heads; it moved up beside the timer in play-testing. Making room for the line moved the arena and the controls down by one block: the swipe pad and A are one block shorter than they were, and B is the same size, one block lower. Held sideways there is no such line; the arena already fills the height.
+
+The **timer** is in the middle of the top bar, counting down the round. It turns amber for the last 30 seconds and red for the last ten, and stays at 0:00 in red once the blocks start to fall. The **menu button** (three bars) is at the top right. It used to say Menu; it was made narrow so the scoreboard fits beside the timer. Held sideways, the timer sits over the column beside the arena instead, because the arena fills the full height.
+
+There used to be a strip at the top left showing your bombs, blast length, speed, boot and glove. It was removed to make room for the timer. The shield and the curse are still shown on the robot itself.
+
+The caption on the swipe pad (*Standard swipes* or *My thumb swipes*) is centred along its bottom edge.
 
 ## The menu
 
 <p align="center">
   <img src="screenshots/menu.png" alt="The menu's Main menu tab: the bot picker, the CPU level and Play" width="220">
   <img src="screenshots/menu-controls.png" alt="The menu's Controls tab: Steering thumb and Swipe direction" width="220">
-  <img src="screenshots/menu-paused.png" alt="The menu opened in the middle of a round: Resume and New round" width="220">
+  <img src="screenshots/menu-paused.png" alt="The menu opened in the middle of a round: the bot picker switched off with your colour showing, Resume and New round" width="220">
 </p>
 
 The menu has two tabs along the top and a close button (✕) beside them.
 
 | Tab | What is on it |
 |---|---|
-| **Main menu** | The bot picker, **CPU players** (Beginner, Normal, Hard or Extreme), and **Play**. If a round is in progress: **Resume** and **New round**. |
+| **Main menu** | The bot picker, **CPU players** (Beginner, Normal or Hard), and **Play**. If a round is in progress: **Resume** and **New round**. If the round has ended for you: **New round**. |
 | **Controls** | On a touch screen: **Steering thumb** and **Swipe direction** (both described below). On a computer: the keyboard keys. |
 
 Opening the menu during a round pauses it. Nothing is lost: the round waits behind the menu.
 
-- **✕** closes the menu and goes to the game: back into the paused round if there is one, otherwise a new round starts.
+- **✕** closes the menu and goes back to the game as it was: into the paused round if there is one. If the round has ended for you (you are out, or it is decided), ✕ goes back to watching it, with the result panel showing again. It does not start a new round; **New round** does. Only before the first round does ✕ start one.
 - **Resume** does the same as ✕ when a round is paused. **New round** abandons it and starts afresh.
-- Picking a different bot colour while paused recolours your bot in the same round. If another bot was wearing that colour, it takes your old one.
-- On a computer, **Escape** opens and closes the menu.
+- **Your colour is yours for the whole round.** While a round is in play the bot picker shows your colour and cannot be pressed. Between rounds (before the first one, or once a round has ended for you) you can pick another; it applies from the next round. If a CPU player was wearing that colour, it takes your old one. (At first a pick while paused recoloured your bot in the same round; that was taken out in play-testing.)
+- On a computer, **Escape** opens and closes the menu, and does the same as ✕.
 
 On a computer the touch controls are hidden and the keyboard is used:
 

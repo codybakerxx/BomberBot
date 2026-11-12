@@ -2,12 +2,13 @@
  * Everything that draws. Reads the world, never changes it.
  *
  * All the art is drawn with canvas shapes in code: there are no image files.
- * - drawRobot: one robot in any of the bot colours, facing any of four ways
+ * - the robots themselves are in robot.ts (drawRobot, drawHead)
  * - drawStatic: the floor and solid blocks (drawn once, then reused)
  * - drawDynamic: bricks, power-ups, bombs, blasts and robots (drawn every frame)
- * - drawItemIcon: the five power-up icons, also used by the top bar
+ * - drawItemIcon: the seven power-up icons, also used by the top bar
  */
-import { World, Dir, FLOOR, HARD, SOFT, FLAME_TICKS, DEATH_TICKS, ItemKind, Player, Bomb, FLY_TICKS_PER_TILE, THROW_TILES } from './sim';
+import { drawRobot, warmRobots, GHOST_ARMS, ROBOT, type Pose, type Wanted } from './robot';
+import { World, FLOOR, HARD, SOFT, FLAME_TICKS, DEATH_TICKS, GHOST_TICKS, SHIELD_GRACE_TICKS, FALL_TICKS, TICK_HZ, ItemKind, Player, Bomb, FLY_TICKS_PER_TILE, THROW_TILES } from './sim';
 
 export interface BotColor {
   /** saved with the player's choice and sent to the rules as Player.colorId */
@@ -40,10 +41,6 @@ export function colorById(id: string): BotColor {
   return COLORS.find((c) => c.id === id) ?? COLORS[0];
 }
 
-// the parts of every robot that stay black whatever its colour
-const BLACK = '#0c0c11';
-const BLACK_HI = '#262833';
-
 type Ctx = CanvasRenderingContext2D;
 
 /** Start a rounded-rectangle path. */
@@ -52,195 +49,55 @@ function rr(ctx: Ctx, x: number, y: number, w: number, h: number, r: number): vo
   ctx.roundRect(x, y, w, h, r);
 }
 
-/**
- * Draw one robot. (x, y) is the point between its feet and `s` is one tile in
- * pixels. The robot is about 0.9 tiles wide and 1.06 tall, so it reads as
- * filling the tile it stands on.
+/*
+ * The robot itself is drawn in robot.ts: drawRobot, drawHead, and the ways it
+ * can be posed. They are handed on from here so that the rest of the game
+ * still finds all the drawing in one place.
  */
-export function drawRobot(
-  ctx: Ctx,
-  x: number,
-  y: number,
-  s: number,
-  c: BotColor,
-  facing: Dir,
-  walk: number,
-  moving: boolean,
-): void {
-  ctx.save();
-  ctx.translate(x, y);
-  ctx.scale(s, s);
-  const sw = moving ? Math.sin(walk) : 0;
-  const bob = moving ? -Math.abs(Math.cos(walk)) * 0.02 : 0;
+export { drawRobot, drawHead, ROBOT, type Pose } from './robot';
 
-  ctx.fillStyle = 'rgba(0,0,0,0.45)';
-  ctx.beginPath();
-  ctx.ellipse(0, 0, 0.38, 0.07, 0, 0, Math.PI * 2);
-  ctx.fill();
 
-  if (facing === 3) ctx.scale(-1, 1);
-  const grad = ctx.createLinearGradient(-0.35, -0.48, 0.35, 0);
-  grad.addColorStop(0, c.light);
-  grad.addColorStop(0.45, c.body);
-  grad.addColorStop(1, c.dark);
+/** What a robot burnt to a crisp is drawn in. */
+const CHARRED: BotColor = { id: 'charred', name: '', body: '#17171a', light: '#34343c', dark: '#060607', glow: '#3d3d46' };
+/** The colours of a missing player's place on the scoreboard. */
+export const NOBODY: BotColor = { id: 'nobody', name: '', body: '#4a4f5c', light: '#666c7c', dark: '#30333d', glow: '#767c8e' };
 
-  const side = facing === 3 || facing === 4;
-  const back = facing === 1;
-  const HR = 0.34;
-  const hy = -0.72 + bob; // head centre
+/** A colour part of the way from one hex colour to another. */
+function mix(a: string, b: string, k: number): string {
+  const pa = parseInt(a.slice(1), 16);
+  const pb = parseInt(b.slice(1), 16);
+  const ch = (shift: number): number => Math.round(((pa >> shift) & 255) + (((pb >> shift) & 255) - ((pa >> shift) & 255)) * k);
+  return `rgb(${ch(16)},${ch(8)},${ch(0)})`;
+}
 
-  const boot = (bx: number, lift: number, w: number, fwd: number): void => {
-    ctx.fillStyle = BLACK;
-    rr(ctx, bx - w / 2 + fwd, -0.12 - lift, w, 0.12, 0.05);
-    ctx.fill();
-    ctx.fillStyle = BLACK_HI;
-    rr(ctx, bx - w / 2 + fwd + 0.02, -0.11 - lift, w - 0.06, 0.03, 0.015);
-    ctx.fill();
-    ctx.save();
-    ctx.shadowColor = c.glow;
-    ctx.shadowBlur = s * 0.08;
-    ctx.fillStyle = c.glow;
-    rr(ctx, bx - w / 2 + fwd, -0.03 - lift, w, 0.03, 0.012);
-    ctx.fill();
-    ctx.restore();
-  };
-  const leg = (lx: number, lift: number): void => {
-    ctx.fillStyle = grad;
-    rr(ctx, lx - 0.09, -0.21, 0.18, 0.13 - lift, 0.03);
-    ctx.fill();
-  };
-  const arm = (ax: number, ay: number, ex: number, ey: number): void => {
-    ctx.lineCap = 'round';
-    ctx.strokeStyle = grad;
-    ctx.lineWidth = 0.14;
-    ctx.beginPath();
-    ctx.moveTo(ax, ay);
-    ctx.lineTo(ex, ey);
-    ctx.stroke();
-    ctx.strokeStyle = BLACK;
-    ctx.lineWidth = 0.145;
-    ctx.lineCap = 'butt';
-    ctx.beginPath();
-    ctx.moveTo(ax + (ex - ax) * 0.4, ay + (ey - ay) * 0.4);
-    ctx.lineTo(ax + (ex - ax) * 0.62, ay + (ey - ay) * 0.62);
-    ctx.stroke();
-    ctx.fillStyle = grad;
-    ctx.beginPath();
-    ctx.arc(ex, ey + 0.03, 0.088, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = BLACK;
-    rr(ctx, ex - 0.055, ey + 0.05, 0.11, 0.022, 0.01);
-    ctx.fill();
-  };
-
-  if (side) {
-    const stride = sw * 0.09;
-    leg(-0.08 - stride, Math.max(0, -sw) * 0.04);
-    boot(-0.08 - stride, Math.max(0, -sw) * 0.04, 0.28, 0.03);
-    ctx.fillStyle = grad;
-    rr(ctx, -0.22, -0.47 + bob, 0.44, 0.2, 0.08);
-    ctx.fill();
-    ctx.fillStyle = BLACK;
-    ctx.fillRect(-0.2, -0.3 + bob, 0.4, 0.07);
-    ctx.fillStyle = grad;
-    rr(ctx, -0.21, -0.245 + bob, 0.42, 0.085, 0.03);
-    ctx.fill();
-    leg(0.08 + stride, Math.max(0, sw) * 0.04);
-    boot(0.08 + stride, Math.max(0, sw) * 0.04, 0.28, 0.03);
-    arm(0, -0.41 + bob, -stride * 1.3, -0.26 + bob);
-  } else {
-    for (const sg of [-1, 1]) {
-      const lift = Math.max(0, sg * sw) * 0.045;
-      leg(sg * 0.125, lift);
-      boot(sg * 0.14, lift, 0.25, 0);
-    }
-    for (const sg of [-1, 1]) {
-      arm(sg * 0.31, -0.41 + bob, sg * 0.37, -0.26 + bob - sg * sw * 0.03);
-    }
-    ctx.fillStyle = grad;
-    ctx.beginPath();
-    ctx.moveTo(-0.28, -0.48 + bob);
-    ctx.lineTo(0.28, -0.48 + bob);
-    ctx.lineTo(0.21, -0.28 + bob);
-    ctx.lineTo(-0.21, -0.28 + bob);
-    ctx.closePath();
-    ctx.fill();
-    ctx.fillStyle = BLACK;
-    ctx.fillRect(-0.21, -0.3 + bob, 0.42, 0.07);
-    ctx.fillStyle = grad;
-    rr(ctx, -0.22, -0.245 + bob, 0.44, 0.085, 0.03);
-    ctx.fill();
+const ghosts = new Map<string, BotColor>();
+/** A robot's colours washed out toward white: what its ghost is drawn in. */
+function ghostOf(c: BotColor): BotColor {
+  let g = ghosts.get(c.id);
+  if (!g) {
+    g = { id: c.id, name: c.name, body: mix(c.body, '#ffffff', 0.55), light: mix(c.light, '#ffffff', 0.6), dark: mix(c.dark, '#ffffff', 0.45), glow: mix(c.glow, '#ffffff', 0.5) };
+    ghosts.set(c.id, g);
   }
+  return g;
+}
 
-  // helmet
-  const hx = side ? 0.03 : 0;
-  const hg = ctx.createRadialGradient(hx - 0.11, hy - 0.15, 0.02, hx, hy, HR);
-  hg.addColorStop(0, '#23252f');
-  hg.addColorStop(0.6, '#0b0b10');
-  hg.addColorStop(1, '#040406');
-  ctx.fillStyle = hg;
-  ctx.beginPath();
-  ctx.arc(hx, hy, HR, 0, Math.PI * 2);
-  ctx.fill();
+/** A number from 0 to 1 that is always the same for the same `n`: for scattering ash without a random generator. */
+function scatter(n: number): number {
+  const v = Math.sin(n * 12.9898) * 43758.5453;
+  return v - Math.floor(v);
+}
 
-  const trim = (): void => {
-    if (side) {
-      ctx.moveTo(hx - 0.31, hy - 0.18);
-      ctx.bezierCurveTo(hx - 0.28, hy + 0.13, hx - 0.04, hy + 0.31, hx + 0.37, hy + 0.19);
-    } else if (back) {
-      ctx.moveTo(-0.37, hy - 0.11);
-      ctx.quadraticCurveTo(0, hy + 0.31, 0.37, hy - 0.11);
-    } else {
-      ctx.moveTo(-0.37, hy - 0.04);
-      ctx.quadraticCurveTo(0, hy + 0.53, 0.37, hy - 0.04);
-    }
-  };
-  ctx.save();
-  ctx.beginPath();
-  ctx.arc(hx, hy, HR, 0, Math.PI * 2);
-  ctx.clip();
-  const pg = ctx.createLinearGradient(-0.3, hy, 0.3, hy + 0.4);
-  pg.addColorStop(0, c.light);
-  pg.addColorStop(0.5, c.body);
-  pg.addColorStop(1, c.dark);
-  ctx.fillStyle = pg;
-  ctx.beginPath();
-  trim();
-  if (side) {
-    ctx.lineTo(hx + 0.5, hy + 0.6);
-    ctx.lineTo(hx - 0.6, hy + 0.6);
-    ctx.lineTo(hx - 0.6, hy - 0.5);
-  } else {
-    ctx.lineTo(0.5, hy + 0.6);
-    ctx.lineTo(-0.5, hy + 0.6);
-  }
-  ctx.closePath();
-  ctx.fill();
-  ctx.shadowColor = c.glow;
-  ctx.shadowBlur = s * 0.1;
-  ctx.strokeStyle = c.glow;
-  ctx.lineWidth = 0.03;
-  ctx.lineCap = 'round';
-  ctx.beginPath();
-  trim();
-  ctx.stroke();
-  ctx.shadowBlur = 0;
-  if (!back) {
-    ctx.strokeStyle = 'rgba(255,255,255,0.7)';
-    ctx.lineWidth = 0.045;
-    ctx.beginPath();
-    ctx.arc(hx, hy, HR - 0.09, -1.05, -0.3);
-    ctx.stroke();
-    if (!side) {
-      ctx.strokeStyle = 'rgba(255,255,255,0.4)';
-      ctx.lineWidth = 0.036;
-      ctx.beginPath();
-      ctx.arc(hx, hy, HR - 0.09, -2.45, -2.15);
-      ctx.stroke();
-    }
-  }
-  ctx.restore();
-  ctx.restore();
+/**
+ * The winner's celebration, `t` seconds after the round was decided: a jump
+ * with one arm in the air, then a dance (bouncing from side to side, pumping
+ * each arm in turn).
+ */
+export function winPose(t: number): Pose {
+  const JUMP = 0.7;
+  if (t < JUMP) return { jump: Math.sin((Math.PI * t) / JUMP) * 0.5, arms: [0, 1] };
+  const beat = (t - JUMP) * 7.5;
+  const s = Math.sin(beat);
+  return { jump: Math.abs(s) * 0.1, lean: s * 0.14, arms: [0.5 + 0.5 * s, 0.5 - 0.5 * s] };
 }
 
 // ---------------------------------------------------------------- arena
@@ -316,11 +173,22 @@ const ITEM_COLOR: Record<ItemKind, string> = {
   speed: '#6dff8a',
   kick: '#ffd84a',
   grab: '#d08cff',
+  shield: '#f1f5ff',
+  curse: '#ff4063',
 };
+/** A power-up lying on the floor is this share of a tile across (it was 0.92; made 10% smaller). */
+const ITEM_SIZE = 0.83;
+/** How far it bobs, as a share of a tile, and how fast (2.2 gives one slow bob about every 3 seconds). */
+const ITEM_BOB = 0.05;
+const ITEM_BOB_RATE = 2.2;
+/** the dark colour icons are drawn in on a power-up tile */
+const ICON_DARK = '#0b0e18';
 
 /** Draw a power-up's icon centred on (cx, cy), about `r` pixels in radius, in its own colour unless one is given. */
 export function drawItemIcon(ctx: Ctx, kind: ItemKind, cx: number, cy: number, r: number, color?: string): void {
   const col = color ?? ITEM_COLOR[kind];
+  // for details cut into an icon: dark on a light icon, the power-up's colour on a dark one
+  const hole = col === ICON_DARK ? ITEM_COLOR[kind] : ICON_DARK;
   ctx.save();
   ctx.translate(cx, cy);
   ctx.fillStyle = col;
@@ -365,6 +233,38 @@ export function drawItemIcon(ctx: Ctx, kind: ItemKind, cx: number, cy: number, r
     ctx.closePath();
     ctx.fill();
     ctx.stroke();
+  } else if (kind === 'shield') {
+    // a shield: flat top, pointed foot, with a cross on it
+    ctx.beginPath();
+    ctx.moveTo(-r * 0.66, -r * 0.7);
+    ctx.lineTo(r * 0.66, -r * 0.7);
+    ctx.lineTo(r * 0.66, -r * 0.05);
+    ctx.quadraticCurveTo(r * 0.6, r * 0.55, 0, r * 0.84);
+    ctx.quadraticCurveTo(-r * 0.6, r * 0.55, -r * 0.66, -r * 0.05);
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = hole;
+    ctx.lineWidth = r * 0.16;
+    line(ctx, 0, -r * 0.44, 0, r * 0.48);
+    line(ctx, -r * 0.36, -r * 0.16, r * 0.36, -r * 0.16);
+  } else if (kind === 'curse') {
+    // a skull: round head, square jaw, two eyes and two gaps between teeth
+    ctx.beginPath();
+    ctx.arc(0, -r * 0.16, r * 0.62, 0, Math.PI * 2);
+    ctx.fill();
+    rr(ctx, -r * 0.36, r * 0.18, r * 0.72, r * 0.56, r * 0.12);
+    ctx.fill();
+    ctx.fillStyle = hole;
+    for (const sx of [-1, 1]) {
+      ctx.beginPath();
+      ctx.arc(sx * r * 0.25, -r * 0.16, r * 0.17, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.strokeStyle = hole;
+    ctx.lineWidth = r * 0.1;
+    ctx.lineCap = 'butt';
+    line(ctx, -r * 0.12, r * 0.44, -r * 0.12, r * 0.74);
+    line(ctx, r * 0.12, r * 0.44, r * 0.12, r * 0.74);
   } else {
     // a glove
     rr(ctx, -r * 0.5, -r * 0.72, r * 0.78, r * 1.1, r * 0.32);
@@ -391,7 +291,7 @@ function line(ctx: Ctx, x1: number, y1: number, x2: number, y2: number): void {
  * the tile player `focusId` counts as standing on, bombs on the floor, blasts,
  * robots (those further down the screen in front), then carried and flying bombs.
  */
-export function drawDynamic(ctx: Ctx, world: World, T: number, time: number, focusId = 0): void {
+export function drawDynamic(ctx: Ctx, world: World, T: number, time: number, focusId = 0, celebrate?: Celebration, crowned = -1): void {
   // every block casts a strip of shadow onto the floor below it
   ctx.fillStyle = 'rgba(0,0,0,0.38)';
   for (let y = 0; y < world.h - 1; y++) {
@@ -402,13 +302,20 @@ export function drawDynamic(ctx: Ctx, world: World, T: number, time: number, foc
     }
   }
 
-  // power-ups: a full tile of solid colour that pulses, with a dark icon
+  // power-ups: a square of solid colour that pulses, with a dark icon. It is a little smaller
+  // than its tile and hovers: it bobs slowly up and down over a shadow that stays on the floor.
   for (const it of world.items) {
     const pop = Math.min(1, it.age / 8);
-    const m = T * 0.04 + (T * 0.46) * (1 - pop);
-    const px = it.cx * T + m;
-    const py = it.cy * T + m;
+    const m = (T * (1 - ITEM_SIZE)) / 2 + ((T * ITEM_SIZE) / 2) * (1 - pop);
     const size = T - m * 2;
+    // each one bobs out of step with its neighbours; `lift` runs from 0 (lowest) to 1 (highest)
+    const lift = 0.5 + 0.5 * Math.sin(time * ITEM_BOB_RATE + it.cx * 1.7 + it.cy * 2.3);
+    const px = it.cx * T + m;
+    const py = it.cy * T + m - T * ITEM_BOB * (lift * 2 - 0.4);
+    ctx.fillStyle = `rgba(0,0,0,${0.34 - 0.14 * lift})`;
+    ctx.beginPath();
+    ctx.ellipse((it.cx + 0.5) * T, (it.cy + 1) * T - T * 0.07, size * (0.44 - 0.07 * lift), T * 0.06, 0, 0, Math.PI * 2);
+    ctx.fill();
     const pulse = 0.5 + 0.5 * Math.sin(time * 6 + it.cx + it.cy);
     ctx.fillStyle = ITEM_COLOR[it.kind];
     rr(ctx, px, py, size, size, T * 0.1);
@@ -418,7 +325,7 @@ export function drawDynamic(ctx: Ctx, world: World, T: number, time: number, foc
     ctx.strokeStyle = 'rgba(255,255,255,0.85)';
     ctx.lineWidth = Math.max(1, T * 0.04);
     ctx.stroke();
-    drawItemIcon(ctx, it.kind, (it.cx + 0.5) * T, (it.cy + 0.5) * T, size * 0.36, '#0b0e18');
+    drawItemIcon(ctx, it.kind, px + size / 2, py + size / 2, size * 0.36, ICON_DARK);
   }
 
   // breakable blocks (burning ones flash and shrink)
@@ -486,15 +393,27 @@ export function drawDynamic(ctx: Ctx, world: World, T: number, time: number, foc
   }
   ctx.restore();
 
+  // where a block is about to land: a shadow that darkens and fills the tile as the block comes down
+  for (const f of world.falling) {
+    const e = 1 - Math.max(0, f.landAt - world.tick) / FALL_TICKS; // 0 as it starts to fall, 1 as it lands
+    const m = T * 0.3 * (1 - e);
+    ctx.fillStyle = `rgba(0,0,0,${0.25 + 0.45 * e})`;
+    rr(ctx, f.cx * T + m, f.cy * T + m, T - m * 2, T - m * 2, T * 0.12);
+    ctx.fill();
+    ctx.strokeStyle = `rgba(255,90,110,${0.35 + 0.5 * e})`;
+    ctx.lineWidth = Math.max(1, T * 0.05);
+    ctx.strokeRect(f.cx * T + 1, f.cy * T + 1, T - 2, T - 2);
+  }
+
   // robots, back to front
   const order = [...world.players].sort((a, b) => a.y - b.y);
-  for (const p of order) drawPlayer(ctx, p, T);
+  for (const p of order) drawPlayer(ctx, world, p, T, celebrate, crowned);
 
   // carried and flying bombs go on top
   for (const b of world.bombs) {
     const gx = (b.x + 0.5) * T;
     const gy = (b.y + 0.5) * T;
-    if (b.state === 'held') drawBomb(ctx, world, b, gx, gy - T * 0.98, T, false);
+    if (b.state === 'held') drawBomb(ctx, world, b, gx, gy + T * (0.46 + ROBOT.top - 0.09), T, false); // just over the helmet of the robot carrying it
     else if (b.state === 'air') {
       const p = b.flyT / FLY_TICKS_PER_TILE;
       const h = p < THROW_TILES ? Math.sin((Math.PI * p) / THROW_TILES) * 0.9 : Math.abs(Math.sin(Math.PI * (p - THROW_TILES))) * 0.4;
@@ -504,6 +423,19 @@ export function drawDynamic(ctx: Ctx, world: World, T: number, time: number, foc
       ctx.fill();
       drawBomb(ctx, world, b, gx, gy - T * (0.25 + h), T, false);
     }
+  }
+
+  // the falling blocks themselves, over everything: larger while high up, speeding up as they drop
+  for (const f of world.falling) {
+    const e = 1 - Math.max(0, f.landAt - world.tick) / FALL_TICKS;
+    const high = 1 - e * e; // 1 at the top, 0 on the floor
+    const size = T * (1 + 0.3 * high);
+    const px = f.cx * T - (size - T) / 2;
+    const py = f.cy * T - (size - T) / 2 - high * T * 2.4;
+    ctx.save();
+    ctx.globalAlpha = Math.min(1, 0.35 + e * 1.3);
+    drawHard(ctx, px, py, size);
+    ctx.restore();
   }
 }
 
@@ -542,25 +474,234 @@ function drawBomb(ctx: Ctx, world: World, b: Bomb, cx: number, cy: number, T: nu
   ctx.restore();
 }
 
-/** A robot on its tile, or fading upward for a moment after being knocked out. */
-function drawPlayer(ctx: Ctx, p: Player, T: number): void {
+/**
+ * What a robot is under, drawn over it so everyone can see: a ring while it
+ * has a shield (blinking for the last 5 seconds), a ring flying outward when
+ * the shield takes a blast, and a small skull over its head while cursed
+ * (blinking for the last 2 seconds).
+ */
+function drawStatus(ctx: Ctx, p: Player, cx: number, cy: number, T: number): void {
+  const shield = ITEM_COLOR.shield;
+  // the shield is a ring round the whole robot, from its feet to the top of its helmet
+  const feet = cy + T * 0.46;
+  const ringY = feet + ROBOT.midY * T;
+  const ringR = (-ROBOT.top / 2 + 0.05) * T;
+  if (p.shieldTicks > 0 && (p.shieldTicks > 5 * TICK_HZ || p.shieldTicks % 16 < 10)) {
+    const pulse = 0.5 + 0.5 * Math.sin(p.shieldTicks * 0.2);
+    ctx.save();
+    ctx.shadowColor = '#8fd0ff';
+    ctx.shadowBlur = T * 0.3;
+    ctx.strokeStyle = shield;
+    ctx.globalAlpha = 0.6 + 0.35 * pulse;
+    ctx.lineWidth = Math.max(2, T * 0.07);
+    ctx.beginPath();
+    ctx.arc(cx, ringY, ringR, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.globalAlpha = 0.1 + 0.06 * pulse;
+    ctx.fillStyle = shield;
+    ctx.fill();
+    ctx.restore();
+  }
+  if (p.graceTicks > 0) {
+    const k = 1 - p.graceTicks / SHIELD_GRACE_TICKS;
+    ctx.save();
+    ctx.strokeStyle = shield;
+    ctx.globalAlpha = 1 - k;
+    ctx.lineWidth = Math.max(2, T * 0.1 * (1 - k));
+    ctx.beginPath();
+    ctx.arc(cx, ringY, ringR + T * k * 0.7, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+  }
+  if (p.curseTicks > 0 && (p.curseTicks > 2 * TICK_HZ || p.curseTicks % 16 < 10)) {
+    const bob = Math.sin(p.curseTicks * 0.15) * T * 0.04;
+    const r = T * 0.2;
+    const iy = feet + (ROBOT.top - 0.17) * T + bob; // just over the top of the helmet
+    ctx.save();
+    ctx.fillStyle = 'rgba(11,14,24,0.75)';
+    ctx.beginPath();
+    ctx.arc(cx, iy, r * 1.25, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+    drawItemIcon(ctx, 'curse', cx, iy, r);
+  }
+}
+
+/**
+ * Get the robots' pictures ready a little ahead of when they are needed (see
+ * warmRobots in robot.ts): everyone's walk in all four directions, the burnt
+ * robot, each ghost, and the winner's dance once there is a winner. Call it
+ * once a frame; it works for at most `ms` thousandths of a second each time.
+ */
+export function warmSprites(ctx: Ctx, world: World, T: number, ms = 4): void {
+  const wanted: Wanted[] = world.players.map((p) => ({ c: colorById(p.colorId), kind: 'walk' as const }));
+  wanted.push({ c: CHARRED, kind: 'burnt' });
+  for (const p of world.players) wanted.push({ c: ghostOf(colorById(p.colorId)), kind: 'ghost' });
+  if (world.over && world.over.winner >= 0) wanted.push({ c: colorById(world.players[world.over.winner].colorId), kind: 'dance' });
+  warmRobots(ctx, T, wanted, ms);
+}
+
+/** The winner of a round, and how many seconds ago it was decided. */
+export interface Celebration {
+  player: number;
+  t: number;
+}
+
+// the knocked-out animation, in ticks out of DEATH_TICKS
+const CRISP_HOLD = 26; // the burnt robot stands this long before it starts to go
+const CRISP_FADE = 34; // and takes this long to crumble away
+const GHOST_FROM = 8; // the ghost starts to rise
+const GHOST_SPEED = 0.075; // how fast it floats up once it is under way, in tiles a tick (4.5 tiles a second)
+const GHOST_EASE = 18; // it takes about this many ticks to get up to that speed
+const GHOST_FADE = 2.5; // it fades over the last few tiles before its head reaches the top of the screen
+const ASH = 18; // specks of ash
+
+/** A robot on its tile; the winner celebrating; or, for a moment after being knocked out, its remains and its ghost. */
+function drawPlayer(ctx: Ctx, world: World, p: Player, T: number, celebrate?: Celebration, crowned = -1): void {
   const col = colorById(p.colorId);
   const x = (p.x + 0.5) * T;
   const y = (p.y + 0.5) * T + T * 0.46;
   if (p.alive) {
-    drawRobot(ctx, x, y, T, col, p.facing, p.walk, p.moving);
+    if (celebrate && celebrate.player === p.id) {
+      // the winner: facing the viewer, jumping and then dancing
+      drawRobot(ctx, x, y, T, col, 2, 0, false, { ...winPose(celebrate.t), crown: crowned === p.id });
+    } else drawRobot(ctx, x, y, T, col, p.facing, p.walk, p.moving, crowned === p.id ? { crown: true } : undefined);
+    drawStatus(ctx, p, x, (p.y + 0.5) * T, T);
     return;
   }
-  if (p.deadTicks >= DEATH_TICKS) return;
-  const k = p.deadTicks / DEATH_TICKS;
+  const t = p.deadTicks;
+  if (t >= DEATH_TICKS) return;
+  // Knocked out. Two things happen at once: what is left of the robot, burnt black with crosses for
+  // eyes, crumbles to ash that drifts up and away; and a pale ghost of it floats up off the screen.
+  // The ghost leaves the arena, so it is drawn by drawGhosts on a layer of its own.
+  // (Under a fallen block there is nothing left to see, so only the ghost.)
+  const crushed = world.tiles[Math.round(p.y) * world.w + Math.round(p.x)] === HARD;
+  if (!crushed) {
+    if (t < 10) {
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.fillStyle = col.glow;
+      ctx.globalAlpha = (1 - t / 10) * 0.7;
+      ctx.beginPath();
+      ctx.arc(x, y - T * 0.5, T * (0.35 + t * 0.05), 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+    const left = t < CRISP_HOLD ? 1 : Math.max(0, 1 - (t - CRISP_HOLD) / CRISP_FADE);
+    if (left > 0) {
+      ctx.save();
+      ctx.globalAlpha = left;
+      drawRobot(ctx, x, y, T, CHARRED, p.facing, 0, false, { xEyes: true, shrink: 0.9 + 0.1 * left });
+      ctx.restore();
+    }
+    for (let i = 0; i < ASH; i++) {
+      const n = p.id * 97 + i * 13;
+      const age = t - (6 + scatter(n) * 34);
+      const life = 34 + scatter(n + 1) * 22;
+      if (age < 0 || age > life) continue;
+      const k = age / life;
+      const side = scatter(n + 2) - 0.5;
+      const px = x + side * T * (0.55 + 0.5 * k) + Math.sin(age * 0.13 + scatter(n + 3) * 6) * T * 0.07;
+      const py = y - T * (0.08 + scatter(n + 4) * 0.8) - k * T * (0.45 + scatter(n + 5) * 0.6);
+      const size = T * (0.045 + scatter(n + 6) * 0.05) * (1 - k * 0.5);
+      ctx.globalAlpha = (1 - k) * 0.9;
+      ctx.fillStyle = i % 6 === 0 ? col.glow : i % 2 ? '#131316' : '#2d2d35'; // mostly ash, the odd ember
+      ctx.fillRect(px - size / 2, py - size / 2, size, size);
+    }
+    ctx.globalAlpha = 1;
+  }
+}
+
+/**
+ * A ghost's two angel wings, drawn before the ghost so they are behind it.
+ * (x, y) is the ghost's feet and `s` its size, as for drawRobot. `beat` goes up
+ * steadily; the wings flap slowly with it.
+ */
+function drawWings(ctx: Ctx, x: number, y: number, s: number, beat: number): void {
+  const flap = Math.sin(beat) * 0.2;
   ctx.save();
-  ctx.globalAlpha = 1 - k;
-  drawRobot(ctx, x, y - k * T * 0.5, T * (1 + k * 0.5), col, p.facing, 0, false);
-  ctx.globalCompositeOperation = 'lighter';
-  ctx.fillStyle = col.glow;
-  ctx.globalAlpha = (1 - k) * 0.6;
-  ctx.beginPath();
-  ctx.arc(x, y - T * 0.5, T * (0.3 + k * 0.9), 0, Math.PI * 2);
-  ctx.fill();
+  ctx.translate(x, y);
+  ctx.scale(s, s);
+  ctx.lineJoin = 'round';
+  for (const dir of [1, -1]) {
+    ctx.save();
+    ctx.scale(dir, 1);
+    ctx.translate(ROBOT.shoulderX * 0.6, ROBOT.shoulderY + 0.04 * ROBOT.scale); // behind the shoulder
+    ctx.scale(ROBOT.scale, ROBOT.scale); // the wing is drawn at its first size and follows the robot's
+    ctx.rotate(-0.12 - flap);
+    const g = ctx.createLinearGradient(0, -0.4, 0.6, 0.1);
+    g.addColorStop(0, '#ffffff');
+    g.addColorStop(1, '#cfdcff');
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.bezierCurveTo(0.14, -0.44, 0.5, -0.52, 0.64, -0.3); // the top edge, out to the tip
+    ctx.quadraticCurveTo(0.58, -0.12, 0.47, -0.15); // three feathers along the bottom
+    ctx.quadraticCurveTo(0.45, 0.02, 0.33, -0.03);
+    ctx.quadraticCurveTo(0.29, 0.12, 0.17, 0.05);
+    ctx.quadraticCurveTo(0.09, 0.14, 0, 0.09);
+    ctx.closePath();
+    ctx.fillStyle = g;
+    ctx.fill();
+    ctx.strokeStyle = '#9fb4ee';
+    ctx.lineWidth = 0.02;
+    ctx.stroke();
+    // the lines between the feathers
+    ctx.beginPath();
+    ctx.moveTo(0.47, -0.15);
+    ctx.quadraticCurveTo(0.36, -0.2, 0.2, -0.2);
+    ctx.moveTo(0.33, -0.03);
+    ctx.quadraticCurveTo(0.24, -0.08, 0.12, -0.08);
+    ctx.stroke();
+    ctx.restore();
+  }
   ctx.restore();
+}
+
+/** A ghost's halo: a gold ring floating over its helmet. Drawn after the ghost. */
+function drawHalo(ctx: Ctx, x: number, y: number, s: number): void {
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.scale(s, s);
+  ctx.shadowColor = 'rgba(255, 220, 110, 0.9)';
+  ctx.shadowBlur = s * 0.12;
+  ctx.strokeStyle = '#ffe27a';
+  const k = ROBOT.scale;
+  ctx.lineWidth = 0.045 * k;
+  ctx.beginPath();
+  ctx.ellipse(0, ROBOT.top - 0.1 * k, 0.2 * k, 0.062 * k, 0, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.restore();
+}
+
+/**
+ * The ghosts of knocked-out robots: a pale robot in a faint version of its suit
+ * colour, with angel wings and a halo, floating straight up from where it was
+ * caught to the top of the screen, and fading as it gets near the top.
+ *
+ * It is drawn in the arena's own pixels (0, 0 is the arena's top-left corner),
+ * on a layer that reaches above the arena. `top` is where the top of the screen
+ * is in those pixels: 0 if the arena starts there, negative if there is
+ * something above it. Returns whether anything was drawn.
+ */
+export function drawGhosts(ctx: Ctx, world: World, T: number, top: number): boolean {
+  let any = false;
+  for (const p of world.players) {
+    if (p.alive || p.deadTicks < GHOST_FROM || p.deadTicks >= GHOST_TICKS) continue;
+    const t = p.deadTicks - GHOST_FROM;
+    const rise = ((GHOST_SPEED * t * t) / (t + GHOST_EASE)) * T;
+    const x = (p.x + 0.5) * T + Math.sin(p.deadTicks * 0.12) * T * 0.07;
+    const y = (p.y + 0.5) * T + T * 0.38 - rise; // its feet
+    const room = y + (ROBOT.top - 0.17 * ROBOT.scale) * T - top; // from the top of its halo to the top of the screen
+    if (room <= 0) continue;
+    ctx.save();
+    // it appears over a few ticks, stays clear on the way up, and goes as it nears the top
+    // (and, on a screen so tall that it runs out of time first, just before the count stops)
+    ctx.globalAlpha = 0.6 * Math.min(1, t / 8) * Math.min(1, room / (GHOST_FADE * T)) * Math.min(1, (GHOST_TICKS - p.deadTicks) / 20);
+    drawWings(ctx, x, y, T, p.deadTicks * 0.16);
+    drawRobot(ctx, x, y, T, ghostOf(colorById(p.colorId)), 2, 0, false, { noShadow: true, pale: true, arms: GHOST_ARMS });
+    drawHalo(ctx, x, y, T);
+    ctx.restore();
+    any = true;
+  }
+  return any;
 }

@@ -23,7 +23,23 @@ import {
   MAX_SPEED_ITEMS,
   KICK_SPEED,
   LOOK_TICKS,
+  START_FIRE,
+  DEATH_TICKS,
+  GHOST_TICKS,
+  cloneWorld,
+  KEEP_OPEN,
+  keptOpen,
   TICK_HZ,
+  ITEM_CHANCE,
+  SHIELD_TICKS,
+  SHIELD_GRACE_TICKS,
+  CURSE_TICKS,
+  CURSE_SPEED,
+  ROUND_TICKS,
+  SHRINK_TICKS,
+  FALL_TICKS,
+  blockLandTick,
+  ticksLeft,
   playerSpeed,
   tileAt,
   makeRng,
@@ -44,11 +60,11 @@ const ticks = (n: number): number => Math.round((n * 0.062) / BASE_SPEED);
 
 /** a two-player world with no bricks unless a density is given: player 0 top-left, player 1 bottom-right */
 const mk = (density = 0): World =>
-  createWorld({ seed: 7, players: [{ colorId: 'gold' }, { colorId: 'blue' }], softDensity: density });
+  createWorld({ roundTicks: 0, seed: 7, players: [{ colorId: 'gold' }, { colorId: 'blue' }], softDensity: density });
 
 // 1. layout: border and pillars are hard, spawn corners are open
 {
-  const w = createWorld({ seed: 1, players: [{ colorId: 'a' }, { colorId: 'b' }, { colorId: 'c' }, { colorId: 'd' }] });
+  const w = createWorld({ roundTicks: 0, seed: 1, players: [{ colorId: 'a' }, { colorId: 'b' }, { colorId: 'c' }, { colorId: 'd' }] });
   assert.equal(w.w, 15);
   assert.equal(w.h, 13);
   assert.equal(tileAt(w, 0, 5), HARD);
@@ -89,19 +105,45 @@ const mk = (density = 0): World =>
   run(w, ticks(40), { dir: 4, a: false, b: false }); // walk off it
   assert.ok(w.players[0].x > 2);
   run(w, ticks(200), { dir: 3, a: false, b: false }); // try to walk back before/after blast
-  // the blast (range 2) reaches x = 3 on the top row; walking back into it is fatal
+  // the starting blast reaches one tile along the top row, to x = 2, which is as far back as the bomb lets it walk
   assert.equal(w.players[0].alive, false, 'walking back into your own blast kills you');
 }
+// a starting blast reaches one tile each way; every flame power-up adds one more
 {
+  assert.equal(START_FIRE, 1);
+  /** drop a bomb on (1,1) with `flames` flame power-ups picked up, stand `tiles` below it, and say whether the robot lives */
+  const lives = (flames: number, tiles: number): boolean => {
+    const w = mk();
+    const p = w.players[0];
+    assert.equal(p.fire, 1, 'a robot starts with a blast one tile long');
+    for (let k = 0; k < flames; k++) {
+      w.items.push({ cx: 1, cy: 1, kind: 'fire', age: 9 });
+      step(w, [none]);
+    }
+    assert.equal(p.fire, 1 + flames, 'each flame power-up makes it one tile longer');
+    step(w, [{ dir: 0, a: true, b: false }]);
+    assert.equal(w.bombs[0].range, 1 + flames);
+    p.y = 1 + tiles;
+    run(w, FUSE_TICKS + FLAME_TICKS, none);
+    assert.equal(w.bombs.length, 0);
+    return p.alive;
+  };
+  assert.equal(lives(0, 1), false, 'the next tile is in a starting blast');
+  assert.equal(lives(0, 2), true, 'two tiles away is clear of it');
+  assert.equal(lives(1, 2), false, 'with one flame power-up two tiles away is in the blast');
+  assert.equal(lives(1, 3), true, 'and three is clear');
+  assert.equal(lives(2, 3), false, 'with two, three tiles away is in it');
+  // exactly the four tiles next to the bomb, in the open
   const w = mk();
+  const p = w.players[0];
+  p.x = 3;
+  p.y = 3;
   step(w, [{ dir: 0, a: true, b: false }]);
-  // two tiles straight down is still inside the starting blast
-  run(w, ticks(32), { dir: 2, a: false, b: false });
-  assert.equal(Math.round(w.players[0].y), 3);
-  run(w, FUSE_TICKS + FLAME_TICKS, none);
-  // (1,3) is exactly range 2 below the bomb: still in the blast
-  assert.equal(w.bombs.length, 0);
-  assert.equal(w.players[0].alive, false);
+  p.x = 7;
+  p.y = 7;
+  run(w, FUSE_TICKS + 1, none);
+  const lit = w.flames.map((f) => `${f.cx},${f.cy}`).sort();
+  assert.deepEqual(lit, ['2,3', '3,2', '3,3', '3,4', '4,3'], 'a starting blast is a plus sign one tile each way');
 }
 {
   const w = mk();
@@ -121,6 +163,7 @@ const mk = (density = 0): World =>
   w.tiles[i] = SOFT;
   w.hidden.set(i, 'fire');
   w.tiles[1 * w.w + 4] = SOFT; // behind the first block: must survive
+  w.players[0].fire = 2; // as if one flame power-up had been picked up: the blast reaches the brick two tiles away
   step(w, [{ dir: 0, a: true, b: false }]);
   run(w, ticks(70), { dir: 2, a: false, b: false });
   run(w, ticks(60), { dir: 4, a: false, b: false });
@@ -166,7 +209,7 @@ const mk = (density = 0): World =>
 // 6. same seed, same inputs, same result (needed for online play later)
 {
   const play = (): string => {
-    const w = createWorld({ seed: 99, players: [{ colorId: 'a' }, { colorId: 'b' }] });
+    const w = createWorld({ roundTicks: 0, seed: 99, players: [{ colorId: 'a' }, { colorId: 'b' }] });
     for (let t = 0; t < 900; t++) {
       const dir = ((Math.floor(t / 37) * 7 + 3) % 5) as Dir;
       step(w, [{ dir, a: t % 211 === 5, b: false }]);
@@ -270,7 +313,7 @@ const mk = (density = 0): World =>
 
 // 9. every arena hides at least one kick and one grab
 for (let seed = 1; seed <= 40; seed++) {
-  const w = createWorld({ seed, players: [{ colorId: 'a' }, { colorId: 'b' }] });
+  const w = createWorld({ roundTicks: 0, seed, players: [{ colorId: 'a' }, { colorId: 'b' }] });
   const kinds = [...w.hidden.values()];
   assert.ok(kinds.includes('kick') && kinds.includes('grab'));
 }
@@ -282,7 +325,7 @@ for (let seed = 1; seed <= 40; seed++) {
   step(w0, [right]);
   run(w0, 30, none);
   assert.ok(Math.abs(w0.players[0].x - (1 + BASE_SPEED)) < 1e-9, 'stops where you let go: one tick of walking');
-  const on = (): World => createWorld({ seed: 7, players: [{ colorId: 'a' }, { colorId: 'b' }], softDensity: 0, stepAssist: true });
+  const on = (): World => createWorld({ roundTicks: 0, seed: 7, players: [{ colorId: 'a' }, { colorId: 'b' }], softDensity: 0, stepAssist: true });
   const w = on();
   step(w, [right]);
   run(w, ticks(30), none);
@@ -391,7 +434,7 @@ for (let seed = 1; seed <= 40; seed++) {
 {
   const rng = makeRng(2024);
   for (let game = 0; game < 30; game++) {
-    const w = createWorld({ seed: 100 + game, players: [{ colorId: 'a' }, { colorId: 'b' }], softDensity: game % 3 === 0 ? 0 : 0.5 });
+    const w = createWorld({ roundTicks: 0, seed: 100 + game, players: [{ colorId: 'a' }, { colorId: 'b' }], softDensity: game % 3 === 0 ? 0 : 0.5 });
     const p = w.players[0];
     let dir: Dir = 0;
     let holdFor = 0;
@@ -689,4 +732,380 @@ for (let seed = 1; seed <= 40; seed++) {
     assert.equal(b.state, 'air');
     assert.equal(b.flyDir, 1, 'thrown up, over the pillar');
   }
+}
+
+// 16. the shield: survive one blast, or lose it after 30 seconds
+{
+  const pressA: PlayerInput = { dir: 0, a: true, b: false };
+  /** a robot at (1,1) in an empty arena with a shield power-up lying on (2,1) */
+  const withShield = (): World => {
+    const w = mk();
+    w.items.push({ cx: 2, cy: 1, kind: 'shield', age: 0 });
+    while (w.players[0].x < 1.5) step(w, [{ dir: 4, a: false, b: false }]);
+    return w;
+  };
+  /** drop a bomb, stand on it until it has gone off and its blast has cleared; say whether a shield took it */
+  const standInBlast = (w: World): boolean => {
+    let took = false;
+    step(w, [pressA]);
+    for (let i = 0; i < FUSE_TICKS + FLAME_TICKS + 2; i++) {
+      step(w, [none]);
+      if (w.events.some((e) => e.type === 'shield' && e.player === 0)) took = true;
+    }
+    return took;
+  };
+
+  // picking it up starts 30 seconds
+  {
+    const w = withShield();
+    const p = w.players[0];
+    assert.equal(w.items.length, 0, 'picked up');
+    assert.equal(p.shieldTicks, SHIELD_TICKS);
+    assert.equal(SHIELD_TICKS, 30 * TICK_HZ);
+  }
+  // it takes one blast: the robot stands in the whole of it and lives, and the shield is gone
+  {
+    const w = withShield();
+    const p = w.players[0];
+    assert.ok(standInBlast(w), 'the shield took the blast');
+    assert.ok(p.alive, 'and the robot stood in all of it and lived');
+    assert.equal(p.shieldTicks, 0, 'the shield is used up');
+    assert.equal(w.flames.length, 0);
+    // the next blast is not survived
+    assert.ok(!standInBlast(w));
+    assert.ok(!p.alive, 'a second blast knocks it out');
+  }
+  // the half second of safety after the shield goes is only that long
+  {
+    const w = withShield();
+    const p = w.players[0];
+    step(w, [pressA]);
+    while (p.shieldTicks > 0 && p.alive) step(w, [none]);
+    assert.ok(p.alive);
+    assert.equal(p.graceTicks, SHIELD_GRACE_TICKS);
+    assert.ok(SHIELD_GRACE_TICKS >= FLAME_TICKS, 'long enough for the blast that broke it to clear');
+    assert.ok(SHIELD_GRACE_TICKS < TICK_HZ, 'and no longer than a second');
+  }
+  // not used: it wears off after 30 seconds, and then a blast knocks the robot out
+  {
+    const w = withShield();
+    const p = w.players[0];
+    run(w, SHIELD_TICKS - 1, none);
+    assert.equal(p.shieldTicks, 1, 'still there just before 30 seconds');
+    step(w, [none]);
+    assert.equal(p.shieldTicks, 0, 'gone at 30 seconds');
+    assert.ok(!standInBlast(w));
+    assert.ok(!p.alive);
+  }
+  // a second shield does not stack: it only starts the 30 seconds again
+  {
+    const w = withShield();
+    const p = w.players[0];
+    run(w, 100, none);
+    w.items.push({ cx: Math.round(p.x), cy: 1, kind: 'shield', age: 0 });
+    step(w, [none]);
+    assert.equal(p.shieldTicks, SHIELD_TICKS);
+    assert.ok(standInBlast(w));
+    assert.ok(!standInBlast(w), 'one blast, not two');
+  }
+}
+
+// 17. the curse: 8 seconds at 85% of the starting speed, whatever speed power-ups the robot has
+{
+  const right: PlayerInput = { dir: 4, a: false, b: false };
+  /** how far the robot moves in one tick, walking right along row 1 */
+  const stride = (w: World): number => {
+    const p = w.players[0];
+    const x0 = p.x;
+    step(w, [right]);
+    return p.x - x0;
+  };
+  for (const boosts of [0, 3, 6]) {
+    const w = mk();
+    const p = w.players[0];
+    p.speed = boosts;
+    const usual = BASE_SPEED + boosts * SPEED_STEP;
+    assert.ok(Math.abs(stride(w) - usual) < 1e-12);
+    w.items.push({ cx: Math.round(p.x), cy: 1, kind: 'curse', age: 0 });
+    step(w, [none]);
+    assert.equal(p.curseTicks, CURSE_TICKS);
+    assert.equal(CURSE_TICKS, 8 * TICK_HZ);
+    assert.ok(Math.abs(stride(w) - BASE_SPEED * CURSE_SPEED) < 1e-12, `cursed with ${boosts} speed power-ups: slower than a robot with none`);
+    assert.ok(BASE_SPEED * CURSE_SPEED < BASE_SPEED && CURSE_SPEED >= 0.8, 'slightly slower than the starting speed');
+    run(w, CURSE_TICKS - 3, none);
+    assert.ok(p.curseTicks > 0 && Math.abs(stride(w) - BASE_SPEED * CURSE_SPEED) < 1e-12, 'still slow just before 8 seconds');
+    run(w, 2, none);
+    assert.equal(p.curseTicks, 0);
+    assert.ok(Math.abs(stride(w) - usual) < 1e-12, 'then back to its usual speed, power-ups and all');
+    assert.equal(p.speed, boosts, 'the curse took no speed power-ups away');
+  }
+  // a second curse starts the 8 seconds again
+  {
+    const w = mk();
+    const p = w.players[0];
+    w.items.push({ cx: 1, cy: 1, kind: 'curse', age: 0 });
+    run(w, 200, none);
+    w.items.push({ cx: 1, cy: 1, kind: 'curse', age: 0 });
+    step(w, [none]);
+    assert.equal(p.curseTicks, CURSE_TICKS);
+  }
+}
+
+// 18. how rare each power-up is
+{
+  const chance = Object.fromEntries(ITEM_CHANCE) as Record<string, number>;
+  assert.deepEqual(ITEM_CHANCE.map(([k]) => k), ['bomb', 'fire', 'speed', 'kick', 'grab', 'shield', 'curse']);
+  assert.ok(Math.abs(ITEM_CHANCE.reduce((s, [, c]) => s + c, 0) - 0.48) < 1e-12, '48% of bricks hide something');
+  assert.equal(chance.shield, 0.01);
+  assert.equal(chance.curse, 0.01);
+  for (const k of ['bomb', 'fire', 'speed']) assert.ok(chance[k] >= 10 * chance.shield, `${k} is far commoner than a shield or a curse`);
+  assert.equal(chance.kick, 0.025);
+  assert.equal(chance.grab, 0.025);
+  for (const k of ['kick', 'grab']) assert.ok(chance[k] > 2 * chance.shield, `${k} is rare, but not as rare as a shield or a curse`);
+  for (const k of ['bomb', 'fire', 'speed']) assert.ok(chance[k] >= 4 * chance.kick, `${k} is at least four times as common as a boot or a glove`);
+
+  // over many arenas: the counts match the chances, and shields and curses are missing from a good share of them
+  const N = 3000;
+  const total: Record<string, number> = {};
+  const arenasWith: Record<string, number> = {};
+  let bricks = 0;
+  for (let seed = 1; seed <= N; seed++) {
+    const w = createWorld({ roundTicks: 0, seed, players: [0, 1, 2, 3].map((i) => ({ colorId: String(i) })) });
+    bricks += w.tiles.filter((t) => t === SOFT).length;
+    const kinds = [...w.hidden.values()];
+    for (const k of kinds) total[k] = (total[k] ?? 0) + 1;
+    for (const k of new Set(kinds)) arenasWith[k] = (arenasWith[k] ?? 0) + 1;
+  }
+  for (const [k, c] of ITEM_CHANCE) {
+    const share = total[k] / bricks;
+    // boots and gloves run a touch over, because every arena is given one if the dice gave none
+    assert.ok(Math.abs(share - c) < 0.004, `${k}: ${(share * 100).toFixed(2)}% of bricks, meant to be ${c * 100}%`);
+  }
+  assert.equal(arenasWith.kick, N, 'every arena has a boot');
+  assert.equal(arenasWith.grab, N, 'every arena has a glove');
+  for (const k of ['shield', 'curse']) {
+    const share = arenasWith[k] / N;
+    assert.ok(share > 0.45 && share < 0.65, `${k} turns up in about half of arenas (${(share * 100).toFixed(0)}%)`);
+  }
+}
+
+// 19. the round timer and the falling blocks
+{
+  /** an arena with the timer on: 1 minute 30 unless told otherwise. Two players, no bricks unless a density is given. */
+  const timed = (roundTicks?: number, density = 0, players = 2): World =>
+    createWorld({ seed: 7, players: [...Array(players)].map((_, i) => ({ colorId: String(i) })), softDensity: density, roundTicks });
+  const at = (w: World, x: number, y: number): number => y * w.w + x;
+  const hard = (w: World): number => w.tiles.filter((t) => t === HARD).length;
+
+  // the defaults: the timer counts down 1 minute 30, then the blocks take 50 seconds to fall, each 0.63 s in the air
+  {
+    const w = timed();
+    assert.equal(ROUND_TICKS, 90 * TICK_HZ);
+    assert.equal(SHRINK_TICKS, 50 * TICK_HZ);
+    assert.equal(FALL_TICKS, 38);
+    assert.equal(w.roundTicks, ROUND_TICKS);
+    assert.equal(w.shrinkTicks, SHRINK_TICKS);
+    assert.equal(ticksLeft(w), ROUND_TICKS);
+    step(w, [none]);
+    assert.equal(ticksLeft(w), ROUND_TICKS - 1, 'the timer counts down a tick at a time');
+  }
+  // a shorter timer changes when the blocks start, not how long they take; no timer means no blocks at all
+  {
+    const short = timed(60 * TICK_HZ);
+    assert.equal(short.shrinkTicks, SHRINK_TICKS);
+    assert.equal(blockLandTick(short, 0), 60 * TICK_HZ + FALL_TICKS);
+    const w = timed(0);
+    assert.equal(ticksLeft(w), Infinity);
+    assert.equal(w.shrinkOrder.length, 0);
+    run(w, 400, none);
+    assert.equal(w.falling.length, 0);
+  }
+  // the order: round the edge from the top-left corner, clockwise, then one ring in; pillars are skipped, and a square in the middle is left alone
+  {
+    const w = timed();
+    const xy = w.shrinkOrder.map((i) => [i % w.w, Math.floor(i / w.w)]);
+    assert.deepEqual(xy.slice(0, 3), [[1, 1], [2, 1], [3, 1]], 'starts along the top row');
+    assert.deepEqual(xy[12], [13, 1], 'reaches the top-right corner');
+    assert.deepEqual(xy[13], [13, 2], 'turns down the right side');
+    assert.deepEqual(xy[43], [1, 2], 'the first ring ends just under where it began');
+    assert.deepEqual(xy[44], [3, 2], 'the second ring starts one in, past the pillar at 2,2');
+    // three whole rings (44, 18 and 28 blocks), then only the two columns either side of the square that stays open
+    assert.deepEqual(xy.slice(90), [[10, 5], [10, 7], [4, 7], [4, 5]], 'the last four close the sides of the 7 by 5 that three rings leave');
+    assert.equal(xy.length, 94);
+    assert.equal(new Set(w.shrinkOrder).size, w.shrinkOrder.length, 'each once');
+    // the square left open: 5 by 5 in the middle, columns 5 to 9 and rows 4 to 8
+    assert.equal(KEEP_OPEN, 5);
+    for (let y = 1; y < w.h - 1; y++) {
+      for (let x = 1; x < w.w - 1; x++) {
+        const inside = x >= 5 && x <= 9 && y >= 4 && y <= 8;
+        assert.equal(keptOpen(w.w, w.h, y * w.w + x), inside);
+        if (inside) assert.ok(!w.shrinkOrder.includes(y * w.w + x), `no block ever falls on ${x},${y}`);
+      }
+    }
+  }
+  // timing: nothing until the timer reaches 0; that moment the first block starts to fall; then one at a
+  // time at an even pace; the last lands 50 seconds after 0:00
+  {
+    const w = timed();
+    const before = hard(w);
+    const n = w.shrinkOrder.length;
+    assert.equal(blockLandTick(w, 0), ROUND_TICKS + FALL_TICKS, 'the first block starts to fall at 0:00, so it lands a fall later');
+    assert.equal(blockLandTick(w, n - 1), ROUND_TICKS + SHRINK_TICKS, 'the last block lands 50 seconds after 0:00');
+    for (let k = 1; k < n; k++) {
+      const gap = blockLandTick(w, k) - blockLandTick(w, k - 1);
+      assert.ok(gap === 31 || gap === 32, `block ${k} lands about half a second after the one before`);
+    }
+    w.players.forEach((p) => { p.x = 7; p.y = 5; }); // out of the way for now
+    run(w, ROUND_TICKS - 1, none);
+    assert.equal(ticksLeft(w), 1);
+    assert.equal(w.falling.length, 0, 'nothing in the air while the timer is running');
+    assert.equal(hard(w), before, 'and not a block has fallen');
+    step(w, [none]);
+    assert.equal(ticksLeft(w), 0);
+    assert.deepEqual(w.falling, [{ cx: 1, cy: 1, landAt: blockLandTick(w, 0) }], 'as the timer reaches 0 the first block is in the air over the top-left corner');
+    assert.equal(w.tiles[at(w, 1, 1)], FLOOR, 'and has not landed yet');
+    run(w, FALL_TICKS - 1, none);
+    assert.equal(w.tiles[at(w, 1, 1)], FLOOR);
+    step(w, [none]);
+    assert.equal(w.tiles[at(w, 1, 1)], HARD, 'it lands and the tile is a solid block');
+    assert.ok(w.events.some((e) => e.type === 'block' && e.cx === 1 && e.cy === 1), 'and says so');
+    assert.equal(hard(w), before + 1, 'one at a time');
+  }
+  // 50 seconds after 0:00 everything is solid except the 5 by 5 in the middle, which is untouched; then the blocks stop
+  {
+    const w = timed(undefined, 0.78, 1);
+    const p = w.players[0];
+    p.x = 7;
+    p.y = 5; // (7,5) is inside the square
+    const before = [...w.tiles];
+    const hiddenBefore = new Map(w.hidden);
+    run(w, ROUND_TICKS + SHRINK_TICKS, none);
+    for (let i = 0; i < w.tiles.length; i++) {
+      if (keptOpen(w.w, w.h, i)) assert.equal(w.tiles[i], before[i], 'inside the square nothing has changed');
+      else assert.equal(w.tiles[i], HARD, 'outside it everything is solid');
+    }
+    for (const [i, kind] of hiddenBefore) assert.equal(w.hidden.get(i), keptOpen(w.w, w.h, i) ? kind : undefined, 'power-ups under bricks in the square are still there');
+    assert.equal(w.tiles.filter((t, i) => keptOpen(w.w, w.h, i) && t !== HARD).length, 19, '19 tiles to fight in: 25 less 6 pillars');
+    assert.equal(w.falling.length, 0);
+    assert.equal(ticksLeft(w), 0);
+    assert.ok(p.alive, 'a robot in the square is still in');
+    const solid = hard(w);
+    run(w, 10 * TICK_HZ, none);
+    assert.equal(ticksLeft(w), 0, 'the timer stays at 0');
+    assert.equal(hard(w), solid, 'and no more blocks fall');
+    assert.ok(p.alive && !w.over, 'the round goes on');
+  }
+  // what a landing block does to what is on its tile
+  {
+    const w = timed(undefined, 0, 3);
+    const [a, b, c] = w.players;
+    const land = blockLandTick(w, 2); // the third block, on (3,1)
+    w.tick = land - 60;
+    w.shrinkNext = 2; // the first two count as fallen already
+    a.x = 3; a.y = 1; a.shieldTicks = 600; // standing on it, with a shield
+    b.x = 3.6; b.y = 1; // counts as standing on the next tile (4,1), leaning over this one
+    c.x = 7; c.y = 5;
+    w.items.push({ cx: 3, cy: 1, kind: 'fire', age: 9 });
+    w.tiles[at(w, 3, 1)] = FLOOR;
+    step(w, [none, none, { dir: 0, a: true, b: false }]);
+    const bomb = w.bombs[0];
+    bomb.x = bomb.cx = 3; bomb.y = bomb.cy = 1; bomb.fuse = 10_000; // someone's bomb is lying on it too
+    assert.equal(c.activeBombs, 1);
+    while (w.tick < land) step(w, [none]);
+    assert.equal(w.tiles[at(w, 3, 1)], HARD);
+    assert.ok(!a.alive, 'a robot under the block is knocked out');
+    assert.ok(w.events.some((e) => e.type === 'death' && e.player === 0 && e.cause === 'block' && e.by === -1));
+    assert.equal(a.shieldTicks > 0, true, 'a shield does not stop a block: it was not even used');
+    assert.ok(b.alive && b.x === 4 && b.y === 1, 'a robot leaning over from the next tile is pushed back onto its own');
+    assert.equal(w.items.length, 0, 'a power-up on the tile is gone');
+    assert.equal(w.bombs.length, 0, 'a bomb on the tile is gone, without going off');
+    assert.equal(w.flames.length, 0);
+    assert.equal(c.activeBombs, 0, 'and its owner has it back');
+  }
+  // a blast now says whose it was
+  {
+    const w = mk();
+    step(w, [{ dir: 0, a: true, b: false }]);
+    let seen = false;
+    for (let i = 0; i < FUSE_TICKS + 2; i++) {
+      step(w, [none]);
+      if (w.events.some((e) => e.type === 'death' && e.player === 0 && e.cause === 'blast' && e.by === 0)) seen = true;
+    }
+    assert.ok(seen);
+  }
+  // who wins when blocks decide it
+  {
+    // one player further along the falling order than the other: it outlasts the other and wins,
+    // even though a block gets it too before the result would have been declared
+    const w = timed();
+    const [a, b] = w.players;
+    a.x = 1; a.y = 1; // first tile to go
+    b.x = 2; b.y = 1; // second
+    while (!w.over && w.tick < ROUND_TICKS + SHRINK_TICKS) step(w, [none, none]);
+    assert.ok(!a.alive && !b.alive);
+    assert.deepEqual(w.over, { winner: 1 }, 'the one who lasted longer wins');
+    assert.equal(w.tick, blockLandTick(w, 1), 'decided the moment the second block landed');
+  }
+  {
+    // both under the same block: a draw
+    const w = timed();
+    w.players.forEach((p) => { p.x = 13; p.y = 1; });
+    while (!w.over && w.tick < ROUND_TICKS + SHRINK_TICKS) step(w, [none, none]);
+    assert.deepEqual(w.over, { winner: -1 });
+  }
+  {
+    // both in the square when the blocks stop: nobody has lost, so the round is not over. It ends when one of them goes.
+    const w = timed();
+    const [a, b] = w.players;
+    a.x = 5; a.y = 5;
+    b.x = 9; b.y = 7;
+    run(w, ROUND_TICKS + SHRINK_TICKS + 5 * TICK_HZ, none);
+    assert.equal(w.over, null, 'still going after the blocks have stopped');
+    step(w, [{ dir: 0, a: true, b: false }, none]); // a drops a bomb and stands on it
+    run(w, FUSE_TICKS + 60, none);
+    assert.deepEqual(w.over, { winner: 1 }, 'the one left standing wins, however long it takes');
+  }
+  // the same seed still gives the same round, blocks and all
+  {
+    const play = (): string => {
+      const w = createWorld({ seed: 5, players: [{ colorId: 'a' }, { colorId: 'b' }] });
+      const rng = makeRng(99);
+      for (let t = 0; t < ROUND_TICKS + 20 * TICK_HZ; t++) {
+        step(w, [0, 1].map(() => ({ dir: Math.floor(rng() * 5) as Dir, a: rng() < 0.02, b: false })));
+      }
+      return JSON.stringify({ ...w, tiles: [...w.tiles], hidden: [...w.hidden] });
+    };
+    assert.equal(play(), play());
+  }
+}
+
+// 20. once a round is decided, nothing more happens to the winner, and no more blocks start to fall
+{
+  const w = createWorld({ seed: 7, players: [{ colorId: 'a' }, { colorId: 'b' }], softDensity: 0, roundTicks: 10 * TICK_HZ });
+  const [a, b] = w.players;
+  a.x = 3; a.y = 3;
+  b.x = 9; b.y = 9;
+  step(w, [{ dir: 0, a: true, b: false }, none]); // a drops a bomb and stands on it
+  run(w, FUSE_TICKS + 60, none);
+  assert.deepEqual(w.over, { winner: 1 });
+  assert.equal(DEATH_TICKS, 90, 'the knocked-out animation has a second and a half');
+  assert.ok(a.deadTicks >= 55 && a.deadTicks <= 62, 'and counts up from the knock-out');
+  {
+    // it goes on counting past the animation, for the ghost, and stops at GHOST_TICKS
+    const c = cloneWorld(w);
+    run(c, GHOST_TICKS + 30, none);
+    assert.equal(c.players[0].deadTicks, GHOST_TICKS, 'the count stops once the ghost has had time to float off the screen');
+    assert.ok(GHOST_TICKS > DEATH_TICKS);
+  }
+  // a blast on the winner's tile
+  w.flames.push({ cx: 9, cy: 9, ttl: 20, owner: 0, kind: 'c', tip: 0 });
+  run(w, 5, none);
+  assert.ok(b.alive, 'a blast after the round is decided does not touch the winner');
+  // the timer runs out: no blocks
+  const solid = w.tiles.filter((tile) => tile === HARD).length;
+  run(w, 20 * TICK_HZ, none);
+  assert.equal(w.falling.length, 0);
+  assert.equal(w.tiles.filter((tile) => tile === HARD).length, solid, 'no blocks fall after the round is decided');
+  assert.ok(b.alive);
+  assert.deepEqual(w.over, { winner: 1 }, 'and the result stands');
 }

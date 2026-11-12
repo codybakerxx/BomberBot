@@ -4,8 +4,9 @@ Retakes the screenshots used in the documentation (docs/screenshots/).
 It opens the built game in a phone-sized browser window, drives it with
 simulated touches and key presses, and saves the pictures: the menu and its
 Controls tab (on Standard, and on My thumb), the right-thumb layout, the menu
-opened mid-round, a round in progress, the Match my thumb screens, and the
-sideways layout.
+opened mid-round, a round in progress, the Match my thumb screens, the
+sideways layout, a close-up of the power-ups, blocks falling after the
+timer reaches 0, the knocked-out animation, and the end of a round.
 
 This is optional tooling, not part of the game. It needs Python 3 with the
 "playwright" package and a Chrome or Chromium browser:
@@ -181,6 +182,78 @@ async def main():
         await page.tap("#play")
         await page.wait_for_timeout(300)
         await page.screenshot(path=str(OUT / "sideways.png"))
+        await context.close()
+
+        # --- the seven power-ups in a row, and what a shield and a curse look like on a robot
+        context, page = await phone(browser, 393, 740)
+        await page.tap("#play")
+        await page.wait_for_timeout(200)
+        await page.evaluate(
+            """() => {
+              const w = __game.world;
+              for (let i = 0; i < w.tiles.length; i++) if (w.tiles[i] === 2) w.tiles[i] = 0;
+              __game.bots.length = 0;  // the CPU players stand still for the picture
+              ['bomb', 'fire', 'speed', 'kick', 'grab', 'shield', 'curse'].forEach((kind, i) => w.items.push({ cx: 3 + i, cy: 1, kind, age: 20 }));
+              const [a, b, c, d] = w.players;
+              Object.assign(a, { x: 3, y: 3, facing: 2, shieldTicks: 1500 });            // shield up
+              Object.assign(b, { x: 5, y: 3, facing: 2, curseTicks: 400 });              // cursed
+              Object.assign(c, { x: 7, y: 3, facing: 2, shieldTicks: 1500, curseTicks: 400 });  // both
+              Object.assign(d, { x: 9, y: 3, facing: 2, graceTicks: 18 });               // a shield just used up
+            }"""
+        )
+        await page.wait_for_timeout(80)
+        box = await page.locator("#cv").bounding_box()
+        await page.screenshot(
+            path=str(OUT / "power-ups.png"),
+            clip={"x": box["x"], "y": box["y"], "width": box["width"], "height": box["height"] * 0.42},
+        )
+        await context.close()
+
+        # --- after the timer reaches 0: blocks falling round the edge
+        context, page = await phone(browser, 393, 740)
+        await page.tap("#play")
+        await page.wait_for_timeout(200)
+        await page.evaluate(
+            """() => {
+              const w = __game.world;
+              __game.bots.length = 0;  // the CPU players stand still for the picture
+              for (let i = 0; i < w.tiles.length; i++) if (w.tiles[i] === 2 && (i * 7) % 3) { w.tiles[i] = 0; w.hidden.delete(i); }
+              [[7, 5], [5, 7], [9, 7], [7, 3]].forEach(([x, y], i) => Object.assign(w.players[i], { x, y, facing: 2 }));
+              w.tick = w.roundTicks + 16 * 60;  // 16 seconds after 0:00: the blocks due by now land at once
+            }"""
+        )
+        await page.wait_for_timeout(1300)
+        box = await page.locator("#cv").bounding_box()
+        await page.screenshot(
+            path=str(OUT / "falling-blocks.png"),
+            clip={"x": 0, "y": 0, "width": 393, "height": box["y"] + box["height"] + 4},
+        )
+        await context.close()
+
+        # --- knocked out, then the round won: three robots caught a third of a second apart, so the
+        # picture shows three moments of the knocked-out animation; then the winner and the result panel
+        context, page = await phone(browser, 393, 740)
+        await page.tap("#play")
+        await page.wait_for_timeout(200)
+        await page.evaluate(
+            """() => {
+              const w = __game.world;
+              __game.bots.length = 0;
+              for (let i = 0; i < w.tiles.length; i++) if (w.tiles[i] === 2) w.tiles[i] = 0;
+              [[3, 5], [5, 5], [7, 5], [9, 5]].forEach(([x, y], i) => Object.assign(w.players[i], { x, y, facing: 2 }));
+              window.blast = (i) => { const p = w.players[i]; w.flames.push({ cx: p.x, cy: p.y, ttl: 8, owner: 0, kind: 'c', tip: 0 }); };
+            }"""
+        )
+        for i in (3, 2, 1):
+            await page.evaluate(f"blast({i})")
+            await page.wait_for_timeout(330)
+        box = await page.locator("#cv").bounding_box()
+        await page.screenshot(
+            path=str(OUT / "knocked-out.png"),
+            clip={"x": 0, "y": 0, "width": 393, "height": box["y"] + box["height"] * 0.62},
+        )
+        await page.wait_for_timeout(1250)  # the round is decided, and the winner is at the top of its jump
+        await page.screenshot(path=str(OUT / "round-won.png"))
         await context.close()
         await browser.close()
     print("saved", ", ".join(sorted(f.name for f in OUT.glob("*.png"))))

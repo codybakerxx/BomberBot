@@ -52,7 +52,7 @@ function play(lean: number, currentPad: boolean, currentTurning: boolean): Tally
   const tally: Tally = { turns: 0, wrong: 0, kinds: { 'doubled back': 0, 'wrong opening': 0, 'other direction': 0, 'no turn': 0 } };
 
   for (let game = 0; game < GAMES; game++) {
-    const w = createWorld({ seed: 7 + game, players: [{ colorId: 'a' }, { colorId: 'b' }], softDensity: 0 });
+    const w = createWorld({ roundTicks: 0, seed: 7 + game, players: [{ colorId: 'a' }, { colorId: 'b' }], softDensity: 0 });
     const p = w.players[0];
     const pad: Pad = currentPad ? new SwipePad() : new PreviousPad();
     let t = 0;

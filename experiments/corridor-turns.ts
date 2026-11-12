@@ -15,7 +15,7 @@ import { previousMove } from './previous-build';
 const hold = (dir: Dir): PlayerInput => ({ dir, a: false, b: false });
 
 function trial(trigger: number, current: boolean): { y0: number; what: string; row: number } {
-  const w: World = createWorld({ seed: 7, players: [{ colorId: 'a' }, { colorId: 'b' }], softDensity: 0 });
+  const w: World = createWorld({ roundTicks: 0, seed: 7, players: [{ colorId: 'a' }, { colorId: 'b' }], softDensity: 0 });
   const p: Player = w.players[0];
   p.x = 3;
   p.y = 1;

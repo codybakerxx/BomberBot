@@ -43,6 +43,10 @@ import {
   SOFT,
   FUSE_TICKS,
   FLAME_TICKS,
+  FALL_TICKS,
+  TICK_HZ,
+  keptOpen,
+  blockLandTick,
   CHAIN_TICKS,
   KICK_SPEED,
   FLY_TICKS_PER_TILE,
@@ -54,10 +58,10 @@ import {
 
 // ---------------------------------------------------------------- levels
 
-export type BotLevel = 'beginner' | 'normal' | 'hard' | 'extreme';
+export type BotLevel = 'beginner' | 'normal' | 'hard';
 
 /** The order the levels are offered in, easiest first. */
-export const BOT_LEVELS: BotLevel[] = ['beginner', 'normal', 'hard', 'extreme'];
+export const BOT_LEVELS: BotLevel[] = ['beginner', 'normal', 'hard'];
 
 export interface LevelSpec {
   /** name shown in the menu */
@@ -99,6 +103,21 @@ export interface LevelSpec {
   evade: boolean;
   /** will not blast a power-up lying in the open just to break bricks */
   spareItems: boolean;
+  /** walks round a curse lying on the floor when there is another way (no level goes looking for one) */
+  dodgeCurse: boolean;
+  /**
+   * Once the blocks have started to fall and it is standing in the square
+   * they leave open, it stops being careful about anything but its own
+   * bombs: see `emboldened`.
+   */
+  squareBold: boolean;
+  /**
+   * How many ticks ahead it knows where blocks will fall once the arena is
+   * shrinking. It treats those tiles as it treats a blast that never ends.
+   * A block is in the air for FALL_TICKS, so a little over that means "only
+   * the ones it can see falling".
+   */
+  blockSight: number;
   /** randomness in its choice of goal, 0 to 1 */
   wobble: number;
 }
@@ -108,12 +127,12 @@ export const LEVELS: Record<BotLevel, LevelSpec> = {
     label: 'Beginner',
     blurb: 'Slow to react and mostly minds its own business.',
     think: 30,
-    hesitate: [20, 60],
-    notice: 45,
+    hesitate: [40, 110],
+    notice: 70,
     margin: 14,
     maxBombs: 1,
-    hunt: 0.3,
-    attack: 0.4,
+    hunt: 0.12,
+    attack: 0.2,
     attackReach: 2,
     killShot: false,
     guard: 3,
@@ -122,18 +141,21 @@ export const LEVELS: Record<BotLevel, LevelSpec> = {
     throwEscape: false,
     evade: false,
     spareItems: false,
+    dodgeCurse: false,
+    squareBold: false,
+    blockSight: 55,
     wobble: 0.6,
   },
   normal: {
     label: 'Normal',
     blurb: 'Collects power-ups and comes after you once it can reach you.',
-    think: 14,
-    hesitate: [0, 14],
-    notice: 16,
+    think: 16,
+    hesitate: [6, 26],
+    notice: 22,
     margin: 9,
     maxBombs: 2,
-    hunt: 0.7,
-    attack: 0.6,
+    hunt: 0.55,
+    attack: 0.5,
     attackReach: 4,
     killShot: false,
     guard: 5,
@@ -142,31 +164,14 @@ export const LEVELS: Record<BotLevel, LevelSpec> = {
     throwEscape: false,
     evade: false,
     spareItems: false,
+    dodgeCurse: true,
+    squareBold: true,
+    blockSight: 150,
     wobble: 0.3,
   },
   hard: {
     label: 'Hard',
-    blurb: 'Quick, hunts you, and spots when a bomb would leave you no way out.',
-    think: 8,
-    hesitate: [0, 0],
-    notice: 6,
-    margin: 6,
-    maxBombs: 8,
-    hunt: 1.2,
-    attack: 0.8,
-    attackReach: 8,
-    killShot: true,
-    guard: 7,
-    kickEscape: true,
-    kickAttack: true,
-    throwEscape: true,
-    evade: false,
-    spareItems: true,
-    wobble: 0.15,
-  },
-  extreme: {
-    label: 'Extreme',
-    blurb: 'Reacts at once, sets traps, and will not let itself be cornered.',
+    blurb: 'Reacts at once, hunts you, sets traps, and will not let itself be cornered.',
     think: 4,
     hesitate: [0, 0],
     notice: 0,
@@ -182,13 +187,16 @@ export const LEVELS: Record<BotLevel, LevelSpec> = {
     throwEscape: true,
     evade: true,
     spareItems: true,
+    dodgeCurse: true,
+    squareBold: true,
+    blockSight: 480,
     wobble: 0.05,
   },
 };
 
 // ---------------------------------------------------------------- the bot's memory
 
-export type GoalKind = 'none' | 'item' | 'brick' | 'hunt' | 'evade';
+export type GoalKind = 'none' | 'item' | 'brick' | 'hunt' | 'evade' | 'retreat';
 
 export interface Bot {
   /** which player it controls */
@@ -211,6 +219,8 @@ export interface Bot {
   lastX: number;
   lastY: number;
   stuck: number;
+  /** its current plan knowingly walks through a curse, because nothing was worth doing on this side of it */
+  throughCurse: boolean;
   /** what it was doing on its last tick, for tests and debugging */
   doing: 'idle' | 'flee' | 'travel' | 'bomb' | 'script' | 'trapped';
 }
@@ -230,6 +240,7 @@ export function createBot(id: number, level: BotLevel, seed: number): Bot {
     lastX: -1,
     lastY: -1,
     stuck: 0,
+    throughCurse: false,
     doing: 'idle',
   };
 }
@@ -351,12 +362,73 @@ function blastTiles(world: World, gone: Map<number, number>, cx: number, cy: num
   return out;
 }
 
+/** A falling block's tile counts as dangerous from this many ticks before the block lands, and then for good. */
+const BLOCK_LEAD = 8;
+const FOREVER = 1e9;
+/**
+ * A block due on a player's tile within this many ticks sends it running, as a
+ * blast does. One further off (but within its level's `blockSight`) is only a
+ * reason to move on: it can still stop to bomb someone on the way.
+ */
+const BLOCK_URGENT = 100;
+/** How far ahead falling blocks count when choosing where to stand clear of its own bomb: until the blast is over, and a little more. */
+const BOMB_SIGHT = FUSE_TICKS + FLAME_TICKS + 45;
+/** In the fight in the square, a player within this many steps is close enough to drop a bomb beside. */
+const SQUEEZE_REACH = 4;
+/** For questions asked on nobody's behalf: the blocks that can be seen falling, and a little more. */
+const PLAIN_SIGHT = FALL_TICKS + 15;
+
+/** For each arena's falling order: which place in the order each tile has. Worked out once per arena. */
+const places = new WeakMap<number[], Map<number, number>>();
+
+/** Ticks until a block lands on tile `idx`. Infinity if none ever will (or the round has no timer). */
+export function blockLandsIn(world: World, idx: number): number {
+  if (world.roundTicks <= 0) return Infinity;
+  let place = places.get(world.shrinkOrder);
+  if (!place) {
+    place = new Map(world.shrinkOrder.map((t, k) => [t, k]));
+    places.set(world.shrinkOrder, place);
+  }
+  const k = place.get(idx);
+  return k === undefined ? Infinity : blockLandTick(world, k) - world.tick;
+}
+
+/**
+ * How far ahead a player should look for falling blocks. Usually its level's
+ * `blockSight`. Near the end every tile it can walk to is about to be covered,
+ * and looking that far ahead would leave it nowhere to go, so it looks only
+ * as far as the last of them: that makes the tile that lasts longest the one
+ * place it counts as safe, and it heads there.
+ */
+function sightFor(world: World, me: Player, level: number): number {
+  if (world.roundTicks <= 0) return 0;
+  if (world.tick + level < blockLandTick(world, 0)) return level; // nothing in sight yet
+  const start = tileOf(world, me);
+  const seen = new Uint8Array(world.w * world.h);
+  const queue = [start];
+  seen[start] = 1;
+  let last = blockLandsIn(world, start);
+  for (let q = 0; q < queue.length; q++) {
+    const i = queue[q];
+    for (const nb of [i - 1, i + 1, i - world.w, i + world.w]) {
+      if (seen[nb] || world.tiles[nb] !== FLOOR) continue;
+      seen[nb] = 1;
+      queue.push(nb);
+      last = Math.max(last, blockLandsIn(world, nb));
+    }
+  }
+  return Math.max(0, Math.min(level, last - 1));
+}
+
 /**
  * Build the danger map. `viewer` and `notice` model slow reactions: a bomb
  * dropped by someone else is left out until it has been down for `notice`
  * ticks. Pass `extra` to include bombs that have not been dropped yet.
+ * `sight` is how many ticks ahead falling blocks are included: a tile a block
+ * will land on within that time is dangerous from just before it lands, for
+ * good.
  */
-export function dangerMap(world: World, viewer: Player | null, notice: number, extra: ExtraBomb[] = []): Danger {
+export function dangerMap(world: World, viewer: Player | null, notice: number, extra: ExtraBomb[] = [], sight = PLAIN_SIGHT): Danger {
   const iv: (number[] | undefined)[] = new Array(world.w * world.h);
   const gone = new Map<number, number>();
   const add = (idx: number, from: number, to: number): void => {
@@ -364,6 +436,14 @@ export function dangerMap(world: World, viewer: Player | null, notice: number, e
   };
   for (const b of world.burning) gone.set(b.cy * world.w + b.cx, b.ttl);
   for (const f of world.flames) add(f.cy * world.w + f.cx, 0, f.ttl);
+  if (world.roundTicks > 0 && sight > 0) {
+    // blocks that have not landed yet, in falling order, as far ahead as `sight`
+    for (let k = world.shrinkNext - world.falling.length; k < world.shrinkOrder.length; k++) {
+      const t = blockLandTick(world, k) - world.tick;
+      if (t > sight) break;
+      if (t > 0) add(world.shrinkOrder[k], Math.max(0, t - BLOCK_LEAD), FOREVER);
+    }
+  }
 
   const pending: { cx: number; cy: number; t: number; landT: number; range: number; done: boolean }[] = [];
   for (const b of world.bombs) {
@@ -393,6 +473,32 @@ export function dangerMap(world: World, viewer: Player | null, notice: number, e
 /** Will this tile be blasted at all? */
 export function hasDanger(D: Danger, idx: number): boolean {
   return D.iv[idx] !== undefined;
+}
+
+/**
+ * The same map with the next `ticks` ticks struck out. For a robot whose
+ * shield has just taken a blast: blasts do it no harm for that long, so it
+ * can walk out through them instead of standing in them.
+ */
+function sparedFor(D: Danger, ticks: number): Danger {
+  const iv = D.iv.map((v) => {
+    if (!v) return undefined;
+    const out: number[] = [];
+    for (let k = 0; k < v.length; k += 2) {
+      if (v[k + 1] >= FOREVER) out.push(v[k], v[k + 1]); // a falling block: no shield helps with that
+      else if (v[k + 1] > ticks) out.push(Math.max(v[k], ticks), v[k + 1]);
+    }
+    return out.length ? out : undefined;
+  });
+  return { w: D.w, iv, gone: D.gone };
+}
+
+/** Must the player on this tile get off it now? Yes for any blast, and for a block landing within `soon` ticks. */
+function urgent(D: Danger, idx: number, soon: number): boolean {
+  const v = D.iv[idx];
+  if (!v) return false;
+  for (let k = 0; k < v.length; k += 2) if (v[k + 1] < FOREVER || v[k] <= soon) return true;
+  return false;
 }
 
 /** Is there a blast on this tile at any moment between `a` and `b`? */
@@ -644,12 +750,14 @@ function bombEffect(world: World, D: Danger, cx: number, cy: number, range: numb
     }
   }
   let items = 0;
-  for (const it of world.items) if (tiles.includes(it.cy * world.w + it.cx)) items++;
+  for (const it of world.items) if (it.kind !== 'curse' && tiles.includes(it.cy * world.w + it.cx)) items++; // a curse is no loss
   return { tiles, bricks, items };
 }
 
 /** How much each power-up is worth going out of the way for. */
 function itemWorth(p: Player, kind: ItemKind): number {
+  if (kind === 'curse') return 0; // never worth walking to
+  if (kind === 'shield') return p.shieldTicks > 10 * TICK_HZ ? 0.5 : 3.4;
   if (kind === 'kick') return p.canKick ? 0.2 : 2;
   if (kind === 'grab') return p.canGrab ? 0.2 : 1.6;
   if (kind === 'speed') return 2.6;
@@ -665,7 +773,17 @@ interface Ctx {
   spec: LevelSpec;
   D: Danger;
   walls: Uint8Array;
+  /**
+   * What it plans its own walking round: the walls, plus any curse lying on
+   * the floor if this level dodges them. The same array as `walls` when there
+   * is nothing extra, so `own !== walls` means "there is a curse to go round".
+   */
+  own: Uint8Array;
   S: number;
+  /** how many ticks ahead it is looking for falling blocks this tick (see sightFor) */
+  sight: number;
+  /** in the fight in the square, with its level's bolder settings (see emboldened) */
+  bold: boolean;
   /** filled in by trapTiles */
   traps?: number[];
 }
@@ -674,6 +792,29 @@ interface Ctx {
  * What the CPU player does this tick. Call once per tick, before step(),
  * and pass the result as that player's input.
  */
+/**
+ * A level's settings for the fight in the square. The timer has run out and
+ * this player is inside the square the falling blocks leave open: from here
+ * the round only ends when someone is knocked out, so it presses.
+ *
+ * - It bombs any player in its blast line, every time, from any distance.
+ * - It uses every bomb it has.
+ * - It no longer holds back because a rival might shut its way out (`guard`).
+ * - It goes for players ahead of bricks and power-ups, and does not pause.
+ * - It also drops bombs next to players to take their room away (see decide).
+ *
+ * What does not change: it still needs a way out of its own blast, and still
+ * plays the move forward on a copy of the world before pressing A.
+ */
+function emboldened(spec: LevelSpec): LevelSpec {
+  return { ...spec, attack: 1, attackReach: 99, maxBombs: 99, guard: 0, hunt: Math.max(1.6, spec.hunt * 3), hesitate: [0, 0] };
+}
+
+/** Is this player in the fight in the square: timer run out, and standing inside the square that stays open? */
+function inSquare(world: World, me: Player): boolean {
+  return world.roundTicks > 0 && world.tick >= world.roundTicks && keptOpen(world.w, world.h, tileOf(world, me));
+}
+
 export function botInput(world: World, bot: Bot): PlayerInput {
   const me = world.players[bot.id];
   if (!me || !me.alive) return NONE;
@@ -682,8 +823,21 @@ export function botInput(world: World, bot: Bot): PlayerInput {
     bot.path = [];
     return bot.script.shift()!;
   }
-  const spec = LEVELS[bot.level];
-  const c: Ctx = { world, me, bot, spec, D: dangerMap(world, me, spec.notice), walls: wallsOf(world), S: tileOf(world, me) };
+  const bold = LEVELS[bot.level].squareBold && inSquare(world, me);
+  const spec = bold ? emboldened(LEVELS[bot.level]) : LEVELS[bot.level];
+  const walls = wallsOf(world);
+  let own = walls;
+  if (spec.dodgeCurse) {
+    for (const it of world.items) {
+      if (it.kind !== 'curse') continue;
+      if (own === walls) own = walls.slice();
+      own[it.cy * world.w + it.cx] = 1;
+    }
+  }
+  const sight = sightFor(world, me, spec.blockSight);
+  let D = dangerMap(world, me, spec.notice, [], sight);
+  if (me.graceTicks > 0) D = sparedFor(D, me.graceTicks);
+  const c: Ctx = { world, me, bot, spec, D, walls, own, S: tileOf(world, me), sight, bold };
 
   // pushing against something and getting nowhere: forget the plan
   if (bot.path.length && bot.wait <= 0 && me.x === bot.lastX && me.y === bot.lastY) {
@@ -696,23 +850,37 @@ export function botInput(world: World, bot: Bot): PlayerInput {
   bot.lastX = me.x;
   bot.lastY = me.y;
 
-  const out = me.carrying ? carrying(c) : hasDanger(c.D, c.S) ? flee(c) : calm(c);
+  const out = me.carrying ? carrying(c) : urgent(c.D, c.S, Math.min(spec.blockSight, BLOCK_URGENT)) ? flee(c) : calm(c);
   return out;
 }
 
 /** Its own tile is going to be blasted: get off it. */
 function flee(c: Ctx): PlayerInput {
-  const { world, me, bot, spec, D, walls } = c;
+  const { world, me, bot, spec, D, walls, own } = c;
   advance(world, me, bot.path);
-  if (!bot.path.length || bot.doing !== 'flee' || !pathOk(world, me, D, bot.path, Math.min(spec.margin, 2), walls, true)) {
+  if (!bot.path.length || bot.doing !== 'flee' || !pathOk(world, me, D, bot.path, Math.min(spec.margin, 2), own, true)) {
     bot.path = [];
-    for (const margin of [spec.margin, 1, 0]) {
-      const reach = explore(world, me, D, margin, walls);
-      const target = escapeTarget(D, reach, margin, bot.rng);
-      if (target >= 0) {
-        bot.path = pathTo(reach, target);
-        break;
+    // round any curse if it can; through one rather than stay in a blast
+    const find = (map: Danger): void => {
+      for (const w of own === walls ? [walls] : [own, walls]) {
+        for (const margin of [spec.margin, 1, 0]) {
+          const reach = explore(world, me, map, margin, w);
+          const target = escapeTarget(map, reach, margin, bot.rng);
+          if (target >= 0) {
+            bot.path = pathTo(reach, target);
+            return;
+          }
+        }
       }
+    };
+    find(D);
+    // Nowhere that stays clear for as far ahead as it looks. Getting out of a blast comes first:
+    // settle for a tile that outlasts the blast, and failing that one clear of the blocks about to land.
+    for (const sight of [BOMB_SIGHT, FALL_TICKS]) {
+      if (bot.path.length || world.roundTicks <= 0 || sight >= c.sight) continue;
+      let near = dangerMap(world, me, spec.notice, [], sight);
+      if (me.graceTicks > 0) near = sparedFor(near, me.graceTicks);
+      find(near);
     }
     if (!bot.path.length) {
       // boxed in: the levels that know how try to kick or throw their way out
@@ -738,7 +906,7 @@ function flee(c: Ctx): PlayerInput {
 
 /** Nothing is about to hit its tile: follow the plan, or make one. */
 function calm(c: Ctx): PlayerInput {
-  const { world, me, bot, spec, D, walls } = c;
+  const { world, me, bot, spec, D } = c;
   if (bot.wait > 0) {
     // making up its mind: stand where it is (its tile is not in any blast, or it would be fleeing)
     bot.wait--;
@@ -748,7 +916,7 @@ function calm(c: Ctx): PlayerInput {
   const hadPath = bot.path.length > 0;
   const arrived = advance(world, me, bot.path) && hadPath;
   let think = --bot.thinkIn <= 0 || arrived || bot.doing === 'flee' || bot.doing === 'trapped';
-  if (bot.path.length && !pathOk(world, me, D, bot.path, spec.margin, walls, false)) {
+  if (bot.path.length && !pathOk(world, me, D, bot.path, spec.margin, bot.throughCurse ? c.walls : c.own, false)) {
     bot.path = [];
     think = true;
   }
@@ -833,6 +1001,15 @@ function decide(c: Ctx): PlayerInput | null {
       });
       if (inLine && bot.rng() < spec.attack) want = true;
     }
+    if (!want && c.bold) {
+      // the fight in the square: a bomb that takes away a tile a nearby player is on or could step to is worth dropping
+      want = enemies.some((e) => {
+        const ex = Math.round(e.x);
+        const ey = Math.round(e.y);
+        if (Math.abs(ex - sx) + Math.abs(ey - sy) > SQUEEZE_REACH) return false;
+        return [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dy]) => fx.tiles.includes((ey + dy) * world.w + ex + dx));
+      });
+    }
     if (want) {
       const act = placeBomb(c);
       if (act) return act;
@@ -840,7 +1017,8 @@ function decide(c: Ctx): PlayerInput | null {
   }
 
   // a nearby player could box it in with one bomb: move somewhere that is not true
-  const reach = explore(world, me, D, spec.margin, walls);
+  let reach = explore(world, me, D, spec.margin, c.own);
+  bot.throughCurse = false;
   if (spec.evade) {
     for (const e of enemies) {
       const ex = Math.round(e.x);
@@ -848,7 +1026,7 @@ function decide(c: Ctx): PlayerInput | null {
       if (Math.abs(ex - sx) + Math.abs(ey - sy) > 5 || e.carrying || e.activeBombs >= e.bombsMax) continue;
       const what = [{ cx: ex, cy: ey, range: e.fire, fuse: FUSE_TICKS }];
       if (!boxedIn(c, me, what, ey * world.w + ex)) continue;
-      const D3 = dangerMap(world, me, spec.notice, what);
+      const D3 = dangerMap(world, me, spec.notice, what, c.sight);
       let best = -1;
       for (let i = 0; i < reach.time.length; i++) {
         if (reach.time[i] > 70 || i === S || hasDanger(D3, i) || hasDanger(D, i)) continue;
@@ -866,6 +1044,13 @@ function decide(c: Ctx): PlayerInput | null {
   // choose somewhere to go
   for (let attempt = 0; attempt < 3; attempt++) {
     const goal = chooseGoal(c, reach, enemies);
+    if (!goal && c.own !== walls && !bot.throughCurse) {
+      // nothing to do on this side of a curse: go through it after all
+      reach = explore(world, me, D, spec.margin, walls);
+      bot.throughCurse = true;
+      c.traps = undefined;
+      continue;
+    }
     if (!goal) {
       bot.path = [];
       bot.goal = 'none';
@@ -906,12 +1091,24 @@ function chooseGoal(c: Ctx, reach: Reach, enemies: Player[]): Goal | null {
   let best: Goal | null = null;
   const offer = (kind: GoalKind, t: number, worth: number): void => {
     const time = reach.time[t];
-    if (time === Infinity || hasDanger(D, t)) return;
+    if (time === Infinity) return;
+    // nowhere a blast is coming. A spot to bomb a player from may be one a block is due on, if not too soon.
+    if (kind === 'hunt' ? urgent(D, t, time + 90) : hasDanger(D, t)) return;
     const score = (worth / (time + SOON)) * (1 + spec.wobble * (bot.rng() - 0.5));
     if (!best || score > best.score) best = { kind, tile: t, score };
   };
 
-  for (const it of world.items) offer('item', it.cy * world.w + it.cx, itemWorth(me, it.kind) * 4);
+  for (const it of world.items) if (it.kind !== 'curse') offer('item', it.cy * world.w + it.cx, itemWorth(me, it.kind) * 4);
+
+  // a block is due on its own tile (not soon enough to run from): the nearest tile that will last longer is worth going to
+  if (hasDanger(D, S)) {
+    let near = -1;
+    for (let t = 0; t < reach.time.length; t++) {
+      if (reach.time[t] === Infinity || hasDanger(D, t)) continue;
+      if (near < 0 || reach.time[t] < reach.time[near]) near = t;
+    }
+    if (near >= 0) offer('retreat', near, 6);
+  }
 
   const mayBomb = !((bot.avoid.get(S) ?? 0) > world.tick);
   for (let t = 0; t < reach.time.length; t++) {
@@ -1005,7 +1202,10 @@ function placeBomb(c: Ctx): PlayerInput | null {
   const sx = S % world.w;
   const sy = (S - sx) / world.w;
   const what = [{ cx: sx, cy: sy, range: me.fire, fuse: FUSE_TICKS }];
-  const D2 = dangerMap(world, null, 0, what);
+  // For getting clear of its own bomb, a tile only has to outlast the blast: a block due on it
+  // after that is something to deal with afterwards. (Near the end, no tile lasts much longer.)
+  const sight = Math.min(c.sight, BOMB_SIGHT);
+  const D2 = dangerMap(world, null, 0, what, sight);
   const press: PlayerInput = { dir: 0, a: true, b: false };
 
   // The players it is watching. For each: how soon it could be standing on
@@ -1025,14 +1225,14 @@ function placeBomb(c: Ctx): PlayerInput | null {
       if (at !== S) w3[at] = 1;
       rivals.push({
         reach: explore(world, e, NO_DANGER, 0, at === S ? walls : blocked),
-        D: dangerMap(world, null, 0, [...what, { cx: ex, cy: ey, range: e.fire, fuse: FUSE_TICKS }]),
+        D: dangerMap(world, null, 0, [...what, { cx: ex, cy: ey, range: e.fire, fuse: FUSE_TICKS }], sight),
         walls: w3,
       });
     }
   }
 
   for (const margin of [spec.margin + 2, spec.margin]) {
-    const reach = explore(world, me, D2, margin, walls);
+    const reach = explore(world, me, D2, margin, c.own);
     for (const target of escapeTargets(D2, reach, margin, 6, bot.rng)) {
       const path = pathTo(reach, target);
       // a rival who can be on the way out before it gets there could drop a bomb and shut it in
