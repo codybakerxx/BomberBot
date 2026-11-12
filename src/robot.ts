@@ -87,6 +87,87 @@ const SIDE_TRIM: [number, number][][] = [
   [[-0.162, -0.035], [-0.14425, 0.08275], [-0.083, 0.2285], [0.06, 0.23]],
   [[0.06, 0.23], [0.165, 0.2311], [0.2675, 0.2198], [0.37, 0.19]],
 ];
+
+/** A point on SIDE_TRIM: `i` is which of its curves, `v` how far along that one (0 to 1). */
+function sideTrimAt(i: number, v: number): [number, number] {
+  const p = SIDE_TRIM[i];
+  const r = 1 - v;
+  const w = [r * r * r, 3 * r * r * v, 3 * r * v * v, v * v * v];
+  return [p[0][0] * w[0] + p[1][0] * w[1] + p[2][0] * w[2] + p[3][0] * w[3], p[0][1] * w[0] + p[1][1] * w[1] + p[2][1] * w[2] + p[3][1] * w[3]];
+}
+
+const GLASS = 0.34; // the glass dome's radius in those units
+
+/**
+ * Where the light bar would run seen from behind: a round arch over the back of the helmet (the owner asked
+ * for it rounded). No bar is drawn there, by the owner's choice: this is only where the helmet's material
+ * ends and the glass begins. It is worked out from SIDE_TRIM, so the two views show the same line on the same ball: where the side
+ * view has the bar `x` towards the face and `y` down, the roundness of the helmet says how far out to the
+ * side that point is, and that is where it is seen from behind.
+ *
+ * The top of the arch is where the side view's bar reaches the back of the helmet. From there to where the
+ * bar starts down the side of the head (the end of SIDE_TRIM's second curve) it is one smooth quarter of an
+ * oval through those two points: worked out exactly, the S-bend the bar makes from the side showed here as
+ * a wobble. Below that it is exact: it comes down both sides close to the edge (those parts are seen almost
+ * edge on) and runs into the edge where the bar goes round to the front.
+ * Points from the left end to the right, x out to the right, y down, same units.
+ */
+const BACK_TRIM: [number, number][] = (() => {
+  const n = SIDE_TRIM.length;
+  const at = (t: number): [number, number] => {
+    const i = Math.min(n - 1, Math.floor(t * n));
+    return sideTrimAt(i, t * n - i);
+  };
+  const inside = (t: number): number => {
+    const [x, y] = at(t);
+    return GLASS * GLASS - x * x - y * y; // above 0 on the glass
+  };
+  const forward = (t: number): number => at(t)[0]; // above 0 in front of the middle of the head
+  const seen = (t: number): [number, number] => [Math.sqrt(Math.max(0, inside(t))), at(t)[1]]; // that point, from behind
+  // the first place after `from` where `f` goes from below 0 to above it
+  const crossing = (f: (t: number) => number, from: number): number => {
+    let a = from;
+    while (a < 1 && f(a + 0.002) <= 0) a += 0.002;
+    let b = Math.min(1, a + 0.002);
+    for (let i = 0; i < 40; i++) {
+      const m = (a + b) / 2;
+      if (f(m) <= 0) a = m;
+      else b = m;
+    }
+    return b;
+  };
+  const top = crossing(inside, 0); // the bar comes onto the glass at the back: the top of the arch
+  const turn = 2 / n; // it starts down the side of the head
+  const end = crossing(forward, turn); // it reaches the side of the helmet and goes round to the front
+  const half: [number, number][] = []; // from the top of the arch down the right side
+  // the top: a quarter of an oval from the top of the arch (level there) to the turn (heading the way the bar does there)
+  const peak: [number, number] = [0, at(top)[1]];
+  const corner = seen(turn);
+  const after = seen(turn + 0.004);
+  const drop = corner[1] - peak[1];
+  const lean = (after[0] - corner[0]) / (after[1] - corner[1] || 1); // how far it leans out for each unit it drops
+  const c1: [number, number] = [corner[0] * 0.5523, peak[1]];
+  const c2: [number, number] = [corner[0] - lean * drop * 0.5523, corner[1] - drop * 0.5523];
+  for (let j = 0; j < 60; j++) {
+    const v = j / 60;
+    const r = 1 - v;
+    const w = [r * r * r, 3 * r * r * v, 3 * r * v * v, v * v * v];
+    half.push([peak[0] * w[0] + c1[0] * w[1] + c2[0] * w[2] + corner[0] * w[3], peak[1] * w[0] + c1[1] * w[1] + c2[1] * w[2] + corner[1] * w[3]]);
+  }
+  // the sides: exactly where the side view puts them
+  for (let j = 0; j <= 100; j++) half.push(seen(turn + (end - turn) * (j / 100)));
+  // carry each end on a little past the edge of the glass, so the bar is cut off by the edge and not square
+  const a = half[half.length - 5];
+  const b = half[half.length - 1];
+  const len = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1;
+  half.push([b[0] + ((b[0] - a[0]) / len) * 0.06, b[1] + ((b[1] - a[1]) / len) * 0.06]);
+  const left = half.slice(1).reverse().map(([x, y]): [number, number] => [-x, y]);
+  return [...left, ...half];
+})();
+/** How far along the arch each of its points is, and its whole length. */
+const backAlong: number[] = BACK_TRIM.map(() => 0);
+for (let i = 1; i < BACK_TRIM.length; i++) backAlong[i] = backAlong[i - 1] + Math.hypot(BACK_TRIM[i][0] - BACK_TRIM[i - 1][0], BACK_TRIM[i][1] - BACK_TRIM[i - 1][1]);
+const backLength = backAlong[backAlong.length - 1];
 const ARM_SWEEP = 2.6; // how far round an arm goes when it is raised right up, in radians
 /**
  * A drawing with at least this many pixels to one of its units (a robot 500 pixels tall or more) gets the
@@ -436,8 +517,8 @@ function helmet(k: Kit, view: 'front' | 'back' | 'side', d: number, hx: number, 
       ctx.moveTo(hx + SIDE_TRIM[0][0][0] * z * d, hy + SIDE_TRIM[0][0][1] * z);
       for (const q of SIDE_TRIM) ctx.bezierCurveTo(hx + q[1][0] * z * d, hy + q[1][1] * z, hx + q[2][0] * z * d, hy + q[2][1] * z, hx + q[3][0] * z * d, hy + q[3][1] * z);
     } else if (view === 'back') {
-      ctx.moveTo(hx - 0.37 * z, hy - 0.11 * z);
-      ctx.quadraticCurveTo(hx, hy + 0.31 * z, hx + 0.37 * z, hy - 0.11 * z);
+      ctx.moveTo(hx + BACK_TRIM[0][0] * z, hy + BACK_TRIM[0][1] * z);
+      for (const q of BACK_TRIM) ctx.lineTo(hx + q[0] * z, hy + q[1] * z);
     } else {
       ctx.moveTo(hx - 0.37 * z, hy - 0.04 * z);
       ctx.quadraticCurveTo(hx, hy + 0.53 * z, hx + 0.37 * z, hy - 0.04 * z);
@@ -449,16 +530,20 @@ function helmet(k: Kit, view: 'front' | 'back' | 'side', d: number, hx: number, 
     const at = (t: number): Pt => {
       if (view === 'side') {
         const i = Math.min(SIDE_TRIM.length - 1, Math.floor(t * SIDE_TRIM.length));
-        const v = t * SIDE_TRIM.length - i;
-        const r = 1 - v;
-        const p = SIDE_TRIM[i];
-        const w = [r * r * r, 3 * r * r * v, 3 * r * v * v, v * v * v];
-        return [hx + (p[0][0] * w[0] + p[1][0] * w[1] + p[2][0] * w[2] + p[3][0] * w[3]) * z * d, hy + (p[0][1] * w[0] + p[1][1] * w[1] + p[2][1] * w[2] + p[3][1] * w[3]) * z];
+        const q = sideTrimAt(i, t * SIDE_TRIM.length - i);
+        return [hx + q[0] * z * d, hy + q[1] * z];
+      }
+      if (view === 'back') {
+        // along the arch, by distance: its points are closer together near the top
+        const want = t * backLength;
+        let i = 1;
+        while (i < BACK_TRIM.length - 1 && backAlong[i] < want) i++;
+        const v = (want - backAlong[i - 1]) / (backAlong[i] - backAlong[i - 1] || 1);
+        const q = lerp(BACK_TRIM[i - 1], BACK_TRIM[i], v);
+        return [hx + q[0] * z, hy + q[1] * z];
       }
       const u = 1 - t;
-      const y0 = view === 'back' ? -0.11 : -0.04;
-      const yc = view === 'back' ? 0.31 : 0.53;
-      return [hx + (-0.37 * u * u + 0.37 * t * t) * z, hy + (y0 * u * u + yc * 2 * u * t + y0 * t * t) * z];
+      return [hx + (-0.37 * u * u + 0.37 * t * t) * z, hy + (-0.04 * u * u + 0.53 * 2 * u * t - 0.04 * t * t) * z];
     };
     const normal = (t: number): Pt => {
       const a = at(Math.max(0, t - 0.01));
@@ -466,9 +551,10 @@ function helmet(k: Kit, view: 'front' | 'back' | 'side', d: number, hx: number, 
       const len = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1;
       return [-(b[1] - a[1]) / len, (b[0] - a[0]) / len];
     };
-    // the chin piece is on the lower side of the trim (from the side, judged where the bar runs under the glass)
+    // the chin piece is on the lower side of the trim (from the side, judged where the bar runs under the glass;
+    // from behind, at the top of the arch)
     const side = normal(view === 'side' ? 0.85 : 0.5)[1] > 0 ? 1 : -1;
-    const steps = view === 'side' ? 160 : 48;
+    const steps = view === 'front' ? 48 : 160;
     ctx.beginPath();
     for (let i = 0; i <= steps; i++) {
       const t = i / steps;
@@ -515,8 +601,13 @@ function helmet(k: Kit, view: 'front' | 'back' | 'side', d: number, hx: number, 
   chin.addColorStop(0.5, c.body);
   chin.addColorStop(1, c.dark);
   const chinShape: Shape = () => {
-    ctx.beginPath();
-    trim();
+    if (view === 'back') {
+      // no light bar on the back of the head: the helmet's own material runs up to the glass, over where the bar would be
+      beside(-LED / 2);
+    } else {
+      ctx.beginPath();
+      trim();
+    }
     if (view === 'side') {
       ctx.lineTo(hx + 0.5 * d, hy + 0.6);
       ctx.lineTo(hx - 0.6 * d, hy + 0.6);
@@ -554,22 +645,24 @@ function helmet(k: Kit, view: 'front' | 'back' | 'side', d: number, hx: number, 
     ctx.restore();
   }
   ctx.restore();
-  // the light bar: the lit edge between glass and chin piece
-  const m = ctx.getTransform();
-  ctx.shadowColor = c.glow;
-  ctx.shadowBlur = Math.hypot(m.a, m.b) * 0.09;
-  ctx.strokeStyle = c.glow;
-  ctx.lineWidth = LED;
-  ctx.beginPath();
-  trim();
-  ctx.stroke();
-  ctx.shadowBlur = 0;
-  ctx.shadowColor = 'rgba(0,0,0,0)';
-  // a black line tracing the light bar's curve, right under it, so that the bar stands out from the chin piece
-  ctx.strokeStyle = '#050508';
-  ctx.lineWidth = LED_LINE;
-  beside(LED / 2 + LED_LINE / 2);
-  ctx.stroke();
+  if (view !== 'back') {
+    // the light bar: the lit edge between glass and chin piece (not on the back of the head: the owner's choice)
+    const m = ctx.getTransform();
+    ctx.shadowColor = c.glow;
+    ctx.shadowBlur = Math.hypot(m.a, m.b) * 0.09;
+    ctx.strokeStyle = c.glow;
+    ctx.lineWidth = LED;
+    ctx.beginPath();
+    trim();
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+    ctx.shadowColor = 'rgba(0,0,0,0)';
+    // a black line tracing the light bar's curve, right under it, so that the bar stands out from the chin piece
+    ctx.strokeStyle = '#050508';
+    ctx.lineWidth = LED_LINE;
+    beside(LED / 2 + LED_LINE / 2);
+    ctx.stroke();
+  }
   if (view !== 'back') {
     // the streaks on the glass (two from the front, the nearer one from the side)
     ctx.strokeStyle = 'rgba(255,255,255,0.8)';

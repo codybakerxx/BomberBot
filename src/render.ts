@@ -8,7 +8,7 @@
  * - drawItemIcon: the seven power-up icons, also used by the top bar
  */
 import { drawRobot, warmRobots, GHOST_ARMS, ROBOT, type Pose, type Wanted } from './robot';
-import { World, FLOOR, HARD, SOFT, FLAME_TICKS, DEATH_TICKS, GHOST_TICKS, SHIELD_GRACE_TICKS, FALL_TICKS, TICK_HZ, ItemKind, Player, Bomb, FLY_TICKS_PER_TILE, THROW_TILES } from './sim';
+import { World, FLOOR, HARD, SOFT, FLAME_TICKS, DEATH_TICKS, GHOST_TICKS, SHIELD_GRACE_TICKS, FALL_TICKS, TICK_HZ, ItemKind, Player, Bomb, FLY_TICKS_PER_TILE, THROW_TILES, FUSE_TICKS, CARRY_FUSE_TICKS } from './sim';
 
 export interface BotColor {
   /** saved with the player's choice and sent to the rules as Player.colorId */
@@ -356,7 +356,7 @@ export function drawDynamic(ctx: Ctx, world: World, T: number, time: number, foc
 
   // bombs on the floor
   for (const b of world.bombs) {
-    if (b.state === 'ground') drawBomb(ctx, world, b, (b.x + 0.5) * T, (b.y + 0.5) * T, T, true);
+    if (b.state === 'ground') drawBomb(ctx, world, b, (b.x + 0.5) * T, (b.y + 0.5 + BOMB_DROP) * T, T, true);
   }
 
   // blasts, in the colour of whoever placed the bomb
@@ -413,7 +413,7 @@ export function drawDynamic(ctx: Ctx, world: World, T: number, time: number, foc
   for (const b of world.bombs) {
     const gx = (b.x + 0.5) * T;
     const gy = (b.y + 0.5) * T;
-    if (b.state === 'held') drawBomb(ctx, world, b, gx, gy + T * (0.46 + ROBOT.top - 0.09), T, false); // just over the helmet of the robot carrying it
+    if (b.state === 'held') drawBomb(ctx, world, b, gx, gy + T * (0.46 + ROBOT.top - 0.2), T, false); // resting on the helmet of the robot carrying it
     else if (b.state === 'air') {
       const p = b.flyT / FLY_TICKS_PER_TILE;
       const h = p < THROW_TILES ? Math.sin((Math.PI * p) / THROW_TILES) * 0.9 : Math.abs(Math.sin(Math.PI * (p - THROW_TILES))) * 0.4;
@@ -439,38 +439,195 @@ export function drawDynamic(ctx: Ctx, world: World, T: number, time: number, foc
   }
 }
 
-/** A bomb: a dark ball with a glowing arc and spark in its owner's colour, pulsing faster when about to go off. */
+const BOMB_R = 0.3; // the ball's radius, in tiles (0.34 when the ball was the whole bomb: it gave up room for the fuse)
+const BOMB_DROP = 0.06; // on the floor the ball sits this far below the middle of its tile, so ball and fuse together look centred
+/** The fuse, from the cap to its far end: a curve (start, two handles, end) in ball radii from the middle of the ball. */
+const FUSE_CURVE: [number, number][] = [
+  [0.545, -1.07],
+  [0.727, -1.426],
+  [1.3, -1.8],
+  [1.5, -0.95],
+];
+const FUSE_STEPS = 24;
+/** Points along the fuse, the same distance apart, so the spark runs down it at a steady speed. */
+const FUSE_POINTS: [number, number][] = (() => {
+  const fine: [number, number][] = [];
+  const along: number[] = [];
+  for (let i = 0; i <= 96; i++) {
+    const v = i / 96;
+    const u = 1 - v;
+    const w = [u * u * u, 3 * u * u * v, 3 * u * v * v, v * v * v];
+    const c = FUSE_CURVE;
+    fine.push([c[0][0] * w[0] + c[1][0] * w[1] + c[2][0] * w[2] + c[3][0] * w[3], c[0][1] * w[0] + c[1][1] * w[1] + c[2][1] * w[2] + c[3][1] * w[3]]);
+    along.push(i ? along[i - 1] + Math.hypot(fine[i][0] - fine[i - 1][0], fine[i][1] - fine[i - 1][1]) : 0);
+  }
+  const out: [number, number][] = [];
+  let j = 1;
+  for (let i = 0; i <= FUSE_STEPS; i++) {
+    const want = (along[96] * i) / FUSE_STEPS;
+    while (j < 96 && along[j] < want) j++;
+    const k = (want - along[j - 1]) / (along[j] - along[j - 1] || 1);
+    out.push([fine[j - 1][0] + (fine[j][0] - fine[j - 1][0]) * k, fine[j - 1][1] + (fine[j][1] - fine[j - 1][1]) * k]);
+  }
+  return out;
+})();
+const CAP_TILT = Math.atan2(FUSE_CURVE[0][0], -FUSE_CURVE[0][1]); // the cap leans the way the fuse leaves the ball
+
+/**
+ * A bomb: a black iron ball with a cap and a rope fuse, a band of light in its owner's colour, and a spark
+ * burning down the fuse. (cx, cy) is the middle of the ball.
+ *
+ * The fuse is a clock. The length of rope left is the share of the bomb's time that is left, so the spark
+ * reaches the cap as the bomb goes off: 2.5 seconds from being dropped; a bomb that has been picked up was
+ * given 3 seconds then, so its fuse is measured against that (it grows back at the first lift, because the
+ * bomb really does get more time). A bomb caught in a blast has a few ticks left, so its spark jumps to
+ * the cap. In the last three quarters of a second the ball throbs faster and flashes red-hot.
+ */
 function drawBomb(ctx: Ctx, world: World, b: Bomb, cx: number, cy: number, T: number, shadow: boolean): void {
   const col = colorById(world.players[b.owner]?.colorId ?? 'gold');
   const urgent = b.fuse < 45;
   const pulse = 1 + 0.07 * Math.sin(b.age * (urgent ? 0.6 : 0.22));
-  const r = T * 0.34 * pulse;
+  const r = T * BOMB_R * pulse;
   if (shadow) {
     ctx.fillStyle = 'rgba(0,0,0,0.4)';
     ctx.beginPath();
-    ctx.ellipse(cx, cy + T * 0.3, r * 0.9, r * 0.3, 0, 0, Math.PI * 2);
+    ctx.ellipse(cx, cy + T * BOMB_R, r * 0.95, r * 0.3, 0, 0, Math.PI * 2);
     ctx.fill();
   }
-  const g = ctx.createRadialGradient(cx - r * 0.35, cy - r * 0.4, r * 0.05, cx, cy, r);
-  g.addColorStop(0, '#3a3d4c');
-  g.addColorStop(0.5, '#101117');
-  g.addColorStop(1, '#030304');
+  const left = Math.max(0, Math.min(1, b.fuse / (b.lifted ? CARRY_FUSE_TICKS : FUSE_TICKS))); // the share of the fuse still to burn
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.scale(r, r); // from here on, 1 is the ball's radius
+  const thin = 1 / r; // one pixel
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+
+  // the rope that is left, from the cap out to where the spark is (drawn first: the cap sits over its root)
+  const at = left * FUSE_STEPS;
+  const whole = Math.floor(at);
+  const part = at - whole;
+  const tip: [number, number] =
+    whole >= FUSE_STEPS
+      ? FUSE_POINTS[FUSE_STEPS]
+      : [FUSE_POINTS[whole][0] + (FUSE_POINTS[whole + 1][0] - FUSE_POINTS[whole][0]) * part, FUSE_POINTS[whole][1] + (FUSE_POINTS[whole + 1][1] - FUSE_POINTS[whole][1]) * part];
+  if (left > 0.01) {
+    const rope = (): void => {
+      ctx.beginPath();
+      ctx.moveTo(FUSE_POINTS[0][0], FUSE_POINTS[0][1]);
+      for (let i = 1; i <= whole; i++) ctx.lineTo(FUSE_POINTS[i][0], FUSE_POINTS[i][1]);
+      ctx.lineTo(tip[0], tip[1]);
+    };
+    ctx.strokeStyle = '#241b12';
+    ctx.lineWidth = Math.max(0.22, 2.6 * thin);
+    rope();
+    ctx.stroke();
+    ctx.strokeStyle = '#d2b98c';
+    ctx.lineWidth = Math.max(0.12, 1.4 * thin);
+    rope();
+    ctx.stroke();
+  }
+
+  // the ball: black iron, lit from the upper left
+  const g = ctx.createRadialGradient(-0.35, -0.4, 0.05, 0, 0, 1);
+  g.addColorStop(0, '#4b4f62');
+  g.addColorStop(0.45, '#15161d');
+  g.addColorStop(1, '#020203');
   ctx.fillStyle = g;
   ctx.beginPath();
-  ctx.arc(cx, cy, r, 0, Math.PI * 2);
+  ctx.arc(0, 0, 1, 0, Math.PI * 2);
   ctx.fill();
-  ctx.save();
-  ctx.shadowColor = col.glow;
-  ctx.shadowBlur = T * 0.3;
+  if (urgent) {
+    // red-hot, flashing, when it is about to go
+    ctx.fillStyle = b.age % 8 < 4 ? 'rgba(255,80,40,0.42)' : 'rgba(255,80,40,0.16)';
+    ctx.fill();
+  }
+  // a band of light low on the ball in its owner's colour: whose bomb it is, and what colour the blast will be
   ctx.strokeStyle = col.glow;
-  ctx.lineWidth = Math.max(1.5, T * 0.06);
+  ctx.globalAlpha = 0.28;
+  ctx.lineWidth = 0.26;
   ctx.beginPath();
-  ctx.arc(cx, cy, r * 0.62, Math.PI * 0.15, Math.PI * 0.85);
+  ctx.arc(0, 0, 0.7, Math.PI * 0.2, Math.PI * 0.8);
   ctx.stroke();
-  ctx.fillStyle = urgent && b.age % 8 < 4 ? '#ffffff' : col.glow;
+  ctx.globalAlpha = 1;
+  ctx.lineWidth = Math.max(0.11, 1.3 * thin);
   ctx.beginPath();
-  ctx.arc(cx, cy - r * 0.98, T * 0.07, 0, Math.PI * 2);
+  ctx.arc(0, 0, 0.7, Math.PI * 0.2, Math.PI * 0.8);
+  ctx.stroke();
+  // the shine on the iron
+  ctx.save();
+  ctx.translate(-0.4, -0.46);
+  ctx.rotate(-0.72);
+  ctx.fillStyle = 'rgba(255,255,255,0.4)';
+  ctx.beginPath();
+  ctx.ellipse(0, 0, 0.3, 0.13, 0, 0, Math.PI * 2);
   ctx.fill();
+  ctx.restore();
+  ctx.fillStyle = 'rgba(255,255,255,0.3)';
+  ctx.beginPath();
+  ctx.arc(-0.66, -0.08, 0.06, 0, Math.PI * 2);
+  ctx.fill();
+
+  // the cap the fuse comes out of: a short steel collar, leaning the way the fuse does
+  ctx.save();
+  ctx.rotate(CAP_TILT);
+  const steel = ctx.createLinearGradient(-0.26, 0, 0.26, 0);
+  steel.addColorStop(0, '#aab0c4');
+  steel.addColorStop(0.45, '#5a5f72');
+  steel.addColorStop(1, '#22242e');
+  ctx.fillStyle = steel;
+  ctx.strokeStyle = '#050508';
+  ctx.lineWidth = Math.max(0.05, 0.8 * thin);
+  rr(ctx, -0.26, -1.15, 0.52, 0.3, 0.07);
+  ctx.fill();
+  ctx.stroke();
+  rr(ctx, -0.17, -1.24, 0.34, 0.12, 0.04);
+  ctx.fill();
+  ctx.stroke();
+  ctx.restore();
+
+  // the spark at the end of the rope: a flickering white-hot point, a warm glow, rays and a few flying embers
+  const seed = b.id * 31 + (b.age >> 1); // changes every other tick
+  const flick = (0.8 + 0.45 * scatter(seed)) * (urgent ? 1.3 : 1);
+  ctx.save();
+  ctx.translate(tip[0], tip[1]);
+  ctx.globalCompositeOperation = 'lighter';
+  const glow = ctx.createRadialGradient(0, 0, 0, 0, 0, 0.8 * flick);
+  glow.addColorStop(0, 'rgba(255,200,110,0.85)');
+  glow.addColorStop(0.4, 'rgba(255,140,40,0.4)');
+  glow.addColorStop(1, 'rgba(255,90,10,0)');
+  ctx.fillStyle = glow;
+  ctx.beginPath();
+  ctx.arc(0, 0, 0.8 * flick, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.strokeStyle = '#ffe7a0';
+  ctx.lineWidth = Math.max(0.07, 1.1 * thin);
+  ctx.beginPath();
+  for (let i = 0; i < 6; i++) {
+    const a = (i * Math.PI) / 3 + scatter(seed + i * 7 + 1) * 0.9;
+    const reach = (0.26 + 0.42 * scatter(seed + i * 7 + 2)) * flick;
+    ctx.moveTo(Math.cos(a) * 0.1, Math.sin(a) * 0.1);
+    ctx.lineTo(Math.cos(a) * reach, Math.sin(a) * reach);
+  }
+  ctx.stroke();
+  for (let i = 0; i < 3; i++) {
+    // an ember: thrown up and out, slowing and falling, gone in a quarter of a second
+    const clock = b.age + i * 5 + b.id * 3;
+    const k = (clock % 15) / 15;
+    const a = -Math.PI / 2 + (scatter(b.id * 17 + i * 29 + Math.floor(clock / 15)) - 0.5) * 2.6;
+    ctx.globalAlpha = 1 - k;
+    ctx.fillStyle = '#ffb347';
+    ctx.beginPath();
+    ctx.arc(Math.cos(a) * (0.25 + k * 0.95), Math.sin(a) * (0.25 + k * 0.95) + k * k * 0.55, Math.max(0.06, 0.7 * thin), 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+  ctx.fillStyle = '#fffbe2';
+  ctx.beginPath();
+  ctx.arc(0, 0, 0.15 * flick, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+
   ctx.restore();
 }
 
