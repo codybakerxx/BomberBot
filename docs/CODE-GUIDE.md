@@ -161,7 +161,7 @@ The markup and all the styles. A comment at the top lists every element by id. `
 
 Classes on `<body>` drive the layout: `touch` (show the on-screen controls) and `portrait` (phone held upright), both set by `layout()` in `main.ts`; `righty` (the right thumb steers, so the controls are mirrored), set by `applySettings()`; and `menu-open` (hide the Menu button and top strip), set by `showMenu()`.
 
-Every canvas is made for the screen's size and pixel density at the moment `layout()` runs. A phone can change its pixel density without a resize event (the Claude app can open the page at density 1 and correct it a moment later), which left the whole game blurry until the next resize. So `keepSharp()` checks size and density every frame and lays the page out again when either has changed; `drawPicker()` redraws the menu's robots when the density changes.
+Every canvas is made for the screen's size and pixel density at the moment `layout()` runs. A phone can change its pixel density without a resize event (the Claude app can open the page at density 1 and correct it a moment later), which left the whole game blurry until the next resize. So `keepSharp()` checks size and density every frame and lays the page out again when either has changed; `drawPicker()` redraws the menu's robots when the density changes. The density used is the phone's own, capped at 4 (`MAX_DENSITY`, `density()`): it was capped at 3, and a phone whose page is zoomed reports more than 3, which drew the arena, robots and power-ups stretched and blurry while the page's text stayed sharp. That was the blur the owner saw, and lifting the cap fixed it on his phone.
 
 ### `build.mjs`: the build
 
