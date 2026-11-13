@@ -585,9 +585,13 @@ function showTitle(): void {
   document.body.classList.remove('menu-open');
   document.body.classList.add('title-open');
   title.hidden = false;
-  $('titlePlay').focus({ preventScroll: true });
+  $('titleLocal').focus({ preventScroll: true });
 }
-/** Leave the title screen for the menu, on one of its tabs. The title's large pictures are let go. */
+/**
+ * Leave the title screen for the menu, on one of its tabs. The title's large pictures are let go.
+ * The title offers the two modes: Local, which leads here (the menu stands in for the lobby to come), and
+ * Online, which is switched off until online play is built (step 2 of the plan in docs/ROADMAP.md).
+ */
 function leaveTitle(tab: Tab): void {
   initAudio(); // a tap: the moment the browser allows sound to start
   title.hidden = true;
@@ -595,8 +599,7 @@ function leaveTitle(tab: Tab): void {
   closeTitle();
   showMenu(tab);
 }
-$('titlePlay').addEventListener('click', () => leaveTitle('main'));
-$('titleControls').addEventListener('click', () => leaveTitle('controls'));
+$('titleLocal').addEventListener('click', () => leaveTitle('main'));
 
 // ---------------------------------------------------------------- menu
 

@@ -151,7 +151,7 @@ Everything that ties the game to the page:
 - the fixed-rate loop (`frame`, `tick`)
 - sizing the arena and controls to the screen (`layout`)
 - the round timer at the top (`drawTimer`)
-- the title screen, where the game opens: showing it (`showTitle`), drawing it each frame instead of the arena (`renderTitle`, with the picture from `title.ts`), and leaving it for the menu (`leaveTitle`). The menu's ✕ goes back to it when no round has been played yet
+- the title screen, where the game opens: showing it (`showTitle`), drawing it each frame instead of the arena (`renderTitle`, with the picture from `title.ts`), and leaving it for the menu (`leaveTitle`, from Local; Online is switched off in `page.html` until online play is built). The menu's ✕ goes back to it when no round has been played yet
 - the menu: its two tabs, opening and closing it, and pausing the round behind it (`showMenu`, `showTab`, `closeMenu`, `play`, `resume`, `watch`, `start`, and the flags `roundLive` and `overShown`)
 - the bot picker (`buildPicker`; `lockPicker` switches it off during a round; a round's colours are set in `newWorld` and nowhere else), the CPU level buttons (`buildLevels`) and the result panel (`finish`)
 - the layer the ghosts float up on (`ghosts`, placed by `layout`, drawn in `render`)

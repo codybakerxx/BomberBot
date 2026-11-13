@@ -26,7 +26,7 @@ Working today:
 - A timer of 1 minute 30: when it reaches zero, blocks fall round the edge and inward for 50 seconds, leaving a 5 by 5 square in the middle to fight it out in
 - A scoreboard of four heads beside the timer that counts the rounds each player has won, with a crown for whoever is in the lead
 - A knock-out that burns the bot to ash while its ghost floats away, and a winner that jumps and dances
-- A title screen: your robot in your colour, waving, with two rivals and a lit bomb, over a stretch of arena
+- A title screen: your robot in your colour, waving, with two rivals and a lit bomb, and a choice of Local or Online (online is coming)
 - A menu that pauses the round, with tabs for the main menu and the controls
 - Keyboard controls for playing on a computer
 - Sound effects

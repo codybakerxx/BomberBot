@@ -77,7 +77,7 @@ class Thumb:
 
 async def phone(browser, width, height, title=None):
     """A phone-sized page with the game open. The game opens on the title screen: it is saved as `title`
-    (once the robot is waving) if given, then Play is tapped, which leads to the menu."""
+    (once the robot is waving) if given, then Local is tapped, which leads to the menu."""
     context = await browser.new_context(
         viewport={"width": width, "height": height}, device_scale_factor=2, has_touch=True, is_mobile=True
     )
@@ -87,7 +87,7 @@ async def phone(browser, width, height, title=None):
     if title:
         await page.wait_for_timeout(1800)  # the first wave (WAVE_FIRST in src/title.ts)
         await page.screenshot(path=str(OUT / title))
-    await page.tap("#titlePlay")
+    await page.tap("#titleLocal")
     await page.wait_for_timeout(100)
     return context, page
 
