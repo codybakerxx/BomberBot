@@ -14,7 +14,7 @@ flowchart LR
   S -- "events" --> A["audio.ts<br>play sounds"]
   S -- "the world" --> B["bot.ts<br>CPU players"]
   B -- "direction, A, B" --> S
-  M["main.ts<br>runs the loop, the menu and the screen layout"] -.-> I
+  M["main.ts<br>runs the loop, the title screen, the menu and the screen layout"] -.-> I
   M -.-> S
   M -.-> R
   M -.-> A
@@ -111,13 +111,18 @@ How one robot is drawn: from the front, the back and each side, standing, walkin
 |---|---|
 | `drawRobot` | Draws one robot, in any colour, facing any of four ways, mid-stride or still. The menu uses it too. |
 | `drawHead` | A robot's helmet on its own, for the scoreboard, with the crown if asked |
-| `Pose` | Ways to draw a robot other than standing or walking: jumping, arms up, leaning, crosses for eyes, a ghost, a crown, shrinking |
+| `Pose` | Ways to draw a robot other than standing or walking: jumping, arms up, leaning, crosses for eyes, a ghost, a crown, shrinking; `fine: false` leaves out the soft rounding however large it is drawn (the title screen) |
 | `ROBOT` | Where the robot's head, top and shoulders are, in tiles, and how big it is next to the size its wings and halo were first drawn for (`scale`): for whatever is drawn round one (crown, halo, wings, shield ring, a carried bomb) |
 | `warmRobots` | Makes robots' pictures ahead of the moment they are needed, a few each frame |
+| `forgetSprites` | Throws away the pictures made at one size: the title screen lets go of its large ones when it closes |
 
 **Sprites.** Drawing one robot takes a few hundred canvas calls, which is too many to make for four robots sixty times a second on a phone. So each robot is drawn once into a small picture of its own (a sprite) for each way it can look: colour, direction, one of 8 steps of the walk, how far each arm is raised. After that, drawing it is a single `drawImage`. Making a sprite takes a few thousandths of a second, so `warmSprites` in `render.ts` (called once a frame from `main.ts`) makes the ones a round will need a few at a time, before they are needed. A change of screen size makes new ones; when there are more than 700 they are all thrown away and made again as wanted.
 
-**Two levels of finish.** Every piece is lit, shaded, given a reflection and a highlight, and throws a shadow on the piece below. On a drawing with a robot over 500 pixels tall (artwork from `tools/portraits.py`) each piece is also rounded by soft shadow and light inside its edges. At playing size that would be less than a pixel, so it is left out. The soft version uses a canvas shadow to blur (`softly`), because the canvas blur filter is missing on iPhones; it has only been tried in Chrome.
+**Two levels of finish.** Every piece is lit, shaded, given a reflection and a highlight, and throws a shadow on the piece below. On a drawing with a robot over 500 pixels tall (artwork from `tools/portraits.py`) each piece is also rounded by soft shadow and light inside its edges. At playing size that would be less than a pixel, so it is left out. The soft version uses a canvas shadow to blur (`softly`), because the canvas blur filter is missing on iPhones; it has only been tried in Chrome. The title screen's robots are that large on a phone, so it draws them with `fine: false` until the soft version has been tried on an iPhone.
+
+### `src/title.ts`: the title screen's picture
+
+The picture behind the title screen, drawn in code: your robot in your colour (`myColor`), front and centre, waving every 6.5 seconds; two rivals a step behind it (blue and pink, or the next bright colours if one of those is yours); a bomb with a lit fuse at its feet; and a stretch of arena behind them, with the robots in an open corridor across it, fading into the dark behind the name and the buttons. `drawTitle` draws it on a canvas the size of the screen, standing the robots in the box main.ts measures from `#titleStage` (the space the page leaves between the name and the buttons). The arena and the dark over it are drawn once per screen size and colour and kept. `closeTitle` lets go of the large robot pictures. It reads nothing of the game. The numbers for the group (how far back the rivals stand, the bomb, the wave's timing) are named at the top of the file.
 
 ### `src/render.ts`: drawing
 
@@ -132,6 +137,7 @@ Everything on the canvas is drawn with shapes in code. There are no image files.
 | `warmSprites` | Gets the robots' pictures ready ahead of need: everyone's walk, the burnt robot, the ghosts, the winner's dance |
 | `drawGhosts` | The ghosts of knocked-out robots, with wings and a halo, floating up to the top of the screen. Drawn on a layer of its own, because they leave the arena |
 | `drawStatus` | What is drawn over a robot: the shield ring, the ring flying off when a shield is used up, the skull over a cursed robot |
+| `drawBombArt`, `drawHard`, `drawSoft` | A bomb with a lit fuse, a solid block and a brick, on their own: for the title screen |
 | `COLORS` | The nine bot colours. Only the coloured parts change (the armour, the helmet's rim and chin piece, the lit soles); the black parts are shared. |
 
 ### `src/audio.ts`: sound
@@ -145,6 +151,7 @@ Everything that ties the game to the page:
 - the fixed-rate loop (`frame`, `tick`)
 - sizing the arena and controls to the screen (`layout`)
 - the round timer at the top (`drawTimer`)
+- the title screen, where the game opens: showing it (`showTitle`), drawing it each frame instead of the arena (`renderTitle`, with the picture from `title.ts`), and leaving it for the menu (`leaveTitle`). The menu's ✕ goes back to it when no round has been played yet
 - the menu: its two tabs, opening and closing it, and pausing the round behind it (`showMenu`, `showTab`, `closeMenu`, `play`, `resume`, `watch`, `start`, and the flags `roundLive` and `overShown`)
 - the bot picker (`buildPicker`; `lockPicker` switches it off during a round; a round's colours are set in `newWorld` and nowhere else), the CPU level buttons (`buildLevels`) and the result panel (`finish`)
 - the layer the ghosts float up on (`ghosts`, placed by `layout`, drawn in `render`)
@@ -159,7 +166,7 @@ It holds no game rules.
 
 The markup and all the styles. A comment at the top lists every element by id. `build.mjs` pastes the compiled code in at the `/*__BUNDLE__*/` marker.
 
-Classes on `<body>` drive the layout: `touch` (show the on-screen controls) and `portrait` (phone held upright), both set by `layout()` in `main.ts`; `righty` (the right thumb steers, so the controls are mirrored), set by `applySettings()`; and `menu-open` (hide the Menu button and top strip), set by `showMenu()`.
+Classes on `<body>` drive the layout: `touch` (show the on-screen controls) and `portrait` (phone held upright), both set by `layout()` in `main.ts`; `righty` (the right thumb steers, so the controls are mirrored), set by `applySettings()`; `menu-open` (hide the Menu button and top strip), set by `showMenu()`; and `title-open` (hide everything of the game screen under the title), set by `showTitle()`.
 
 Every canvas is made for the screen's size and pixel density at the moment `layout()` runs. A phone can change its pixel density without a resize event (the Claude app can open the page at density 1 and correct it a moment later), which left the whole game blurry until the next resize. So `keepSharp()` checks size and density every frame and lays the page out again when either has changed; `drawPicker()` redraws the menu's robots when the density changes. The density used is the phone's own, capped at 4 (`MAX_DENSITY`, `density()`): it was capped at 3, and a phone whose page is zoomed reports more than 3, which drew the arena, robots and power-ups stretched and blurry while the page's text stayed sharp. That was the blur the owner saw, and lifting the cap fixed it on his phone.
 

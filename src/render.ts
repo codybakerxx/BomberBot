@@ -8,6 +8,7 @@
  * - drawItemIcon: the seven power-up icons, also used by the top bar
  */
 import { drawRobot, warmRobots, GHOST_ARMS, ROBOT, type Pose, type Wanted } from './robot';
+export { warmRobots } from './robot';
 import { World, FLOOR, HARD, SOFT, FLAME_TICKS, DEATH_TICKS, GHOST_TICKS, SHIELD_GRACE_TICKS, FALL_TICKS, TICK_HZ, ItemKind, Player, Bomb, FLY_TICKS_PER_TILE, THROW_TILES, FUSE_TICKS, CARRY_FUSE_TICKS } from './sim';
 
 export interface BotColor {
@@ -54,7 +55,7 @@ function rr(ctx: Ctx, x: number, y: number, w: number, h: number, r: number): vo
  * can be posed. They are handed on from here so that the rest of the game
  * still finds all the drawing in one place.
  */
-export { drawRobot, drawHead, ROBOT, type Pose } from './robot';
+export { drawRobot, drawHead, forgetSprites, ROBOT, type Pose } from './robot';
 
 
 /** What a robot burnt to a crisp is drawn in. */
@@ -103,7 +104,7 @@ export function winPose(t: number): Pose {
 // ---------------------------------------------------------------- arena
 
 /** Solid block: fills its whole tile, raised bevel with a sunken square in the middle. */
-function drawHard(ctx: Ctx, px: number, py: number, T: number): void {
+export function drawHard(ctx: Ctx, px: number, py: number, T: number): void {
   const e = Math.max(1, Math.round(T * 0.07));
   ctx.fillStyle = '#39456b';
   ctx.fillRect(px, py, T, T);
@@ -125,7 +126,7 @@ function drawHard(ctx: Ctx, px: number, py: number, T: number): void {
 }
 
 /** Breakable block: fills its whole tile with four staggered courses of bricks. */
-function drawSoft(ctx: Ctx, px: number, py: number, T: number): void {
+export function drawSoft(ctx: Ctx, px: number, py: number, T: number): void {
   ctx.fillStyle = '#232a45'; // mortar
   ctx.fillRect(px, py, T, T);
   const rows = 4;
@@ -485,8 +486,22 @@ const CAP_TILT = Math.atan2(FUSE_CURVE[0][0], -FUSE_CURVE[0][1]); // the cap lea
  */
 function drawBomb(ctx: Ctx, world: World, b: Bomb, cx: number, cy: number, T: number, shadow: boolean): void {
   const col = colorById(world.players[b.owner]?.colorId ?? 'gold');
-  const urgent = b.fuse < 45;
-  const pulse = 1 + 0.07 * Math.sin(b.age * (urgent ? 0.6 : 0.22));
+  const left = b.fuse / (b.lifted ? CARRY_FUSE_TICKS : FUSE_TICKS); // the share of the fuse still to burn
+  paintBomb(ctx, cx, cy, T, col.glow, left, b.fuse < 45, b.age, b.id, shadow);
+}
+
+/**
+ * A bomb on its own, for screens outside a round (the title screen): the same drawing as in play.
+ * (cx, cy) is the middle of the ball and `T` the size of a tile. `left` is the share of the fuse still to
+ * burn, `age` how many ticks it has been lit (it sets the throb and the flicker of the spark).
+ */
+export function drawBombArt(ctx: Ctx, cx: number, cy: number, T: number, glow: string, left: number, age: number): void {
+  paintBomb(ctx, cx, cy, T, glow, left, false, age, 7, true);
+}
+
+/** The drawing of a bomb itself, for drawBomb and drawBombArt. `id` keeps one bomb's spark from flickering in step with another's. */
+function paintBomb(ctx: Ctx, cx: number, cy: number, T: number, band: string, share: number, urgent: boolean, age: number, id: number, shadow: boolean): void {
+  const pulse = 1 + 0.07 * Math.sin(age * (urgent ? 0.6 : 0.22));
   const r = T * BOMB_R * pulse;
   if (shadow) {
     ctx.fillStyle = 'rgba(0,0,0,0.4)';
@@ -494,7 +509,7 @@ function drawBomb(ctx: Ctx, world: World, b: Bomb, cx: number, cy: number, T: nu
     ctx.ellipse(cx, cy + T * BOMB_R, r * 0.95, r * 0.3, 0, 0, Math.PI * 2);
     ctx.fill();
   }
-  const left = Math.max(0, Math.min(1, b.fuse / (b.lifted ? CARRY_FUSE_TICKS : FUSE_TICKS))); // the share of the fuse still to burn
+  const left = Math.max(0, Math.min(1, share));
   ctx.save();
   ctx.translate(cx, cy);
   ctx.scale(r, r); // from here on, 1 is the ball's radius
@@ -538,11 +553,11 @@ function drawBomb(ctx: Ctx, world: World, b: Bomb, cx: number, cy: number, T: nu
   ctx.fill();
   if (urgent) {
     // red-hot, flashing, when it is about to go
-    ctx.fillStyle = b.age % 8 < 4 ? 'rgba(255,80,40,0.42)' : 'rgba(255,80,40,0.16)';
+    ctx.fillStyle = age % 8 < 4 ? 'rgba(255,80,40,0.42)' : 'rgba(255,80,40,0.16)';
     ctx.fill();
   }
   // a band of light low on the ball in its owner's colour: whose bomb it is, and what colour the blast will be
-  ctx.strokeStyle = col.glow;
+  ctx.strokeStyle = band;
   ctx.globalAlpha = 0.28;
   ctx.lineWidth = 0.26;
   ctx.beginPath();
@@ -586,7 +601,7 @@ function drawBomb(ctx: Ctx, world: World, b: Bomb, cx: number, cy: number, T: nu
   ctx.restore();
 
   // the spark at the end of the rope: a flickering white-hot point, a warm glow, rays and a few flying embers
-  const seed = b.id * 31 + (b.age >> 1); // changes every other tick
+  const seed = id * 31 + (age >> 1); // changes every other tick
   const flick = (0.8 + 0.45 * scatter(seed)) * (urgent ? 1.3 : 1);
   ctx.save();
   ctx.translate(tip[0], tip[1]);
@@ -612,9 +627,9 @@ function drawBomb(ctx: Ctx, world: World, b: Bomb, cx: number, cy: number, T: nu
   ctx.stroke();
   for (let i = 0; i < 3; i++) {
     // an ember: thrown up and out, slowing and falling, gone in a quarter of a second
-    const clock = b.age + i * 5 + b.id * 3;
+    const clock = age + i * 5 + id * 3;
     const k = (clock % 15) / 15;
-    const a = -Math.PI / 2 + (scatter(b.id * 17 + i * 29 + Math.floor(clock / 15)) - 0.5) * 2.6;
+    const a = -Math.PI / 2 + (scatter(id * 17 + i * 29 + Math.floor(clock / 15)) - 0.5) * 2.6;
     ctx.globalAlpha = 1 - k;
     ctx.fillStyle = '#ffb347';
     ctx.beginPath();

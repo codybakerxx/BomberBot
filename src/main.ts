@@ -4,7 +4,7 @@
  * - keeps the current match (a World from sim.ts) and steps it 60 times a second
  * - reads the player's input (input.ts) and plays sounds for what happened (audio.ts)
  * - sizes and places the arena, the touch controls and the panels for the screen
- * - runs the menu, the result panel, the D-pad settings and the Match my thumb screen
+ * - runs the title screen, the menu, the result panel, the D-pad settings and the Match my thumb screen
  * - remembers the chosen bot and the D-pad settings on this device (localStorage)
  *
  * It holds no game rules. Those are all in sim.ts.
@@ -13,6 +13,7 @@ import { createWorld, step, ticksLeft, World, PlayerInput, Dir, TICK_HZ, DEATH_T
 import { Bot, BotLevel, BOT_LEVELS, LEVELS, createBot, botInput } from './bot';
 import { COLORS, NOBODY, ROBOT, colorById, drawRobot, drawHead, drawStatic, drawDynamic, drawGhosts, warmSprites } from './render';
 import { Input } from './input';
+import { drawTitle, closeTitle } from './title';
 import { initAudio, sfx } from './audio';
 import { Hand, STRAIGHT, standardAims, uniformAims } from './swipe';
 import {
@@ -45,6 +46,9 @@ const menu = $('menu');
 const result = $('result');
 const touch = $('touch');
 const teach = $('teach');
+const title = $('title');
+const titleArt = $<HTMLCanvasElement>('titleArt');
+const tctx = titleArt.getContext('2d')!;
 
 // The chosen bot colour, remembered on this device under the key "botColor".
 let myColor = 'gold';
@@ -186,8 +190,11 @@ try {
 
 let world: World;
 let T = 32; // tile size in canvas pixels
-/** menu: the menu is open (a round may be paused behind it). playing: a round. over: result panel showing. teach: Match my thumb. */
-let mode: 'menu' | 'playing' | 'over' | 'teach' = 'menu';
+/**
+ * title: the title screen, shown when the game opens. menu: the menu is open (a round may be paused behind
+ * it). playing: a round. over: result panel showing. teach: Match my thumb.
+ */
+let mode: 'title' | 'menu' | 'playing' | 'over' | 'teach' = 'title';
 let overShown = false;
 /** True from the start of a round until its result: the round the menu pauses and can go back to. */
 let roundLive = false;
@@ -541,9 +548,55 @@ function frame(now: number): void {
     }
     if (n === 6) acc = 0;
   }
-  render(now / 1000);
+  // the title screen covers everything, so the arena behind it is not drawn
+  if (mode === 'title') renderTitle(now / 1000);
+  else render(now / 1000);
   requestAnimationFrame(frame);
 }
+
+// ---------------------------------------------------------------- title screen
+
+/** When the title screen was opened, on the frame clock in seconds; -1 until its first frame. */
+let titleFrom = -1;
+/**
+ * Draw the title screen's picture (title.ts): your robot in your colour, waving now and then, with two
+ * rivals and a lit bomb, standing in the space the page leaves between the name and the buttons. The canvas
+ * is the size of the screen at its full pixel density; it is made again whenever that changes.
+ */
+function renderTitle(time: number): void {
+  if (titleFrom < 0) titleFrom = time;
+  const dpr = density();
+  const w = Math.round(window.innerWidth * dpr);
+  const h = Math.round(window.innerHeight * dpr);
+  if (titleArt.width !== w || titleArt.height !== h) {
+    titleArt.width = w;
+    titleArt.height = h;
+  }
+  const r = $('titleStage').getBoundingClientRect();
+  drawTitle(tctx, { x: r.left * dpr, y: r.top * dpr, w: r.width * dpr, h: r.height * dpr }, colorById(myColor), time - titleFrom);
+}
+/** Open the title screen. It is where the game starts, and where the menu's ✕ goes back to before any round has been played. */
+function showTitle(): void {
+  mode = 'title';
+  titleFrom = -1;
+  menu.hidden = true;
+  result.hidden = true;
+  teach.hidden = true;
+  document.body.classList.remove('menu-open');
+  document.body.classList.add('title-open');
+  title.hidden = false;
+  $('titlePlay').focus({ preventScroll: true });
+}
+/** Leave the title screen for the menu, on one of its tabs. The title's large pictures are let go. */
+function leaveTitle(tab: Tab): void {
+  initAudio(); // a tap: the moment the browser allows sound to start
+  title.hidden = true;
+  document.body.classList.remove('title-open');
+  closeTitle();
+  showMenu(tab);
+}
+$('titlePlay').addEventListener('click', () => leaveTitle('main'));
+$('titleControls').addEventListener('click', () => leaveTitle('controls'));
 
 // ---------------------------------------------------------------- menu
 
@@ -964,14 +1017,14 @@ function watch(): void {
 }
 
 /**
- * The X: close the menu and go back to the game as it was. Into the paused round if there is one; back to
- * watching a round that has ended for you (it never starts a new one: that is what New round is for);
- * and only when no round has been played yet, a first round.
+ * The X: close the menu and go back to where the player came from. Into the paused round if there is one;
+ * back to watching a round that has ended for you (it never starts a new one: that is what New round is
+ * for); and when no round has been played yet, back to the title screen.
  */
 function closeMenu(): void {
   if (roundLive) resume();
   else if (overShown) watch();
-  else start();
+  else showTitle();
 }
 
 /** The menu's main button: Resume a paused round, otherwise a new round. */
@@ -1006,7 +1059,7 @@ layout();
 buildPicker();
 buildLevels();
 applySettings(false);
-showMenu('main');
+showTitle();
 requestAnimationFrame(frame);
 
 // A handle for automated browser checks and for poking about in the browser console.

@@ -49,6 +49,12 @@ export interface Pose {
   crownOnly?: boolean;
   /** drawn at this share of its full size, about its feet (a burnt robot shrinking as it crumbles) */
   shrink?: number;
+  /**
+   * false: never give it the soft rounding inside each piece, however large it is drawn. For screens of the
+   * game (the title screen), because that rounding has not been tried on an iPhone (see `softly`).
+   * Left out, a robot drawn large enough gets it (artwork, tools/portraits.py).
+   */
+  fine?: boolean;
 }
 
 /**
@@ -467,9 +473,9 @@ const DARK = '#000000'; // outlines of the black parts
 const JOINT: Gloss = { tint: COOL, light: 0.22, shade: 0.4, rim: 0.5, depth: 0.01, sky: 0.8 };
 
 /** Get ready to draw a robot in colour `c` on `ctx`, which must already be set to the robot's own units. */
-function kitFor(ctx: Ctx, c: BotColor, pale: boolean, xEyes: boolean): Kit {
+function kitFor(ctx: Ctx, c: BotColor, pale: boolean, xEyes: boolean, fine = true): Kit {
   const m = ctx.getTransform();
-  FINE = Math.hypot(m.a, m.b) >= FINE_FROM;
+  FINE = fine && Math.hypot(m.a, m.b) >= FINE_FROM;
   SUIT_DIM = mixRgb(c.dark, '#000000', 0.72);
   ctx.lineJoin = 'round';
   ctx.lineCap = 'round';
@@ -1558,8 +1564,8 @@ const SPRITE_Y = 1.361 * K;
 /** More sprites than this and they are all thrown away and made again as needed (a change of screen size leaves the old ones unused). */
 const SPRITE_LIMIT = 700;
 
-function spriteKey(c: BotColor, facing: Dir, frame: number, armL: number, armR: number, pale: boolean, xEyes: boolean, px: number): string {
-  return `${c.id}|${c.body}|${facing}|${frame}|${armL}|${armR}|${pale ? 1 : 0}${xEyes ? 1 : 0}|${px}`;
+function spriteKey(c: BotColor, facing: Dir, frame: number, armL: number, armR: number, pale: boolean, xEyes: boolean, px: number, fine = true): string {
+  return `${c.id}|${c.body}|${facing}|${frame}|${armL}|${armR}|${pale ? 1 : 0}${xEyes ? 1 : 0}${fine ? '' : 'p'}|${px}`;
 }
 
 interface Sprite {
@@ -1574,8 +1580,8 @@ const sprites = new Map<string, Sprite>();
  * The picture of one robot in one stance, `px` pixels to the tile: made the
  * first time it is asked for and kept.
  */
-function sprite(c: BotColor, facing: Dir, frame: number, armL: number, armR: number, pale: boolean, xEyes: boolean, px: number): Sprite {
-  const key = spriteKey(c, facing, frame, armL, armR, pale, xEyes, px);
+function sprite(c: BotColor, facing: Dir, frame: number, armL: number, armR: number, pale: boolean, xEyes: boolean, px: number, fine = true): Sprite {
+  const key = spriteKey(c, facing, frame, armL, armR, pale, xEyes, px, fine);
   let sp = sprites.get(key);
   if (sp) return sp;
   if (sprites.size >= SPRITE_LIMIT) sprites.clear();
@@ -1592,7 +1598,7 @@ function sprite(c: BotColor, facing: Dir, frame: number, armL: number, armR: num
     bob: frame < 0 ? 0 : -Math.abs(Math.cos(phase)) * 0.018,
     arms: [armL / ARM_STEPS, armR / ARM_STEPS],
   };
-  const k = kitFor(g, c, pale, xEyes);
+  const k = kitFor(g, c, pale, xEyes, fine);
   if (facing === 3) sideView(k, -1, stance);
   else if (facing === 4) sideView(k, 1, stance);
   else frontBack(k, facing === 1, stance);
@@ -1600,10 +1606,15 @@ function sprite(c: BotColor, facing: Dir, frame: number, armL: number, armR: num
   return sp;
 }
 
-/** A robot whose sprites are wanted soon, and for what: walking about, burnt (knocked out), as a ghost, or dancing as the winner. */
+/**
+ * A robot whose sprites are wanted soon, and for what: walking about, burnt (knocked out), as a ghost,
+ * dancing as the winner, or on the title screen (`stand`: facing the viewer; `wave`: the same, then raising
+ * the arm on the right of the picture in every other step, as the title screen's wave uses). The two
+ * title kinds are made without the soft rounding (`Pose.fine` false), as the title screen draws them.
+ */
 export interface Wanted {
   c: BotColor;
-  kind: 'walk' | 'burnt' | 'ghost' | 'dance';
+  kind: 'walk' | 'burnt' | 'ghost' | 'dance' | 'stand' | 'wave';
 }
 /** The arms of the ghost: a little way out from its sides. */
 export const GHOST_ARMS: [number, number] = [0.25, 0.25];
@@ -1623,9 +1634,9 @@ export function warmRobots(ctx: Ctx, s: number, wanted: Wanted[], ms: number): v
   const sig = `${px}|${wanted.map((w) => w.c.id + w.c.body + w.kind).join('|')}`;
   if (sig === warmed) return;
   const t0 = performance.now();
-  const need = (c: BotColor, facing: Dir, frame: number, armL: number, armR: number, pale: boolean, xEyes: boolean): boolean => {
-    if (sprites.has(spriteKey(c, facing, frame, armL, armR, pale, xEyes, px))) return true;
-    sprite(c, facing, frame, armL, armR, pale, xEyes, px);
+  const need = (c: BotColor, facing: Dir, frame: number, armL: number, armR: number, pale: boolean, xEyes: boolean, fine = true): boolean => {
+    if (sprites.has(spriteKey(c, facing, frame, armL, armR, pale, xEyes, px, fine))) return true;
+    sprite(c, facing, frame, armL, armR, pale, xEyes, px, fine);
     return performance.now() - t0 < ms;
   };
   const ways: Dir[] = [2, 1, 4, 3];
@@ -1638,6 +1649,9 @@ export function warmRobots(ctx: Ctx, s: number, wanted: Wanted[], ms: number): v
       for (const f of ways) for (let i = 0; i < WALK_FRAMES; i++) if (!need(w.c, f, i, 0, 0, false, false)) return;
     } else if (w.kind === 'burnt') {
       for (const f of ways) if (!need(w.c, f, -1, 0, 0, false, true)) return;
+    } else if (w.kind === 'stand' || w.kind === 'wave') {
+      if (!need(w.c, 2, -1, 0, 0, false, false, false)) return;
+      if (w.kind === 'wave') for (let i = 2; i <= ARM_STEPS; i += 2) if (!need(w.c, 2, -1, 0, i, false, false, false)) return;
     } else if (w.kind === 'ghost') {
       const a = Math.round(GHOST_ARMS[0] * ARM_STEPS);
       if (!need(w.c, 2, -1, a, a, true, false)) return;
@@ -1648,6 +1662,15 @@ export function warmRobots(ctx: Ctx, s: number, wanted: Wanted[], ms: number): v
     }
   }
   warmed = sig;
+}
+
+/**
+ * Throw away the pictures made at `px` pixels to the tile. The title screen's robots are drawn far larger
+ * than the game's, a few megabytes each, so it lets go of them when it closes.
+ */
+export function forgetSprites(px: number): void {
+  for (const key of sprites.keys()) if (key.endsWith(`|${px}`)) sprites.delete(key);
+  warmed = '';
 }
 
 /**
@@ -1725,7 +1748,7 @@ export function drawRobot(ctx: Ctx, x: number, y: number, s: number, c: BotColor
   const front = facing !== 3 && facing !== 4;
   const armL = pose.arms && front ? steps(pose.arms[0]) : 0;
   const armR = pose.arms && front ? steps(pose.arms[1]) : 0;
-  const sp = sprite(c, facing === 0 ? 2 : facing, frame, armL, armR, !!pose.pale, !!pose.xEyes, px);
+  const sp = sprite(c, facing === 0 ? 2 : facing, frame, armL, armR, !!pose.pale, !!pose.xEyes, px, pose.fine !== false);
   const jump = pose.jump ?? 0;
   const still = !pose.lean && !jump && pose.shrink === undefined && m.b === 0 && m.c === 0;
   ctx.save();

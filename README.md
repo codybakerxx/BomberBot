@@ -5,6 +5,7 @@ A top-down 2D bomber battle game for the browser, built for phones. You steer a 
 It is a personal project for playing with friends.
 
 <p align="center">
+  <img src="docs/screenshots/title.png" alt="The title screen: your robot waving, with two rivals and a lit bomb" width="230">
   <img src="docs/screenshots/menu.png" alt="The menu: pick one of nine bot colours" width="230">
   <img src="docs/screenshots/play.png" alt="A round in progress: a blast along the top row, power-ups in the open" width="230">
   <img src="docs/screenshots/match-result.png" alt="Match my thumb showing its result" width="230">
@@ -25,6 +26,7 @@ Working today:
 - A timer of 1 minute 30: when it reaches zero, blocks fall round the edge and inward for 50 seconds, leaving a 5 by 5 square in the middle to fight it out in
 - A scoreboard of four heads beside the timer that counts the rounds each player has won, with a crown for whoever is in the lead
 - A knock-out that burns the bot to ash while its ghost floats away, and a winner that jumps and dances
+- A title screen: your robot in your colour, waving, with two rivals and a lit bomb, over a stretch of arena
 - A menu that pauses the round, with tabs for the main menu and the controls
 - Keyboard controls for playing on a computer
 - Sound effects
@@ -87,7 +89,8 @@ src/
   input.ts      keyboard and touch wiring
   render.ts     all the drawing
   audio.ts      sound effects
-  main.ts       ties it together: game loop, menu, screen layout, settings
+  title.ts      the title screen's picture: your robot waving, two rivals, a lit bomb
+  main.ts       ties it together: game loop, title screen, menu, screen layout, settings
   page.html     the page's markup and styles
 tests/          automatic checks of the rules, the swipe pad, the thumb maths and the CPU players
 experiments/    simulations used to tune the controls and measure the CPU players (not part of the game)

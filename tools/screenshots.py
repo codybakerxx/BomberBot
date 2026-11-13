@@ -2,7 +2,7 @@
 Retakes the screenshots used in the documentation (docs/screenshots/).
 
 It opens the built game in a phone-sized browser window, drives it with
-simulated touches and key presses, and saves the pictures: the menu and its
+simulated touches and key presses, and saves the pictures: the title screen (upright and sideways), the menu and its
 Controls tab (on Standard, and on My thumb), the right-thumb layout, the menu
 opened mid-round, a round in progress, the Match my thumb screens, the
 sideways layout, a close-up of the power-ups, blocks falling after the
@@ -75,13 +75,20 @@ class Thumb:
             await self.page.wait_for_timeout(90)
 
 
-async def phone(browser, width, height):
+async def phone(browser, width, height, title=None):
+    """A phone-sized page with the game open. The game opens on the title screen: it is saved as `title`
+    (once the robot is waving) if given, then Play is tapped, which leads to the menu."""
     context = await browser.new_context(
         viewport={"width": width, "height": height}, device_scale_factor=2, has_touch=True, is_mobile=True
     )
     page = await context.new_page()
     await page.goto(PAGE)
     await page.wait_for_timeout(400)
+    if title:
+        await page.wait_for_timeout(1800)  # the first wave (WAVE_FIRST in src/title.ts)
+        await page.screenshot(path=str(OUT / title))
+    await page.tap("#titlePlay")
+    await page.wait_for_timeout(100)
     return context, page
 
 
@@ -92,7 +99,7 @@ async def main():
         browser = await p.chromium.launch(executable_path=chrome, args=["--no-sandbox"]) if chrome else await p.chromium.launch()
 
         # --- upright phone: menu
-        context, page = await phone(browser, 393, 740)
+        context, page = await phone(browser, 393, 740, title="title.png")
         await page.screenshot(path=str(OUT / "menu.png"))
         await page.tap("#tabControls")
         await page.wait_for_timeout(100)
@@ -168,7 +175,8 @@ async def main():
         context, page = await phone(browser, 393, 740)
         await page.tap("#tabControls")
         await page.tap("#handRight")
-        await page.tap("#menuClose")  # closes the menu and starts a round
+        await page.tap("#tabMain")
+        await page.tap("#play")
         await page.wait_for_timeout(300)
         await page.screenshot(path=str(OUT / "right-thumb.png"))
         # --- and the menu as it looks when opened in the middle of a round
@@ -178,7 +186,7 @@ async def main():
         await context.close()
 
         # --- the same game held sideways
-        context, page = await phone(browser, 844, 390)
+        context, page = await phone(browser, 844, 390, title="title-sideways.png")
         await page.tap("#play")
         await page.wait_for_timeout(300)
         await page.screenshot(path=str(OUT / "sideways.png"))
