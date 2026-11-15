@@ -439,7 +439,15 @@
   .big-name { font: 700 20px/1 var(--font-display); letter-spacing: 0.12em; text-transform: uppercase; }
   .hint { margin: 0; font: 500 13px/1.35 var(--font-body); color: var(--ink-dim); }
   .hint.center { text-align: center; }
-  .dots { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
+  .dots { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; }
+  .dot-cell { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+  .ptag { min-width: 26px; padding: 2px 4px; text-align: center; font: 700 10px/1.2 var(--font-display); letter-spacing: 0.04em; color: var(--ink); background: #1d2338; border-radius: 5px; }
+  .ptag:empty { visibility: hidden; }
+  .ptag.me { color: #14100a; background: var(--accent); }
+  .ptag.pop { animation: ptag-pop 420ms cubic-bezier(.2, 1.6, .4, 1); }
+  @keyframes ptag-pop { 0% { transform: scale(0.3); } 60% { transform: scale(1.45); } 100% { transform: scale(1); } }
+  .go.ok { flex: 0 0 auto; align-self: stretch; padding: 13px 12px; font-size: 16px; }
+  .go.ok:disabled { opacity: 1; color: var(--accent); background: transparent; border: 1.5px solid rgba(255, 197, 106, 0.45); }
   .dot { width: 30px; height: 30px; border-radius: 50%; padding: 0; cursor: pointer; background: var(--c); border: 3px solid var(--void); box-shadow: 0 0 0 1px var(--line); }
   .dot[aria-pressed="true"] { border-color: #fff; box-shadow: 0 0 0 2px var(--c), 0 0 12px var(--c); }
   .dot:disabled { opacity: 0.2; cursor: default; }
@@ -685,8 +693,10 @@
             <button class="round-btn" id="colNext" type="button" aria-label="Next colour"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg></button>
           </div>
           <div class="big-name" id="youName"></div>
-          <div class="dots" id="youDots" role="group" aria-label="Your colour"></div>
-          <p class="hint center">Tap the arrows or a colour, or swipe across your robot. Colours a CPU wears are greyed out.</p>
+          <p class="hint center" id="youState" aria-live="polite"></p>
+          <div class="dots" id="youDots" role="group" aria-label="Colours: under each, the player who wears it"></div>
+          <button class="go ok" id="colOk" type="button">OK</button>
+          <p class="hint center">Pick a colour with the arrows, a dot or a swipe across your robot, then OK (or double-tap the dot). If a CPU wears it, the CPU takes your old colour. Online, each player will OK their own colour, and can change it until the match starts.</p>
         </div>
         <div class="sec-head"><span>Players</span><span id="playerCount"></span></div>
         <div class="slots" id="slots"></div>

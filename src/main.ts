@@ -557,7 +557,7 @@ function tick(): void {
   } else if (!world.over && !overShown && !me.alive && me.deadTicks >= DEATH_TICKS) {
     // You are out and the others are still at it. The round carries on behind this panel, and its
     // winner still gets the win; Next round does not wait for it.
-    finish(crushed ? 'You got crushed' : 'You got blasted', `${how} The others are still fighting.`);
+    finish(crushed ? 'You got crushed' : 'You got blasted', `${how} The others are still fighting. Next round gives this round to one of them at random.`);
   }
 }
 
@@ -1062,8 +1062,31 @@ $('pauseLobby').addEventListener('click', () =>
     if (yes) showLobby();
   }),
 );
+/**
+ * Next round while you are out and the CPU players are still fighting: the round is not left without a
+ * winner. One of the CPU players still in gets it, at random, and a point on the scoreboard (the owner's
+ * call: solo against CPU players only; online, the round will be played out). Returns false if that point
+ * has won it the match, so the result of the match is shown instead of a new round.
+ */
+function settleUnfinished(): boolean {
+  if (counted || world.over) return true;
+  const still = world.players.filter((p) => p.id > 0 && p.alive);
+  if (!still.length) return true; // everyone is out: a draw, no point
+  const w = still[Math.floor(Math.random() * still.length)].id;
+  counted = true;
+  wins[w]++;
+  if (leader < 0 || wins[w] > wins[leader]) leader = w;
+  if (wins[w] < setup.firstTo) return true;
+  matchWinner = w;
+  scoreKey = '';
+  finish(`${nameOf(w)} wins the match`, `First to ${setup.firstTo}. Final score ${scoreLine()}. You were out, so the last round went to ${nameOf(w)}, picked at random from the CPU players still in.`);
+  return false;
+}
 // the result panel: Next round and Menu while the match goes on; Rematch and Lobby once it is won
-$('again').addEventListener('click', () => (matchWinner >= 0 ? newMatch() : start()));
+$('again').addEventListener('click', () => {
+  if (matchWinner >= 0) newMatch();
+  else if (settleUnfinished()) start();
+});
 $('change').addEventListener('click', () => (matchWinner >= 0 ? showLobby() : openPause()));
 
 // ------------------------------------------------ Settings

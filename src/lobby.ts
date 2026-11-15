@@ -2,8 +2,10 @@
  * The lobby: where a match is set up before it starts. Two pages, with Start always in the middle of the
  * bottom bar and the other page's name beside it:
  *
- * - Players: your robot (‹ › arrows, a dot for each colour, or a swipe across it), then a card for each
- *   player. Tap a CPU player's card for its panel: its colour, its level, and Remove. An empty card adds a
+ * - Players: your robot (‹ › arrows, a dot for each colour, or a swipe across it) and OK, then a card for
+ *   each player. Browsing shows a colour on your robot; OK makes it yours, and a P1 tag pops up under its
+ *   dot (P2 to P4 sit under the CPU players' colours). If a CPU player wears the colour you take, it takes
+ *   the one you had. Start with a colour picked but not OK'd asks which you mean. Tap a CPU player's card for its panel: its colour, its level, and Remove. An empty card adds a
  *   CPU player. "All CPUs" sets every CPU player's level at once.
  * - Match: the arena (‹ ›, dots or a swipe; the picture is the real arena, drawn with the bricks the rules
  *   ask for), then the rules, which the host sets: the round timer and how fast the blocks close in, rounds
@@ -68,6 +70,13 @@ export function createLobby(host: LobbyHost): {
   redraw(): void;
 } {
   let page: LobbyPage = 'players';
+  /**
+   * The colour shown on your robot while browsing. It is only yours (`host.myColor`) once OK is pressed.
+   * Online, every player will pick and OK their own the same way, and can pick and OK again until the start.
+   */
+  let pick = host.myColor;
+  /** set by OK, so the next redraw makes the P1 tag pop up */
+  let popMine = false;
   /** the CPU player whose panel is open, or -1 */
   let editing = -1;
   const s = (): MatchSetup => host.setup;
@@ -83,19 +92,23 @@ export function createLobby(host: LobbyHost): {
     const used = new Set([host.myColor, ...s().cpus.filter((_, i) => i !== except).map((c) => c.colorId)]);
     return COLORS.map((c) => c.id).filter((id) => !used.has(id));
   }
-  function setMine(id: string): void {
-    if (s().cpus.some((c) => c.colorId === id)) return; // worn by a CPU player
-    host.myColor = id;
-    changed();
+  /** Show a colour on your robot (not yours until OK). Any colour, a CPU player's included. */
+  function setPick(id: string): void {
+    pick = id;
+    refresh();
   }
   function stepMine(d: number): void {
     const ids = COLORS.map((c) => c.id);
-    let i = ids.indexOf(host.myColor);
-    for (let n = 0; n < ids.length; n++) {
-      i = (i + d + ids.length) % ids.length;
-      if (!s().cpus.some((c) => c.colorId === ids[i])) break;
-    }
-    setMine(ids[i]);
+    setPick(ids[(ids.indexOf(pick) + d + ids.length) % ids.length]);
+  }
+  /** OK: the colour on your robot becomes yours. A CPU player wearing it takes the colour you had. */
+  function confirmPick(): void {
+    if (pick === host.myColor) return;
+    const old = host.myColor;
+    for (const c of s().cpus) if (c.colorId === pick) c.colorId = old;
+    host.myColor = pick;
+    popMine = true;
+    changed();
   }
   function addCpu(): void {
     if (s().cpus.length >= MAX_CPUS) return;
@@ -117,14 +130,23 @@ export function createLobby(host: LobbyHost): {
   swipeable($('youBot'), stepMine);
   const dots = $('youDots');
   for (const c of COLORS) {
+    // a dot, with a tag under it saying which player wears that colour (P1 is you)
+    const cell = document.createElement('div');
+    cell.className = 'dot-cell';
     const b = document.createElement('button');
     b.type = 'button';
     b.className = 'dot';
     b.id = `dot-${c.id}`;
     b.style.setProperty('--c', c.body);
-    b.addEventListener('click', () => setMine(c.id));
-    dots.append(b);
+    b.addEventListener('click', () => setPick(c.id));
+    b.addEventListener('dblclick', () => confirmPick()); // a double tap is a quick OK
+    const tag = document.createElement('span');
+    tag.className = 'ptag';
+    tag.id = `ptag-${c.id}`;
+    cell.append(b, tag);
+    dots.append(cell);
   }
+  $('colOk').addEventListener('click', confirmPick);
 
   const allCpus: Opt[] = [
     choice({
@@ -173,7 +195,7 @@ export function createLobby(host: LobbyHost): {
     me.setAttribute('aria-label', `You, ${colorById(host.myColor).name}`);
     const mc = document.createElement('canvas');
     const mt = document.createElement('div');
-    mt.innerHTML = `<b>You</b><small>${colorById(host.myColor).name} · player 1</small>`;
+    mt.innerHTML = `<b>You · P1</b><small>${colorById(host.myColor).name}</small>`;
     me.append(mc, mt);
     box.append(me);
     const cvs: [HTMLCanvasElement, string][] = [[mc, host.myColor]];
@@ -185,7 +207,7 @@ export function createLobby(host: LobbyHost): {
       b.setAttribute('aria-label', `CPU ${i + 1}, ${colorById(c.colorId).name}, ${LEVELS[c.level].label}. Tap to change.`);
       const cv = document.createElement('canvas');
       const t = document.createElement('div');
-      t.innerHTML = `<b>CPU ${i + 1}</b><small>${LEVELS[c.level].label} · ${colorById(c.colorId).name}</small>`;
+      t.innerHTML = `<b>CPU ${i + 1} · P${i + 2}</b><small>${LEVELS[c.level].label} · ${colorById(c.colorId).name}</small>`;
       const edit = document.createElement('span');
       edit.className = 'edit';
       edit.textContent = 'Edit';
@@ -440,21 +462,51 @@ export function createLobby(host: LobbyHost): {
   $('lobbySettings').addEventListener('click', () => host.settings());
   $('lobbyStart').addEventListener('click', () => {
     if (problem(s())) return;
-    host.start();
+    if (pick === host.myColor) {
+      host.start();
+      return;
+    }
+    // a colour picked but not OK'd: ask which is meant rather than guess
+    const want = colorById(pick).name;
+    confirmFirst(`Play as ${want}?`, `${want} is on your robot, but you have not pressed OK, so you are still ${colorById(host.myColor).name}.`, `Play as ${want}`, (yes) => {
+      if (!yes) return;
+      confirmPick();
+      host.start();
+    });
   });
 
   function refresh(): void {
-    const me = colorById(host.myColor);
-    // your robot and the dots
-    drawBotOn($<HTMLCanvasElement>('youBot'), host.myColor, 0.95);
-    $('youBot').setAttribute('aria-label', `Your robot, in ${me.name}`);
-    $('youName').textContent = me.name;
+    const shown = colorById(pick);
+    const mine = pick === host.myColor;
+    const wearer = s().cpus.findIndex((x) => x.colorId === pick);
+    // your robot, in the colour being looked at, and the dots with who wears each colour under them
+    drawBotOn($<HTMLCanvasElement>('youBot'), pick, 0.95);
+    $('youBot').setAttribute('aria-label', `Your robot, in ${shown.name}${mine ? '' : ' (not yours until you press OK)'}`);
+    $('youName').textContent = shown.name;
+    $('youState').textContent = mine
+      ? 'P1 · your colour'
+      : wearer >= 0
+        ? `P${wearer + 2} wears it now. OK to take it: CPU ${wearer + 1} gets ${colorById(host.myColor).name}.`
+        : `Not yours yet: press OK to take it.`;
+    const ok = $<HTMLButtonElement>('colOk');
+    ok.disabled = mine;
+    ok.textContent = mine ? `✓ ${shown.name} is yours` : `OK: play as ${shown.name}`;
     for (const c of COLORS) {
       const b = $<HTMLButtonElement>(`dot-${c.id}`);
       const cpu = s().cpus.findIndex((x) => x.colorId === c.id);
-      b.disabled = cpu >= 0;
-      b.setAttribute('aria-pressed', String(c.id === host.myColor));
-      b.setAttribute('aria-label', cpu >= 0 ? `${c.name}, worn by CPU ${cpu + 1}` : c.id === host.myColor ? `${c.name}, yours` : c.name);
+      const tag = $(`ptag-${c.id}`);
+      const isMe = c.id === host.myColor;
+      tag.textContent = isMe ? 'P1' : cpu >= 0 ? `P${cpu + 2}` : '';
+      tag.classList.toggle('me', isMe);
+      b.setAttribute('aria-pressed', String(c.id === pick));
+      b.setAttribute('aria-label', `${c.name}${isMe ? ', yours (P1)' : cpu >= 0 ? `, worn by CPU ${cpu + 1} (P${cpu + 2})` : ''}`);
+    }
+    if (popMine) {
+      popMine = false;
+      const tag = $(`ptag-${host.myColor}`);
+      tag.classList.remove('pop');
+      void tag.offsetWidth; // so the animation starts again
+      tag.classList.add('pop');
     }
     buildSlots();
     refreshAll();
@@ -476,6 +528,7 @@ export function createLobby(host: LobbyHost): {
 
   return {
     show(p?: LobbyPage): void {
+      pick = host.myColor;
       $('lobby').hidden = false;
       setPage(p ?? page);
       $('lobbyStart').focus({ preventScroll: true });
