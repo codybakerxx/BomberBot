@@ -644,7 +644,6 @@ export function createLobby(host: LobbyHost): {
       return;
     }
     // not everyone is ready: ask rather than guess
-    const want = botName(colorById(pick));
     const go = (yes: boolean): void => {
       if (!yes) return;
       if (!ready) readyUp();
@@ -652,13 +651,13 @@ export function createLobby(host: LobbyHost): {
       host.start();
     };
     if (!others.length) {
-      confirmFirst(`Ready as ${want}?`, `You have not pressed Ready on the Players page. Everyone must be ready to start.`, 'Ready & Start', go); // the owner's wording: short, the name is in the question
+      confirmFirst('Are you ready?', `You have not pressed Ready on the Players page. Everyone must be ready to start.`, 'Ready & Start', go); // the owner's wording: short, with no robot names
       return;
     }
     const names = [...(ready ? [] : ['You']), ...others.map((g) => `P${guests().indexOf(g) + 2}`)];
     const list = names.length === 1 ? names[0] : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
     confirmFirst(
-      'Not everyone is ready',
+      'Are you ready?',
       `${list} ${names.length === 1 && names[0] !== 'You' ? 'has' : 'have'} not pressed Ready. They play as the robots showing now.`,
       'Ready & Start',
       go,
