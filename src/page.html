@@ -427,6 +427,7 @@
     #lobby .pages-row { height: 0; border: 0; overflow: hidden; visibility: hidden; }
   }
   .foot { flex: 0 0 auto; display: grid; grid-template-columns: 108px minmax(0, 1fr) 108px; align-items: center; gap: 8px; padding: 6px 12px 12px; max-width: 560px; width: 100%; margin: 0 auto; }
+  .foot[hidden] { display: none; }
   .foot.one { grid-template-columns: minmax(0, 1fr); max-width: 420px; }
   .foot-note { flex: 0 0 auto; margin: 0 14px; text-align: center; font: 500 13px/1.3 var(--font-body); color: #ff9a9a; min-height: 0; }
   .foot-note:empty { display: none; }
@@ -732,7 +733,7 @@
   <button id="btnA" class="tbtn" type="button" aria-label="A button, drop bomb">A</button>
 </div>
 
-<!-- The lobby: two pages, Players and Match, with one slim button in the bottom bar (Match › or Start).
+<!-- The lobby: two pages, Players and Match, with one slim Start in the bottom bar on the Match page (none on the Players page).
      main.ts and lobby.ts fill it in. On a wide screen both pages show side by side. -->
 <div id="lobby" class="screen" hidden>
   <header class="bar">
@@ -799,7 +800,7 @@
   <div class="undo" id="undoBar" role="status" hidden><span id="undoText"></span><button class="mini" id="undoBtn" type="button">Undo</button></div>
   <p class="foot-note" id="startNote" role="status"></p>
   <footer class="foot one">
-    <button id="lobbyStart" class="go big" type="button">Start</button>
+    <button id="lobbyStart" class="go big" type="button" data-pad="≡">Start</button>
   </footer>
 </div>
 

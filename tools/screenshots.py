@@ -76,11 +76,11 @@ class Thumb:
 
 
 async def start_round(page):
-    """From the lobby (as a fresh visit leaves it, on the Players page): Ready, Match ›, then Start."""
+    """From the lobby (as a fresh visit leaves it, on the Players page): Ready, Next ›, then Start."""
     if await page.evaluate("document.getElementById('lobbyMatch').hidden"):
-        if not await page.evaluate("document.getElementById('colOk').disabled"):
+        if await page.evaluate("document.getElementById('colOk').textContent") != "Next ›":
             await page.tap("#colOk")  # Ready
-        await page.tap("#lobbyStart")  # Match ›
+        await page.tap("#colOk")  # Next ›
     await page.tap("#lobbyStart")
     if await page.evaluate("!document.getElementById('confirm').hidden"):
         await page.tap("#confirmYes")
@@ -119,7 +119,7 @@ async def main():
         await page.tap("#colOk")
         await page.wait_for_timeout(500)
         await page.screenshot(path=str(OUT / "lobby-ready.png"))
-        await page.tap("#lobbyStart")  # Match ›
+        await page.tap("#colOk")  # Next ›
         await page.wait_for_timeout(100)
         await page.screenshot(path=str(OUT / "lobby-match.png"))
         await page.tap("#lobbyPrev")

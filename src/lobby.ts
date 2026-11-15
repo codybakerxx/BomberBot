@@ -624,15 +624,9 @@ export function createLobby(host: LobbyHost): {
   $('lobbyBack').addEventListener('click', () => host.back());
   $('lobbySound').addEventListener('click', () => host.settings('sound'));
   $('lobbySettings').addEventListener('click', () => host.settings());
-  // The main button: on the Players page it goes on to the Match page (the owner's call: a match cannot be
-  // started from the Players page). On the Match page, or a wide screen showing both, it starts the match.
-  $('lobbyStart').addEventListener('click', () => {
-    if (page === 'players' && !wide()) {
-      setPage('match');
-      return;
-    }
-    tryStart();
-  });
+  // The main button, Start: on the Match page, or a wide screen showing both. The Players page has no bottom
+  // bar at all (the owner's ask): its ways on are Next › (Ready, once pressed), the Match page name, and RB or E.
+  $('lobbyStart').addEventListener('click', tryStart);
   // a second Start right under the arena picture, close to hand (the owner's ask); the same as the one in the bar
   $('arenaStart').addEventListener('click', tryStart);
   /** The other players here who have not pressed Ready (with the robot they are showing). */
@@ -783,17 +777,13 @@ export function createLobby(host: LobbyHost): {
     refreshRules();
     // the summary at the top, and whether Start can be pressed
     $('lobbySummary').textContent = summary(s(), G);
-    // the main button: Match › on the Players page, Start on the Match page (or a wide screen)
+    // the main button: Start on the Match page (or a wide screen); none on the Players page
     const go = $<HTMLButtonElement>('lobbyStart');
     const toMatch = page === 'players' && !wide();
-    go.textContent = toMatch ? 'Match ›' : 'Start';
-    // its hint: RB (or E) turns to the Match page; ≡ starts
-    go.dataset.pad = toMatch ? 'RB' : '≡';
-    if (toMatch) go.dataset.key = 'E';
-    else delete go.dataset.key;
-    go.setAttribute('aria-label', toMatch ? 'Go on to the Match page' : 'Start the match');
+    go.parentElement!.hidden = toMatch;
+    go.dataset.pad = '≡'; // its hint
     const why = problem(s(), G);
-    go.disabled = !toMatch && !!why;
+    go.disabled = !!why;
     ($('arenaStart') as HTMLButtonElement).disabled = !!why;
     const note = $('startNote');
     const late = waiting().map((g) => `P${guests().indexOf(g) + 2}`);
@@ -820,7 +810,7 @@ export function createLobby(host: LobbyHost): {
       nameBox.hidden = true;
       $('youName').hidden = false;
       setPage(p ?? page);
-      $('lobbyStart').focus({ preventScroll: true });
+      $(page === 'players' && !wide() ? 'colOk' : 'lobbyStart').focus({ preventScroll: true });
     },
     hide(): void {
       hideUndo();
