@@ -577,7 +577,7 @@ export function createLobby(host: LobbyHost): {
             : 'Not yours yet: Ready takes it.';
     const ok = $<HTMLButtonElement>('colOk');
     ok.disabled = mine && ready;
-    ok.textContent = mine && ready ? '✓ Ready' : mine ? 'Ready' : `Ready as ${botName(shown)}`;
+    ok.textContent = mine && ready ? '✓ Ready' : 'Ready'; // just Ready (the owner's wording): the robot's name is right above it
     for (const c of COLORS) {
       const b = $<HTMLButtonElement>(`dot-${c.id}`);
       const cpu = s().cpus.findIndex((x) => x.colorId === c.id);
