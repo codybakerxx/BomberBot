@@ -240,6 +240,21 @@ export interface WorldConfig {
   roundTicks?: number;
   /** see World.stepAssist. Default false. */
   stepAssist?: boolean;
+  /**
+   * How long the falling blocks take to close in once the timer reaches 0, in ticks. Default SHRINK_TICKS
+   * (50 seconds). The lobby's "Closing in" setting.
+   */
+  shrinkTicks?: number;
+  /**
+   * The chance that a brick hides each kind of power-up, in place of ITEM_CHANCE (same kinds; a kind left
+   * out never appears). The lobby's power-up settings. A kind set to 0 never appears, and the kick and
+   * grab power-ups are only made sure of when their chance is above 0. The chances must add up to 1 or less.
+   */
+  itemChance?: [ItemKind, number][];
+  /** What every player starts the round with: bombs (1 to MAX_BOMBS, default 1), blast length (START_FIRE to MAX_FIRE), speed power-ups (0 to MAX_SPEED_ITEMS). */
+  startBombs?: number;
+  startFire?: number;
+  startSpeed?: number;
 }
 
 // ---------------------------------------------------------------- constants
@@ -333,6 +348,7 @@ export function createWorld(cfg: WorldConfig): World {
   }
 
   const hidden = new Map<number, ItemKind>();
+  const chances = cfg.itemChance ?? ITEM_CHANCE;
   const density = cfg.softDensity ?? 0.78;
   for (let y = 0; y < h; y++) {
     for (let x = 0; x < w; x++) {
@@ -342,9 +358,9 @@ export function createWorld(cfg: WorldConfig): World {
       if (border || pillar) tiles[i] = HARD;
       else if (!safe.has(i) && rng() < density) {
         tiles[i] = SOFT;
-        // one random number per brick decides what, if anything, it hides (ITEM_CHANCE)
+        // one random number per brick decides what, if anything, it hides (ITEM_CHANCE, or the lobby's mix)
         let r = rng();
-        for (const [kind, chance] of ITEM_CHANCE) {
+        for (const [kind, chance] of chances) {
           if (r < chance) {
             hidden.set(i, kind);
             break;
@@ -354,8 +370,9 @@ export function createWorld(cfg: WorldConfig): World {
       }
     }
   }
-  // every arena has at least one kick and one grab power-up somewhere
+  // every arena has at least one kick and one grab power-up somewhere (unless the lobby has switched them off)
   for (const kind of ['kick', 'grab'] as const) {
+    if (!chances.some(([k, c]) => k === kind && c > 0)) continue;
     if ([...hidden.values()].includes(kind)) continue;
     const empty: number[] = [];
     for (let i = 0; i < tiles.length; i++) if (tiles[i] === SOFT && !hidden.has(i)) empty.push(i);
@@ -363,6 +380,11 @@ export function createWorld(cfg: WorldConfig): World {
   }
 
   const roundTicks = Math.max(0, Math.floor(cfg.roundTicks ?? ROUND_TICKS));
+  const within = (v: number | undefined, lo: number, hi: number, dflt: number): number =>
+    v === undefined || !Number.isFinite(v) ? dflt : Math.max(lo, Math.min(hi, Math.round(v)));
+  const startBombs = within(cfg.startBombs, 1, MAX_BOMBS, 1);
+  const startFire = within(cfg.startFire, START_FIRE, MAX_FIRE, START_FIRE);
+  const startSpeed = within(cfg.startSpeed, 0, MAX_SPEED_ITEMS, 0);
   const players: Player[] = cfg.players.map((p, id) => ({
     id,
     colorId: p.colorId,
@@ -378,9 +400,9 @@ export function createWorld(cfg: WorldConfig): World {
     askTicks: 0,
     alive: true,
     deadTicks: 0,
-    bombsMax: 1,
-    fire: START_FIRE,
-    speed: 0,
+    bombsMax: startBombs,
+    fire: startFire,
+    speed: startSpeed,
     activeBombs: 0,
     canKick: false,
     canGrab: false,
@@ -404,7 +426,7 @@ export function createWorld(cfg: WorldConfig): World {
     items: [],
     tick: 0,
     roundTicks,
-    shrinkTicks: SHRINK_TICKS,
+    shrinkTicks: Math.max(FALL_TICKS * 2, Math.floor(cfg.shrinkTicks ?? SHRINK_TICKS)),
     shrinkOrder: roundTicks > 0 ? spiral(w, h).filter((i) => tiles[i] !== HARD && !keptOpen(w, h, i)) : [],
     shrinkNext: 0,
     falling: [],

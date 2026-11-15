@@ -31,6 +31,8 @@ import {
   keptOpen,
   TICK_HZ,
   ITEM_CHANCE,
+  MAX_BOMBS,
+  ItemKind,
   SHIELD_TICKS,
   SHIELD_GRACE_TICKS,
   CURSE_TICKS,
@@ -1108,4 +1110,48 @@ for (let seed = 1; seed <= 40; seed++) {
   assert.equal(w.tiles.filter((tile) => tile === HARD).length, solid, 'no blocks fall after the round is decided');
   assert.ok(b.alive);
   assert.deepEqual(w.over, { winner: 1 }, 'and the result stands');
+}
+
+// 21. the lobby's match options: starting power, the power-up mix, how fast the blocks close in
+{
+  const players = [{ colorId: 'a' }, { colorId: 'b' }];
+  // what every player starts with
+  const w = createWorld({ seed: 3, players, startBombs: 3, startFire: 4, startSpeed: 2 });
+  for (const p of w.players) {
+    assert.equal(p.bombsMax, 3, 'starting bombs');
+    assert.equal(p.fire, 4, 'starting blast length');
+    assert.equal(p.speed, 2, 'starting speed power-ups');
+  }
+  // out of range is held to the limits, and left out is the usual start
+  const lim = createWorld({ seed: 3, players, startBombs: 99, startFire: 0, startSpeed: -4 });
+  assert.equal(lim.players[0].bombsMax, MAX_BOMBS);
+  assert.equal(lim.players[0].fire, START_FIRE);
+  assert.equal(lim.players[0].speed, 0);
+  const plain = createWorld({ seed: 3, players });
+  assert.equal(plain.players[0].bombsMax, 1);
+  assert.equal(plain.players[0].fire, START_FIRE);
+  assert.equal(plain.players[0].speed, 0);
+  // the power-up mix: kinds set to 0 never appear, and kick and grab are not forced in when switched off
+  for (let seed = 1; seed <= 30; seed++) {
+    const only = createWorld({ seed, players, itemChance: [['bomb', 0.3], ['fire', 0], ['speed', 0], ['kick', 0], ['grab', 0], ['shield', 0], ['curse', 0]] });
+    const kinds = new Set(only.hidden.values());
+    assert.ok([...kinds].every((k) => k === 'bomb'), `seed ${seed}: only bomb power-ups`);
+    const none = createWorld({ seed, players, itemChance: [] });
+    assert.equal(none.hidden.size, 0, 'power-ups switched off: none at all');
+  }
+  // the same seed and options always make the same arena
+  const opts = { seed: 11, players, itemChance: [['bomb', 0.2], ['shield', 0.2]] as [ItemKind, number][], softDensity: 0.6 };
+  assert.deepEqual([...createWorld(opts).hidden], [...createWorld(opts).hidden]);
+  // how fast the blocks close in
+  assert.equal(createWorld({ seed: 1, players, shrinkTicks: 30 * TICK_HZ }).shrinkTicks, 30 * TICK_HZ);
+  assert.equal(createWorld({ seed: 1, players }).shrinkTicks, SHRINK_TICKS);
+  // other arena sizes: spawns in the corners, a falling order that covers the edge, the middle kept open
+  for (const [cols, rows] of [[11, 9], [15, 13]]) {
+    const big = createWorld({ seed: 5, players: [{ colorId: 'a' }, { colorId: 'b' }, { colorId: 'c' }, { colorId: 'd' }], cols, rows });
+    assert.equal(big.w, cols + 2);
+    assert.equal(big.h, rows + 2);
+    assert.deepEqual(big.players.map((p) => [p.x, p.y]), [[1, 1], [cols, rows], [cols, 1], [1, rows]]);
+    assert.ok(big.shrinkOrder.length > 0);
+    assert.ok(big.shrinkOrder.every((i) => !keptOpen(big.w, big.h, i)));
+  }
 }

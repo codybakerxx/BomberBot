@@ -8,11 +8,11 @@ The game runs at a fixed 60 ticks a second. Times below are given in seconds wit
 
 *`createWorld` in sim.ts*
 
-- The arena is 15 tiles wide and 13 tall. The outer ring is wall, leaving 13 by 11 to play in.
+- The usual arena (Classic) is 15 tiles wide and 13 tall. The outer ring is wall, leaving 13 by 11 to play in. The lobby also offers Compact (11 by 9 to play in) and Big (15 by 13): the same build in other sizes.
 - **Solid blocks** never break. They are the outer wall plus a pillar on every second tile in both directions. The pillars turn the arena into a grid of lanes.
-- **Bricks** can be blasted away. At the start each open tile has a 78% chance of holding a brick.
+- **Bricks** can be blasted away. At the start each open tile has a 78% chance of holding a brick. The lobby's Bricks setting changes that: Few 50%, Some 65%, Normal 78%, Lots 86%, Packed 93%.
 - Each player's starting tile and the tiles next to it are always left clear, so nobody starts boxed in.
-- Up to four players start in the corners, in this order: top-left, bottom-right, top-right, bottom-left. You are always top-left.
+- Two to four players (you and one to three CPU players, as the lobby says) start in the corners, in this order: top-left, bottom-right, top-right, bottom-left. You are always top-left.
 - The layout comes from a seed number. The same seed always builds the same arena. The game picks a new random seed for every round.
 
 ## Moving
@@ -195,7 +195,7 @@ The blocks were made 20% faster on 11 November 2026, after play-testing: they to
 - The result is declared three quarters of a second later (45 ticks). That pause lets a blast that catches the last two together count as a **draw**.
 - If a block knocks out the only robot left, that robot still wins: it outlasted the others. If the last robots are under the *same* block, it is a draw.
 - Once a round is decided, nothing more can happen to the winner, no more blocks start to fall, and nobody moves.
-- The three other bots are CPU players. Be the last one in and the round is won.
+- The other bots are CPU players, each at the level the lobby gave it. Be the last one in and the round is won.
 
 ### The scoreboard and the end of a round
 
@@ -205,9 +205,9 @@ The blocks were made 20% faster on 11 November 2026, after play-testing: they to
 - **The player in the lead wears a crown**, sitting crooked on its head, on the scoreboard and on its robot in the arena. Nobody has it until someone wins a round. It changes hands only when another player gets ahead: drawing level with the leader does not take it.
 - A player knocked out of the round in play is dimmed, with crosses for eyes. A place with no player in it (when fewer than four are playing) is a grey head with no number.
 - **Winning a round adds one** to the winner's number, which is shown in the winner's colour until the next round starts. A draw adds nothing.
-- The numbers count up for as long as the game stays open. How many rounds make a match will be a setting later; for now there is no end to it.
+- **The match**: the first to win the number of rounds set in the lobby (Rounds to win, 1 to 9; 3 unless changed) wins the match. The panel then says who won the match and the final score, and offers Rematch (the score back to 0) or Lobby. The score is not kept once you leave a match for the lobby.
 - **When you are knocked out** a panel says how (whose blast caught you, or that a block did) and that the others are still fighting. The round carries on, and its winner still gets the win. **Next round** does not wait for it.
-- **When the round is decided** the panel says who won: *You win*, *Pink wins*, or *Draw*.
+- **When the round is decided** the panel says who won: *You win the round* (with how many more you need for the match), *Pink wins the round*, or *Draw*.
 - The panel never covers the arena. Upright it lies over the controls; sideways it is in the column beside the arena.
 
 ### Knocked out, and winning
@@ -257,6 +257,22 @@ All of these are named constants near the top of `src/sim.ts`. Changing one chan
 
 Starting values for every player are set in `createWorld`: 1 bomb, a blast 1 tile long, no speed power-ups, no boot, no glove, no shield, no curse. The arena size (13 by 11) and the brick chance (78%) are defaults there too.
 
+## Set in the lobby
+
+*`MatchSetup` and `worldConfig` in setup.ts; `WorldConfig` in sim.ts*
+
+The host can change these before a match. Left alone, every one is the usual rule described above.
+
+| Setting | Choices | What it changes |
+|---|---|---|
+| Arena | Compact 11×9, Classic 13×11, Big 15×13 | The size of the arena (`cols`, `rows`) |
+| Round timer | On or off; 0:30 to 5:00 in steps of 15 seconds | `roundTicks`. Off: no timer and no falling blocks; a round lasts until one robot is left |
+| Closing in | Slow 75 s, Normal 50 s, Fast 32 s | How long the falling blocks take (`shrinkTicks`) |
+| Rounds to win | 1 to 9 | The match ends when someone reaches it |
+| Bricks | Few, Some, Normal, Lots, Packed | `softDensity` (see The arena) |
+| Custom start | Bombs 1 to 8, blast 1 to 8 tiles, speed +0 to +6 | What everyone starts each round with (`startBombs`, `startFire`, `startSpeed`) |
+| Custom power-ups | For each kind: Off, Rare (half), Normal, Lots (double) | Its chance under a brick (`itemChance`). A boot and a glove are only made sure of when they are not Off |
+
 ## Not in the game yet
 
-A choice of round length, teams, playing online, more arenas, and setting bombs off by remote. See [ROADMAP.md](ROADMAP.md).
+Teams, more than four players, playing online, more arenas, and setting bombs off by remote. See [ROADMAP.md](ROADMAP.md).

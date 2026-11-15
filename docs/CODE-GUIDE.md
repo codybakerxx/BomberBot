@@ -14,7 +14,7 @@ flowchart LR
   S -- "events" --> A["audio.ts<br>play sounds"]
   S -- "the world" --> B["bot.ts<br>CPU players"]
   B -- "direction, A, B" --> S
-  M["main.ts<br>runs the loop, the title screen, the menu and the screen layout"] -.-> I
+  M["main.ts<br>runs the loop, the title screen, Settings, the menu and the screen layout"] -.-> I
   M -.-> S
   M -.-> R
   M -.-> A
@@ -109,7 +109,7 @@ How one robot is drawn: from the front, the back and each side, standing, walkin
 
 | Name | What it is |
 |---|---|
-| `drawRobot` | Draws one robot, in any colour, facing any of four ways, mid-stride or still. The menu uses it too. |
+| `drawRobot` | Draws one robot, in any colour, facing any of four ways, mid-stride or still. The lobby uses it too. |
 | `drawHead` | A robot's helmet on its own, for the scoreboard, with the crown if asked |
 | `Pose` | Ways to draw a robot other than standing or walking: jumping, arms up, leaning, crosses for eyes, a ghost, a crown, shrinking; `fine: false` leaves out the soft rounding however large it is drawn (the title screen) |
 | `ROBOT` | Where the robot's head, top and shoulders are, in tiles, and how big it is next to the size its wings and halo were first drawn for (`scale`): for whatever is drawn round one (crown, halo, wings, shield ring, a carried bomb) |
@@ -119,6 +119,18 @@ How one robot is drawn: from the front, the back and each side, standing, walkin
 **Sprites.** Drawing one robot takes a few hundred canvas calls, which is too many to make for four robots sixty times a second on a phone. So each robot is drawn once into a small picture of its own (a sprite) for each way it can look: colour, direction, one of 8 steps of the walk, how far each arm is raised. After that, drawing it is a single `drawImage`. Making a sprite takes a few thousandths of a second, so `warmSprites` in `render.ts` (called once a frame from `main.ts`) makes the ones a round will need a few at a time, before they are needed. A change of screen size makes new ones; when there are more than 700 they are all thrown away and made again as wanted.
 
 **Two levels of finish.** Every piece is lit, shaded, given a reflection and a highlight, and throws a shadow on the piece below. On a drawing with a robot over 500 pixels tall (artwork from `tools/portraits.py`) each piece is also rounded by soft shadow and light inside its edges. At playing size that would be less than a pixel, so it is left out. The soft version uses a canvas shadow to blur (`softly`), because the canvas blur filter is missing on iPhones; it has only been tried in Chrome. The title screen's robots are that large on a phone, so it draws them with `fine: false` until the soft version has been tried on an iPhone.
+
+### `src/setup.ts`: what the lobby and Settings choose
+
+`MatchSetup` is the match the host sets up in the lobby: the CPU players (each `{ colorId, level }`, up to `MAX_CPUS` 3), the arena (`ARENAS`: Compact 11 by 9, Classic 13 by 11, Big 15 by 13), and the rules (round timer and length, how fast the blocks close in (`CLOSE_IN`), rounds to win, bricks (`BRICKS`), a custom start, a custom power-up mix (`ITEM_AMOUNTS` times each usual chance)). `worldConfig` turns it into the config `createWorld` takes; `summary` is the one line the lobby and the menu show; `problem` says why a setup cannot start (no CPU player). `Prefs` is a player's own settings: sound on, volume, sounds switched off, sharpness (`SHARPNESS`), ghosts, less movement, how strongly the touch controls show. `readSetup` and `readPrefs` read what was saved and ignore anything that does not look right. Saved under `matchSetup` and `prefs`.
+
+### `src/lobby.ts`: the lobby
+
+`createLobby(host)` wires up the lobby's two pages (see docs/CONTROLS.md): your colour, the player cards and a CPU player's panel, the arena picture (a real arena from `createWorld`, drawn with `drawStatic` and `drawDynamic`) and the rules. It changes `host.setup` and `host.myColor` and calls `host.save()` after every change, then redraws everything (`refresh`). Colours always stay different: you cannot pick a CPU player's colour, and a CPU player's Colour choice lists only free ones.
+
+### `src/ui.ts`: the menus' controls
+
+The pieces every menu is built from, so each setting works the same with a finger, a mouse or the keys: `choice` (‹ value ›), `slider` (− slider +, with its value written out), `toggle` (a switch; the settings that only matter when it is on sit under it and show when it is), `heading`, `note`. Each is an `Opt` with `refresh()`; `mount` puts a list on a page and returns a function that refreshes them all. `swipeable` turns a sideways swipe on an element into ‹ or ›. `confirmFirst` asks before anything that cannot be undone, in the `#confirm` panel.
 
 ### `src/title.ts`: the title screen's picture
 
@@ -142,7 +154,7 @@ Everything on the canvas is drawn with shapes in code. There are no image files.
 
 ### `src/audio.ts`: sound
 
-Each effect is a short synthesised tone or burst of noise. `sfx.place()`, `sfx.explode()` and so on. Sound only starts after the first tap or key press, because browsers require that.
+Each effect is a short synthesised tone or burst of noise. `sfx.place()`, `sfx.explode()` and so on. Sound only starts after the first tap or key press, because browsers require that. `setSound(on, volume, muted)` puts Settings › Sound into effect: every sound is scaled by the volume, and a sound switched off is not played. `preview(id)` plays one whatever its switch says, for the ▶ buttons.
 
 ### `src/main.ts`: the app shell
 
@@ -151,9 +163,12 @@ Everything that ties the game to the page:
 - the fixed-rate loop (`frame`, `tick`)
 - sizing the arena and controls to the screen (`layout`)
 - the round timer at the top (`drawTimer`)
-- the title screen, where the game opens: showing it (`showTitle`), drawing it each frame instead of the arena (`renderTitle`, with the picture from `title.ts`), and leaving it for the menu (`leaveTitle`, from Local; Online is switched off in `page.html` until online play is built). The menu's ✕ goes back to it when no round has been played yet
-- the menu: its two tabs, opening and closing it, and pausing the round behind it (`showMenu`, `showTab`, `closeMenu`, `play`, `resume`, `watch`, `start`, and the flags `roundLive` and `overShown`)
-- the bot picker (`buildPicker`; `lockPicker` switches it off during a round; a round's colours are set in `newWorld` and nowhere else), the CPU level buttons (`buildLevels`) and the result panel (`finish`)
+- the title screen, where the game opens: showing it (`showTitle`), drawing it each frame instead of the arena (`renderTitle`, with the picture from `title.ts`), and leaving it for the lobby (`leaveTitle`, from Local; Online is switched off in `page.html` until online play is built). The lobby's back button goes back to it
+- the lobby's host (`lobbyHost`, handed to `createLobby` in `lobby.ts`) and opening it (`showLobby`): it holds `setup` and `myColor`, and saves them
+- the match: `newMatch` (score to 0, round 1), `start` (the next round), `resume`, `watch`, the score (`wins`, `roundNo`, `matchWinner`; `setup.firstTo` wins take the match) and the result panel (`finish`). A round's players, colours and levels are set in `newWorld`, from the setup, and nowhere else
+- the menu during a match (`openPause`, `showPause`, `fillPause`, `closePause`), and its Restart round, New match and Leave to the lobby, which ask first (`confirmFirst` in `ui.ts`)
+- Settings (`showSettings`, `showSetTab`, `closeSettings`): the Sound and Graphics pages are built from `ui.ts` controls (`soundOpts`, `gfxOpts`, `padOpts`); your settings are `prefs`, put into effect by `applyPrefs`
+- the keys for the menus: Escape back one step, Q and E to turn pages
 - the layer the ghosts float up on (`ghosts`, placed by `layout`, drawn in `render`)
 - the scoreboard (`drawScore`; `layout` works out where its four places go), the count of rounds won (`wins`) and who wears the crown (`leader`), which last until the game is closed
 - the three CPU players of the round (`bots`, made in `newWorld`, asked for their input in `tick`)
@@ -166,9 +181,9 @@ It holds no game rules.
 
 The markup and all the styles. A comment at the top lists every element by id. `build.mjs` pastes the compiled code in at the `/*__BUNDLE__*/` marker.
 
-Classes on `<body>` drive the layout: `touch` (show the on-screen controls) and `portrait` (phone held upright), both set by `layout()` in `main.ts`; `righty` (the right thumb steers, so the controls are mirrored), set by `applySettings()`; `menu-open` (hide the Menu button and top strip), set by `showMenu()`; and `title-open` (hide everything of the game screen under the title), set by `showTitle()`.
+Classes on `<body>` drive the layout: `touch` (show the on-screen controls) and `portrait` (phone held upright), both set by `layout()` in `main.ts`; `righty` (the right thumb steers, so the controls are mirrored), set by `applySettings()`; `menu-open` (hide the Menu button and top strip while a menu screen is open), set by `showLobby()`, `showSettings()` and `showPause()`; `calm` (no animation in the menus), set by `applyPrefs()`; and `title-open` (hide everything of the game screen under the title), set by `showTitle()`.
 
-Every canvas is made for the screen's size and pixel density at the moment `layout()` runs. A phone can change its pixel density without a resize event (the Claude app can open the page at density 1 and correct it a moment later), which left the whole game blurry until the next resize. So `keepSharp()` checks size and density every frame and lays the page out again when either has changed; `drawPicker()` redraws the menu's robots when the density changes. The density used is the phone's own, capped at 4 (`MAX_DENSITY`, `density()`): it was capped at 3, and a phone whose page is zoomed reports more than 3, which drew the arena, robots and power-ups stretched and blurry while the page's text stayed sharp. That was the blur the owner saw, and lifting the cap fixed it on his phone.
+Every canvas is made for the screen's size and pixel density at the moment `layout()` runs. A phone can change its pixel density without a resize event (the Claude app can open the page at density 1 and correct it a moment later), which left the whole game blurry until the next resize. So `keepSharp()` checks size and density every frame and lays the page out again when either has changed; the lobby's robots are redrawn when the density changes. The density used is the phone's own (less if Settings › Graphics › Sharpness asks for it), capped at 4 (`MAX_DENSITY`, `density()`): it was capped at 3, and a phone whose page is zoomed reports more than 3, which drew the arena, robots and power-ups stretched and blurry while the page's text stayed sharp. That was the blur the owner saw, and lifting the cap fixed it on his phone.
 
 ### `build.mjs`: the build
 

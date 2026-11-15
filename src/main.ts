@@ -4,17 +4,21 @@
  * - keeps the current match (a World from sim.ts) and steps it 60 times a second
  * - reads the player's input (input.ts) and plays sounds for what happened (audio.ts)
  * - sizes and places the arena, the touch controls and the panels for the screen
- * - runs the title screen, the menu, the result panel, the D-pad settings and the Match my thumb screen
- * - remembers the chosen bot and the D-pad settings on this device (localStorage)
+ * - runs the title screen, the lobby (with lobby.ts), Settings, the menu during a match, the result panel and
+ *   the Match my thumb screen, and keeps the score of a match
+ * - remembers your colour, the lobby's setup, your settings and the D-pad settings on this device (localStorage)
  *
  * It holds no game rules. Those are all in sim.ts.
  */
 import { createWorld, step, ticksLeft, World, PlayerInput, Dir, TICK_HZ, DEATH_TICKS } from './sim';
 import { Bot, BotLevel, BOT_LEVELS, LEVELS, createBot, botInput } from './bot';
-import { COLORS, NOBODY, ROBOT, colorById, drawRobot, drawHead, drawStatic, drawDynamic, drawGhosts, warmSprites } from './render';
+import { COLORS, NOBODY, colorById, drawHead, drawStatic, drawDynamic, drawGhosts, warmSprites } from './render';
 import { Input } from './input';
 import { drawTitle, closeTitle } from './title';
-import { initAudio, sfx } from './audio';
+import { initAudio, preview, setSound, sfx } from './audio';
+import { createLobby, LobbyHost } from './lobby';
+import { MatchSetup, Prefs, SHARPNESS, SOUND_NAMES, arenaOf, clockText, defaultSetup, load, readPrefs, readSetup, save, summary, worldConfig } from './setup';
+import { Opt, answerConfirm, choice, confirmFirst, confirmOpen, heading, mount, note, slider, toggle, wireConfirm } from './ui';
 import { Hand, STRAIGHT, standardAims, uniformAims } from './swipe';
 import {
   TEACH_ORDER,
@@ -42,7 +46,6 @@ const gctx = ghosts.getContext('2d')!;
 let ghostTop = 0;
 /** true if the ghost layer has something drawn on it */
 let ghostsShown = false;
-const menu = $('menu');
 const result = $('result');
 const touch = $('touch');
 const teach = $('teach');
@@ -59,25 +62,38 @@ try {
   /* storage is optional */
 }
 
-// How good the CPU players are, remembered on this device under the key "cpuLevel".
-let cpuLevel: BotLevel = 'normal';
+/**
+ * The match set up in the lobby (setup.ts): the CPU players, each with its own colour and level, the arena
+ * and the rules. Remembered on this device under the key "matchSetup". Before the lobby there was one level
+ * for all CPU players, saved as "cpuLevel": a setup saved before then starts with that level for all three.
+ */
+let setup: MatchSetup = load('matchSetup', (raw) => readSetup(raw, myColor, COLORS.map((c) => c.id)));
 try {
-  // there used to be a fourth level, Extreme. Hard is now what Extreme was, so a saved Extreme becomes Hard.
   const stored = localStorage.getItem('cpuLevel');
-  const saved = (stored === 'extreme' ? 'hard' : stored) as BotLevel | null;
-  if (saved && BOT_LEVELS.includes(saved)) cpuLevel = saved;
+  // there used to be a fourth level, Extreme. Hard is now what Extreme was, so a saved Extreme becomes Hard.
+  const old = (stored === 'extreme' ? 'hard' : stored) as BotLevel | null;
+  if (old && BOT_LEVELS.includes(old) && !localStorage.getItem('matchSetup')) {
+    setup = defaultSetup(myColor);
+    for (const c of setup.cpus) c.level = old;
+  }
 } catch {
   /* storage is optional */
 }
-/** The three CPU players of the current arena (players 1 to 3). */
+/** Your own settings (setup.ts): sound, sharpness, ghosts, less movement, how strongly the touch controls show. Key "prefs". */
+const prefs: Prefs = load('prefs', readPrefs);
+/** The CPU players of the current arena (players 1 and up). */
 let bots: Bot[] = [];
 /** Whose blast caught you this round: a player id, CRUSHED for a falling block, or -1 if you are still in. */
 let blastedBy = -1;
 const CRUSHED = -2;
 /** true once this round's "blocks are falling" warning has sounded */
 let hurried = false;
-/** Rounds won by each of the four places on the scoreboard since the game was opened. Place 0 is you. */
+/** Rounds won in this match by each of the four places on the scoreboard. Place 0 is you. */
 const wins = [0, 0, 0, 0];
+/** Which round of the match this is: 1 for the first. */
+let roundNo = 0;
+/** The player who has won the match (reached `setup.firstTo` wins), or -1 while it goes on. */
+let matchWinner = -1;
 /**
  * Who wears the crown: the place with the most rounds won, or -1 before anyone has won one.
  * It changes hands only when another player takes the lead; drawing level does not take it.
@@ -191,10 +207,11 @@ try {
 let world: World;
 let T = 32; // tile size in canvas pixels
 /**
- * title: the title screen, shown when the game opens. menu: the menu is open (a round may be paused behind
- * it). playing: a round. over: result panel showing. teach: Match my thumb.
+ * title: the title screen, shown when the game opens. lobby: setting up a match. settings: Settings, opened
+ * from the lobby or from the menu. pause: the menu during a match (the round waits behind it). playing: a
+ * round. over: the result panel is showing. teach: Match my thumb.
  */
-let mode: 'title' | 'menu' | 'playing' | 'over' | 'teach' = 'title';
+let mode: 'title' | 'lobby' | 'settings' | 'pause' | 'playing' | 'over' | 'teach' = 'title';
 let overShown = false;
 /** True from the start of a round until its result: the round the menu pauses and can go back to. */
 let roundLive = false;
@@ -213,20 +230,15 @@ function showTouch(): void {
 if (window.matchMedia?.('(pointer: coarse)').matches) document.body.classList.add('touch');
 window.addEventListener('touchstart', showTouch, { passive: true, once: true });
 
-/** Start a fresh arena with a random seed. */
+/**
+ * Start a fresh arena with a random seed, set up as the lobby says: you, then the CPU players in their lobby
+ * order, each in the colour and at the level the lobby gave it. This is the one place a round's colours are
+ * set. The lobby keeps them all different, and can only be reached between matches.
+ */
 function newWorld(): void {
-  // You, plus three CPU players in the other corners, all in different colours. This is the one place a
-  // round's colours are set: yours is the colour chosen at this moment (`myColor`), and it stays yours until
-  // the next round is made. The CPU players keep the colours they had; if you have chosen one of theirs
-  // since, that one takes the colour you had.
-  const had: string[] | null = world ? world.players.map((p) => p.colorId) : null;
-  const others = had ? had.slice(1).map((id) => (id === myColor ? had[0] : id)) : COLORS.filter((c) => c.id !== myColor).slice(0, 3).map((c) => c.id);
   const seed = (Math.random() * 2 ** 31) | 0;
-  world = createWorld({
-    seed,
-    players: [{ colorId: myColor }, ...others.map((id) => ({ colorId: id }))],
-  });
-  bots = others.map((_, i) => createBot(i + 1, cpuLevel, seed));
+  world = createWorld(worldConfig(setup, myColor, seed));
+  bots = setup.cpus.map((c, i) => createBot(i + 1, c.level, seed));
   blastedBy = -1;
   hurried = false;
   counted = false;
@@ -259,7 +271,8 @@ let scoreMid = 0;
  */
 const MAX_DENSITY = 4;
 function density(): number {
-  return Math.min(window.devicePixelRatio || 1, MAX_DENSITY);
+  // Settings › Graphics › Sharpness can ask for less, to save battery (Sharpest is the usual)
+  return Math.min(window.devicePixelRatio || 1, MAX_DENSITY, SHARPNESS[prefs.sharpness].cap);
 }
 
 /**
@@ -273,7 +286,7 @@ function layout(): void {
   const dpr = density();
   const sharper = laidOut.dpr !== 0 && laidOut.dpr !== dpr;
   laidOut = { w: W, h: H, dpr };
-  if (sharper) drawPicker();
+  if (sharper && mode === 'lobby') lobby.redraw();
   const portrait = H > W * 1.05;
   const isTouch = document.body.classList.contains('touch');
   document.body.classList.toggle('portrait', portrait);
@@ -454,12 +467,15 @@ function render(time: number): void {
   gctx.setTransform(1, 0, 0, 1, 0, 0);
   if (ghostsShown) gctx.clearRect(0, 0, ghosts.width, ghosts.height);
   gctx.setTransform(1, 0, 0, 1, 0, ghostTop);
-  ghostsShown = drawGhosts(gctx, world, T, -ghostTop);
+  ghostsShown = prefs.ghosts ? drawGhosts(gctx, world, T, -ghostTop) : false; // they can be switched off in Settings › Graphics
   drawTimer();
   drawScore();
 }
 
-/** Show the result panel. */
+/**
+ * Show the result panel. Its buttons are Next round and Menu while the match goes on; once someone has won
+ * the match, Rematch (the same setup, the score back to 0) and Lobby.
+ */
 function finish(title: string, text: string): void {
   mode = 'over';
   overShown = true;
@@ -467,10 +483,22 @@ function finish(title: string, text: string): void {
   $('resultTitle').textContent = title;
   $('resultText').textContent = text;
   $('resultText').hidden = !text;
+  const done = matchWinner >= 0;
+  $('again').textContent = done ? 'Rematch' : 'Next round';
+  $('change').textContent = done ? 'Lobby' : 'Menu';
   if (result.hidden) {
     result.hidden = false;
-    $('again').focus();
+    $('again').focus({ preventScroll: true });
   }
+}
+
+/** "3–1–0" in scoreboard order, for the end of a match. */
+function scoreLine(): string {
+  return world.players.map((_, i) => wins[i]).join('–');
+}
+/** A player's name as the menus say it: You, or the colour of a CPU player. */
+function nameOf(i: number): string {
+  return i === 0 ? 'You' : colorById(world.players[i].colorId).name;
 }
 
 /** One step of the game rules: read the input, advance the world, play its sounds, check for the end. */
@@ -519,9 +547,12 @@ function tick(): void {
       // the crown goes to whoever is in front; a player who only draws level does not take it
       if (leader < 0 || wins[winner] > wins[leader]) leader = winner;
       sfx.win();
+      if (wins[winner] >= setup.firstTo) matchWinner = winner;
     }
-    if (winner === 0) finish('You win', 'Last bot standing.');
-    else if (winner > 0) finish(`${colorById(world.players[winner].colorId).name} wins`, me.alive ? '' : how);
+    if (matchWinner === 0) finish('You win the match', `First to ${setup.firstTo}. Final score ${scoreLine()}.`);
+    else if (matchWinner > 0) finish(`${nameOf(matchWinner)} wins the match`, `First to ${setup.firstTo}. Final score ${scoreLine()}.${me.alive ? '' : ' ' + how}`);
+    else if (winner === 0) finish('You win the round', `Last bot standing. ${wins[0]} of ${setup.firstTo} to win the match.`);
+    else if (winner > 0) finish(`${nameOf(winner)} wins the round`, me.alive ? '' : how);
     else finish('Draw', me.alive ? 'Nobody was left standing.' : `${how} Nobody was left standing.`);
   } else if (!world.over && !overShown && !me.alive && me.deadTicks >= DEATH_TICKS) {
     // You are out and the others are still at it. The round carries on behind this panel, and its
@@ -548,9 +579,9 @@ function frame(now: number): void {
     }
     if (n === 6) acc = 0;
   }
-  // the title screen covers everything, so the arena behind it is not drawn
+  // the title screen, the lobby and Settings cover everything, so the arena behind them is not drawn
   if (mode === 'title') renderTitle(now / 1000);
-  else render(now / 1000);
+  else if (mode !== 'lobby' && mode !== 'settings') render(now / 1000);
   requestAnimationFrame(frame);
 }
 
@@ -573,93 +604,34 @@ function renderTitle(time: number): void {
     titleArt.height = h;
   }
   const r = $('titleStage').getBoundingClientRect();
-  drawTitle(tctx, { x: r.left * dpr, y: r.top * dpr, w: r.width * dpr, h: r.height * dpr }, colorById(myColor), time - titleFrom);
+  // with less movement asked for (Settings › Graphics), the picture holds still
+  drawTitle(tctx, { x: r.left * dpr, y: r.top * dpr, w: r.width * dpr, h: r.height * dpr }, colorById(myColor), prefs.calm ? 0 : time - titleFrom);
 }
-/** Open the title screen. It is where the game starts, and where the menu's ✕ goes back to before any round has been played. */
+/** Open the title screen. It is where the game starts, and where the lobby's back button goes. */
 function showTitle(): void {
+  hideScreens();
   mode = 'title';
   titleFrom = -1;
-  menu.hidden = true;
-  result.hidden = true;
-  teach.hidden = true;
   document.body.classList.remove('menu-open');
   document.body.classList.add('title-open');
   title.hidden = false;
   $('titleLocal').focus({ preventScroll: true });
 }
 /**
- * Leave the title screen for the menu, on one of its tabs. The title's large pictures are let go.
- * The title offers the two modes: Local, which leads here (the menu stands in for the lobby to come), and
- * Online, which is switched off until online play is built (step 2 of the plan in docs/ROADMAP.md).
+ * Leave the title screen for the lobby. The title's large pictures are let go.
+ * The title offers the two modes: Local, which leads here, and Online, which is switched off until online
+ * play is built (step 2 of the plan in docs/ROADMAP.md).
  */
-function leaveTitle(tab: Tab): void {
+function leaveTitle(): void {
   initAudio(); // a tap: the moment the browser allows sound to start
   title.hidden = true;
   document.body.classList.remove('title-open');
   closeTitle();
-  showMenu(tab);
+  showLobby();
 }
-$('titleLocal').addEventListener('click', () => leaveTitle('main'));
+$('titleLocal').addEventListener('click', leaveTitle);
 
-// ---------------------------------------------------------------- menu
-
-/**
- * The nine bot buttons in the menu, each drawn with the same code that draws the robots in play.
- *
- * Picking one chooses your colour for the next round (`myColor`, which is also saved). It never changes
- * a round that has started: a round's colours are fixed when it is made, in newWorld(). While a round
- * is in play the buttons cannot be pressed at all (lockPicker). Other menus that let a player choose a
- * colour should do the same two things: set `myColor`, and leave the world alone once a round has begun.
- */
-function buildPicker(): void {
-  const grid = $('picker');
-  grid.textContent = '';
-  for (const c of COLORS) {
-    const b = document.createElement('button');
-    b.type = 'button';
-    b.className = 'bot';
-    b.id = `bot-${c.id}`;
-    b.style.setProperty('--glow', c.glow);
-    b.setAttribute('aria-pressed', String(c.id === myColor));
-    const cv = document.createElement('canvas');
-    cv.dataset.color = c.id;
-    const label = document.createElement('span');
-    label.textContent = c.name;
-    b.append(cv, label);
-    b.addEventListener('click', () => {
-      if (roundLive) return; // your colour is yours for the whole round
-      myColor = c.id;
-      try {
-        localStorage.setItem('botColor', c.id);
-      } catch {
-        /* storage is optional */
-      }
-      for (const el of grid.querySelectorAll('.bot')) {
-        el.setAttribute('aria-pressed', String(el === b));
-      }
-      // Before the first round the arena waiting behind the menu has not been played on, so it is recoloured
-      // to show the choice. (If another bot wears the colour picked, it takes your old one: no two bots ever
-      // match.) A round that has ended for you is left as it was; the choice is for the next one.
-      if (overShown) return;
-      const me = world.players[0];
-      for (const p of world.players) if (p !== me && p.colorId === c.id) p.colorId = me.colorId;
-      me.colorId = c.id;
-    });
-    grid.append(b);
-  }
-  drawPicker();
-}
-
-/** Draw the robots on the bot buttons, sharp at the screen's present pixel density. */
-function drawPicker(): void {
-  const dpr = density();
-  for (const cv of $('picker').querySelectorAll('canvas')) {
-    cv.width = 96 * dpr;
-    cv.height = 108 * dpr;
-    const g = cv.getContext('2d')!;
-    drawRobot(g, cv.width / 2, cv.height * 0.95, (cv.height * 0.9) / -ROBOT.top, colorById(cv.dataset.color ?? ''), 2, 0, false); // nine tenths of the button's height
-  }
-}
+// ---------------------------------------------------------------- the screen's sharpness
 
 /**
  * Keep the game sharp. Every canvas is made for the screen's size and pixel density when layout() runs. A
@@ -671,42 +643,6 @@ function drawPicker(): void {
 function keepSharp(): void {
   const dpr = density();
   if (dpr !== laidOut.dpr || window.innerWidth !== laidOut.w || window.innerHeight !== laidOut.h) layout();
-}
-
-/** While a round is in play your colour cannot be changed: the bot buttons are switched off and a line says why. */
-function lockPicker(locked: boolean): void {
-  for (const el of $('picker').querySelectorAll<HTMLButtonElement>('.bot')) el.disabled = locked;
-  $('pickerNote').hidden = !locked;
-}
-
-/** The three CPU level buttons in the menu. A change applies at once, to a paused round too. */
-function buildLevels(): void {
-  const row = $('cpuLevels');
-  for (const lv of BOT_LEVELS) {
-    const b = document.createElement('button');
-    b.type = 'button';
-    b.id = `cpu-${lv}`;
-    const name = document.createElement('b');
-    name.textContent = LEVELS[lv].label;
-    b.append(name);
-    b.addEventListener('click', () => {
-      cpuLevel = lv;
-      for (const bot of bots) bot.level = lv;
-      try {
-        localStorage.setItem('cpuLevel', lv);
-      } catch {
-        /* storage is optional */
-      }
-      showLevel();
-    });
-    row.append(b);
-  }
-  showLevel();
-}
-
-function showLevel(): void {
-  for (const lv of BOT_LEVELS) $(`cpu-${lv}`).setAttribute('aria-pressed', String(lv === cpuLevel));
-  $('cpuBlurb').textContent = LEVELS[cpuLevel].blurb;
 }
 
 /** Push the control settings into the swipe pad, the screen layout, the menu and the pad's caption, and optionally save them. */
@@ -798,7 +734,7 @@ function startTeach(): void {
   learnSamples = [];
   testSwipes = [];
   teachSum = null;
-  hideMenu();
+  hideScreens();
   teach.hidden = false;
   teachPrompt();
 }
@@ -911,7 +847,7 @@ function showTeachEnd(title: string, text: string): void {
   $('teachClose').textContent = 'Done';
 }
 
-/** Done or Cancel: keep the chosen setting if a test has just finished, then back to the Controls tab. */
+/** Done or Cancel: keep the chosen setting if a test has just finished, then back to Settings › Controls. */
 function closeTeach(): void {
   if (teachPhase === 'done' && teachSum?.ok && candidates.length) {
     const pick = candidates[chosen];
@@ -922,7 +858,8 @@ function closeTeach(): void {
       applySettings(true);
     }
   }
-  showMenu('controls');
+  teach.hidden = true;
+  showSettings('controls');
 }
 
 input.pad.onStroke = teachStroke;
@@ -952,103 +889,385 @@ $('handRight').addEventListener('click', () => {
   applySettings(true);
 });
 
-// ---------------------------------------------------------------- menu, rounds
+// ---------------------------------------------------------------- screens, rounds and the match
 
-type Tab = 'main' | 'controls';
-
-/** Show one of the menu's two tabs. */
-function showTab(tab: Tab): void {
-  for (const [name, tabId, paneId] of [['main', 'tabMain', 'paneMain'], ['controls', 'tabControls', 'paneControls']] as const) {
-    $(tabId).setAttribute('aria-selected', String(name === tab));
-    $(paneId).hidden = name !== tab;
-  }
-}
-
-/**
- * Open the menu. The game stops while it is open. If a round is in progress
- * it waits behind the menu, untouched, and the menu offers Resume. If the
- * round has ended for you (you are out, or it is decided) it waits too: the
- * menu offers New round, and closing the menu goes back to watching it.
- */
-function showMenu(tab: Tab = 'main'): void {
-  mode = 'menu';
-  result.hidden = true;
-  teach.hidden = true;
-  menu.hidden = false;
-  document.body.classList.add('menu-open');
-  $('play').textContent = roundLive ? 'Resume' : overShown ? 'New round' : 'Play';
-  $('newRound').hidden = !roundLive;
-  lockPicker(roundLive);
-  showTab(tab);
-}
-
-function hideMenu(): void {
-  menu.hidden = true;
+/** Hide every screen and panel over the game: the lobby, Settings, the menu, the result panel, Match my thumb. */
+function hideScreens(): void {
+  lobby.hide();
+  $('settings').hidden = true;
+  $('pause').hidden = true;
   result.hidden = true;
   teach.hidden = true;
   document.body.classList.remove('menu-open');
 }
 
-/** Start a new round in a fresh arena. */
+// ------------------------------------------------ the lobby (lobby.ts)
+
+const lobbyHost: LobbyHost = {
+  get setup() {
+    return setup;
+  },
+  set setup(v: MatchSetup) {
+    setup = v;
+  },
+  get myColor() {
+    return myColor;
+  },
+  set myColor(v: string) {
+    myColor = v;
+  },
+  save(): void {
+    save('matchSetup', setup);
+    try {
+      localStorage.setItem('botColor', myColor);
+    } catch {
+      /* storage is optional */
+    }
+  },
+  density,
+  start: () => newMatch(),
+  back: () => showTitle(),
+  settings: (tab) => showSettings(tab, 'lobby'),
+};
+const lobby = createLobby(lobbyHost);
+
+/** Open the lobby. It is only reached between matches: leaving a match for it ends the match. */
+function showLobby(): void {
+  hideScreens();
+  mode = 'lobby';
+  roundLive = false;
+  document.body.classList.add('menu-open');
+  lobby.show();
+}
+
+// ------------------------------------------------ rounds and the match
+
+/** Start a match with the lobby's setup: everyone's score back to 0, then round 1. */
+function newMatch(): void {
+  wins.fill(0);
+  leader = -1;
+  roundNo = 0;
+  matchWinner = -1;
+  start();
+}
+/** Start the next round of the match in a fresh arena. */
 function start(): void {
   initAudio();
   newWorld();
+  layout(); // the arena may be a different size from the last one
   input.reset();
   acc = 0;
   roundLive = true;
+  roundNo++;
   mode = 'playing';
-  hideMenu();
+  hideScreens();
 }
-
 /** Carry on with the round that was waiting behind the menu. */
 function resume(): void {
   initAudio();
   input.reset();
   acc = 0;
   mode = 'playing';
-  hideMenu();
+  hideScreens();
 }
-
 /** Back to a round that has ended for you: the result panel again, and the rest of the round (or the winner's dance) behind it. */
 function watch(): void {
   initAudio();
   input.reset();
   acc = 0;
+  hideScreens();
   mode = 'over';
-  hideMenu();
   result.hidden = false;
 }
 
+// ------------------------------------------------ the menu during a match
+
 /**
- * The X: close the menu and go back to where the player came from. Into the paused round if there is one;
- * back to watching a round that has ended for you (it never starts a new one: that is what New round is
- * for); and when no round has been played yet, back to the title screen.
+ * The menu during a match (the three bars at the top, or Escape). The round waits behind it. It says
+ * what is going on: local or online, paused or over, which round, the rules, the time left, and every
+ * player's state and score. Then Resume and Settings, and the host's choices: restart the round, start a
+ * new match, or leave to the lobby. Those three ask first.
  */
-function closeMenu(): void {
+function openPause(): void {
+  if (mode !== 'playing' && mode !== 'over') return;
+  showPause();
+}
+function showPause(): void {
+  hideScreens();
+  mode = 'pause';
+  document.body.classList.add('menu-open');
+  fillPause();
+  $('pause').hidden = false;
+  $('pauseResume').focus({ preventScroll: true });
+}
+/** Resume: back into the round, or back to its result if it is over for you. */
+function closePause(): void {
   if (roundLive) resume();
-  else if (overShown) watch();
-  else showTitle();
+  else watch();
+}
+function fillPause(): void {
+  const done = matchWinner >= 0;
+  $('pauseState').textContent = roundLive ? 'Paused' : done ? 'Match over' : world.over ? 'Round over' : 'You are out';
+  $('pauseTitle').textContent = done ? `${nameOf(matchWinner)} won the match` : `Round ${roundNo}`;
+  const left = ticksLeft(world);
+  const time = world.over || left === Infinity ? '' : left > 0 ? ` · ${clockText(Math.ceil(left / TICK_HZ))} left` : ' · Blocks falling';
+  $('pauseInfo').textContent = `${summary(setup)}${time}`;
+  $('pauseResume').textContent = roundLive ? 'Resume' : 'Back to the round';
+  ($('pauseRestart') as HTMLButtonElement).disabled = !roundLive;
+  const list = $('standings');
+  list.textContent = '';
+  const dpr = density();
+  world.players.forEach((p, i) => {
+    const li = document.createElement('li');
+    const cv = document.createElement('canvas');
+    cv.width = cv.height = Math.round(34 * dpr);
+    const col = colorById(p.colorId);
+    drawHead(cv.getContext('2d')!, cv.width / 2, cv.height / 2, cv.width * 0.42, col, { xEyes: !p.alive, crown: false });
+    if (i === leader) drawHead(cv.getContext('2d')!, cv.width / 2, cv.height / 2, cv.width * 0.42, col, { crownOnly: true });
+    const who = document.createElement('div');
+    const name = document.createElement('b');
+    name.textContent = i === 0 ? 'You' : `CPU ${i}`;
+    const sub = document.createElement('small');
+    sub.textContent = i === 0 ? col.name : `${col.name} · ${LEVELS[setup.cpus[i - 1]?.level ?? 'normal'].label}`;
+    who.append(name, sub);
+    const st = document.createElement('span');
+    const won = world.over && world.over.winner === i;
+    st.className = `st${p.alive ? ' in' : ''}`;
+    st.textContent = won ? 'Won' : p.alive ? 'In' : 'Out';
+    const w = document.createElement('span');
+    w.className = 'wins';
+    w.textContent = String(wins[i]);
+    w.setAttribute('aria-label', `${wins[i]} rounds won`);
+    li.append(cv, who, st, w);
+    list.append(li);
+  });
+}
+$('menuBtn').addEventListener('click', openPause);
+$('pauseResume').addEventListener('click', closePause);
+$('pauseSettings').addEventListener('click', () => showSettings(undefined, 'pause'));
+$('pauseRestart').addEventListener('click', () =>
+  confirmFirst('Restart this round?', 'Everyone starts again from their corner, in a new arena. The score stays as it is.', 'Restart round', (yes) => {
+    if (!yes) return;
+    roundNo--; // the same round, played again
+    start();
+  }),
+);
+$('pauseNewMatch').addEventListener('click', () =>
+  confirmFirst('Start a new match?', 'The score goes back to 0 for everyone and round 1 starts, with the same players and rules.', 'New match', (yes) => {
+    if (yes) newMatch();
+  }),
+);
+$('pauseLobby').addEventListener('click', () =>
+  confirmFirst('Leave to the lobby?', 'This match ends and its score is not kept. In the lobby you can change the players and the rules.', 'Leave match', (yes) => {
+    if (yes) showLobby();
+  }),
+);
+// the result panel: Next round and Menu while the match goes on; Rematch and Lobby once it is won
+$('again').addEventListener('click', () => (matchWinner >= 0 ? newMatch() : start()));
+$('change').addEventListener('click', () => (matchWinner >= 0 ? showLobby() : openPause()));
+
+// ------------------------------------------------ Settings
+
+type SetTab = 'sound' | 'controls' | 'graphics';
+const SET_TABS: SetTab[] = ['sound', 'controls', 'graphics'];
+const SET_NAMES: Record<SetTab, string> = { sound: 'Sound', controls: 'Controls', graphics: 'Graphics' };
+const SET_IDS: Record<SetTab, [string, string]> = { sound: ['pgSound', 'setSound'], controls: ['pgControls', 'setControls'], graphics: ['pgGraphics', 'setGraphics'] };
+let setTab: SetTab = 'sound';
+/** where Settings goes back to: the lobby, or the menu during a match */
+let setFrom: 'lobby' | 'pause' = 'lobby';
+
+/** Open Settings on one of its pages (or the last one seen). `from` is where Done and Back go. */
+function showSettings(tab?: SetTab, from?: 'lobby' | 'pause'): void {
+  if (from) setFrom = from;
+  if (tab) setTab = tab;
+  hideScreens();
+  mode = 'settings';
+  document.body.classList.add('menu-open');
+  $('settings').hidden = false;
+  showSetTab(setTab);
+  $('setDone').focus({ preventScroll: true });
+}
+function showSetTab(t: SetTab): void {
+  setTab = t;
+  const i = SET_TABS.indexOf(t);
+  for (const k of SET_TABS) {
+    $(SET_IDS[k][0]).setAttribute('aria-selected', String(k === t));
+    $(SET_IDS[k][1]).hidden = k !== t;
+  }
+  const prev = SET_TABS[i - 1];
+  const next = SET_TABS[i + 1];
+  $('setPrev').hidden = !prev;
+  $('setNext').hidden = !next;
+  $('setPrev').querySelector('span')!.textContent = prev ? SET_NAMES[prev] : '';
+  $('setNext').querySelector('span')!.textContent = next ? SET_NAMES[next] : '';
+  $('setPrev').setAttribute('aria-label', prev ? `Previous page: ${SET_NAMES[prev]}` : '');
+  $('setNext').setAttribute('aria-label', next ? `Next page: ${SET_NAMES[next]}` : '');
+  const sc = document.querySelector('#settings .scroll');
+  if (sc) sc.scrollTop = 0;
+  refreshPrefs();
+}
+function stepSettings(d: number): void {
+  const i = SET_TABS.indexOf(setTab) + d;
+  if (i >= 0 && i < SET_TABS.length) showSetTab(SET_TABS[i]);
+}
+function closeSettings(): void {
+  if (setFrom === 'pause') showPause();
+  else showLobby();
+}
+for (const t of SET_TABS) $(SET_IDS[t][0]).addEventListener('click', () => showSetTab(t));
+$('setPrev').addEventListener('click', () => stepSettings(-1));
+$('setNext').addEventListener('click', () => stepSettings(1));
+$('setDone').addEventListener('click', closeSettings);
+$('setBack').addEventListener('click', closeSettings);
+
+/** Your settings changed: save them, put them into effect, and redraw the pages that show them. */
+function prefsChanged(): void {
+  save('prefs', prefs);
+  applyPrefs();
+  refreshPrefs();
+}
+/** Put your settings into effect. (Sharpness is picked up by keepSharp on the next frame.) */
+function applyPrefs(): void {
+  setSound(prefs.soundOn, prefs.volume, prefs.muted);
+  document.body.classList.toggle('calm', prefs.calm);
+  document.documentElement.style.setProperty('--pad-show', String(prefs.padShow / 100));
 }
 
-/** The menu's main button: Resume a paused round, otherwise a new round. */
-function play(): void {
-  if (roundLive) resume();
-  else start();
+/** A sound's row: a switch for whether it plays, and a button that plays it. */
+function soundRow(id: string, name: string): Opt {
+  const o = toggle({
+    label: name,
+    get: () => !prefs.muted.includes(id),
+    set: (on) => {
+      prefs.muted = on ? prefs.muted.filter((m) => m !== id) : [...prefs.muted, id];
+      prefsChanged();
+    },
+  });
+  const play = document.createElement('button');
+  play.type = 'button';
+  play.className = 'step opt-play';
+  play.setAttribute('aria-label', `Play the ${name.toLowerCase()} sound`);
+  play.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.5l11 6.5-11 6.5z"/></svg>';
+  play.addEventListener('click', () => {
+    initAudio();
+    preview(id);
+  });
+  const row = o.el.querySelector('.opt-toggle')!;
+  row.insertBefore(play, row.querySelector('.switch-btn'));
+  return o;
 }
 
-$('play').addEventListener('click', play);
-$('newRound').addEventListener('click', start);
-$('menuClose').addEventListener('click', closeMenu);
-$('tabMain').addEventListener('click', () => showTab('main'));
-$('tabControls').addEventListener('click', () => showTab('controls'));
-$('again').addEventListener('click', start);
-$('change').addEventListener('click', () => showMenu('main'));
-$('menuBtn').addEventListener('click', () => showMenu('main'));
-// Escape opens the menu during a round and closes it again
+const soundOpts: Opt[] = [
+  toggle({
+    label: 'Sound effects',
+    hint: 'Every sound in the game',
+    get: () => prefs.soundOn,
+    set: (v) => {
+      prefs.soundOn = v;
+      prefsChanged();
+    },
+    offText: 'All sounds are off. Switch them on to set the volume.',
+    under: [
+      slider({
+        label: 'Volume',
+        min: 0,
+        max: 100,
+        step: 10,
+        get: () => prefs.volume,
+        set: (v) => {
+          prefs.volume = v;
+          prefsChanged();
+          initAudio();
+          preview('pickup'); // so the new volume can be heard
+        },
+        text: (v) => `${v}%`,
+      }),
+    ],
+  }),
+  heading('Which sounds play', 'Tap ▶ to hear one'),
+  ...SOUND_NAMES.map(([id, name]) => soundRow(id, name)),
+  note('There is no music yet. It will come with the new sound effects, with a switch of its own.'),
+];
+const padOpts: Opt[] = [
+  slider({
+    label: 'Touch controls',
+    hint: 'How strongly the swipe pad and the A and B buttons show over the game',
+    min: 40,
+    max: 200,
+    step: 20,
+    get: () => prefs.padShow,
+    set: (v) => {
+      prefs.padShow = v;
+      prefsChanged();
+    },
+    text: (v) => (v === 100 ? 'Usual' : v < 100 ? `Fainter (${v}%)` : `Stronger (${v}%)`),
+  }),
+];
+const gfxOpts: Opt[] = [
+  slider({
+    label: 'Sharpness',
+    hint: () =>
+      prefs.sharpness === SHARPNESS.length - 1
+        ? 'Uses every pixel of the screen. The usual setting.'
+        : 'Draws the game with fewer pixels, which uses less battery on big, sharp screens. It looks a little softer.',
+    min: 0,
+    max: SHARPNESS.length - 1,
+    get: () => prefs.sharpness,
+    set: (v) => {
+      prefs.sharpness = v;
+      prefsChanged();
+    },
+    text: (v) => SHARPNESS[v].name,
+  }),
+  toggle({
+    label: 'Ghosts',
+    hint: 'A knocked-out robot’s ghost floats up the screen',
+    get: () => prefs.ghosts,
+    set: (v) => {
+      prefs.ghosts = v;
+      prefsChanged();
+    },
+  }),
+  toggle({
+    label: 'Less movement',
+    hint: 'Stops the waving on the title screen and the pulsing and sliding in the menus',
+    get: () => prefs.calm,
+    set: (v) => {
+      prefs.calm = v;
+      prefsChanged();
+    },
+  }),
+  note('More graphic styles are planned.'),
+];
+const refreshSound = mount($('soundOpts'), soundOpts);
+const refreshPad = mount($('padOpts'), padOpts);
+const refreshGfx = mount($('gfxOpts'), gfxOpts);
+function refreshPrefs(): void {
+  refreshSound();
+  refreshPad();
+  refreshGfx();
+}
+
+// ------------------------------------------------ keys
+
+// Escape goes back one step: closes a question or a panel, leaves Settings, resumes from the menu, opens the
+// menu during a round, and goes from the lobby back to the title. Q and E turn the pages of the lobby and Settings.
 window.addEventListener('keydown', (e) => {
-  if (e.code !== 'Escape') return;
-  if (mode === 'playing' || mode === 'over') showMenu('main');
-  else if (mode === 'menu') closeMenu();
+  if (e.code === 'Escape') {
+    if (confirmOpen()) answerConfirm(false);
+    else if (mode === 'lobby' && lobby.sheetOpen()) lobby.closeSheet();
+    else if (mode === 'lobby') showTitle();
+    else if (mode === 'settings') closeSettings();
+    else if (mode === 'pause') closePause();
+    else if (mode === 'playing' || mode === 'over') openPause();
+    else if (mode === 'teach') closeTeach();
+    return;
+  }
+  if ((e.code === 'KeyQ' || e.code === 'KeyE') && !confirmOpen() && !e.repeat) {
+    const d = e.code === 'KeyQ' ? -1 : 1;
+    if (mode === 'lobby' && !lobby.sheetOpen()) lobby.turn(d);
+    else if (mode === 'settings') stepSettings(d);
+  }
 });
 input.onFirstGesture = initAudio;
 
@@ -1059,8 +1278,8 @@ window.addEventListener('orientationchange', () => setTimeout(layout, 200));
 
 newWorld();
 layout();
-buildPicker();
-buildLevels();
+wireConfirm();
+applyPrefs();
 applySettings(false);
 showTitle();
 requestAnimationFrame(frame);
@@ -1076,8 +1295,17 @@ requestAnimationFrame(frame);
   get bots() {
     return bots;
   },
-  get cpuLevel() {
-    return cpuLevel;
+  get setup() {
+    return setup;
+  },
+  get prefs() {
+    return prefs;
+  },
+  get wins() {
+    return wins;
+  },
+  get matchWinner() {
+    return matchWinner;
   },
   get pad() {
     return input.pad;

@@ -6,7 +6,8 @@ It is a personal project for playing with friends.
 
 <p align="center">
   <img src="docs/screenshots/title.png" alt="The title screen: your robot waving, with two rivals and a lit bomb" width="230">
-  <img src="docs/screenshots/menu.png" alt="The menu: pick one of nine bot colours" width="230">
+  <img src="docs/screenshots/lobby.png" alt="The lobby: your robot and colour, and the CPU players" width="230">
+  <img src="docs/screenshots/lobby-match.png" alt="The lobby's Match page: the arena and the rules" width="230">
   <img src="docs/screenshots/play.png" alt="A round in progress: a blast along the top row, power-ups in the open" width="230">
   <img src="docs/screenshots/match-result.png" alt="Match my thumb showing its result" width="230">
 </p>
@@ -22,27 +23,29 @@ Working today:
 - Bombs, blasts, chain reactions and seven power-ups, two of them very rare
 - Kicking bombs, and lifting and throwing them
 - Touch controls made for one thumb on each side, steered with the left or the right thumb, with a swipe pad that can be matched to your own thumb
-- Three CPU players at three levels: Beginner, Normal and Hard
-- A timer of 1 minute 30: when it reaches zero, blocks fall round the edge and inward for 50 seconds, leaving a 5 by 5 square in the middle to fight it out in
+- One to three CPU players, each with its own colour and level: Beginner, Normal or Hard
+- A round timer (1 minute 30 unless the lobby says otherwise): when it reaches zero, blocks fall round the edge and inward for 50 seconds, leaving a 5 by 5 square in the middle to fight it out in
 - A scoreboard of four heads beside the timer that counts the rounds each player has won, with a crown for whoever is in the lead
 - A knock-out that burns the bot to ash while its ghost floats away, and a winner that jumps and dances
 - A title screen: your robot in your colour, waving, with two rivals and a lit bomb, and a choice of Local or Online (online is coming)
-- A menu that pauses the round, with tabs for the main menu and the controls
+- A lobby to set up a match: your colour, the CPU players, the arena (three sizes), and the rules: round timer and how fast the blocks close in, rounds to win the match, bricks, what everyone starts with, and how often each power-up turns up
+- Settings of your own: sound (volume, and a switch for each sound), controls, and graphics
+- A menu during a match that says what is going on, with Resume, Settings, Restart round, New match and Leave to the lobby (those last three ask first)
 - Keyboard controls for playing on a computer
 - Sound effects
 
-Not built yet: a choice of round length, teams, and playing online. The plan is in [docs/ROADMAP.md](docs/ROADMAP.md).
+Not built yet: teams, more than four players, and playing online. The plan is in [docs/ROADMAP.md](docs/ROADMAP.md).
 
 ## How to play
 
-Be the last bot standing. Three CPU players start in the other corners; choose how good they are under **CPU players** in the menu. Blast them without getting caught in a blast yourself.
+Be the last bot standing, and win the most rounds. Tap **Local**, set up the match in the lobby (or just tap **Start**), then blast the CPU players without getting caught in a blast yourself. The first to win the number of rounds set in the lobby wins the match.
 
 | | Phone | Computer |
 |---|---|---|
 | Move | Swipe on the pad and keep your thumb down. Slide another way to turn. Lift to stop. | Arrow keys or W A S D |
 | Drop a bomb | **A** | Space |
 | Lift a bomb, then throw it | **B**, then **B** again (needs the glove) | Shift |
-| Pause and open the menu | The three bars at the top right, then **✕** to go back | Escape |
+| Pause and open the menu | The three bars at the top right, then **Resume** | Escape |
 
 Power-ups are hidden under some bricks:
 
@@ -56,7 +59,7 @@ Power-ups are hidden under some bricks:
 | Shield (very rare) | The next blast does not knock you out. Wears off after 30 seconds |
 | Skull (very rare) | A curse, not a gift: you walk slower than the starting speed for 8 seconds |
 
-If the pad sometimes reads your swipes as the wrong direction, open the menu's **Controls** tab and tap **My thumb** to run Match my thumb. Twelve swipes measure how yours lean, eight more test the result, and it keeps whichever setting reads you best. It takes about 40 seconds, and you only do it once. The tab and the corner of the swipe pad show whether Standard or My thumb is on. [How it works](docs/MATCH-MY-THUMB.md).
+If the pad sometimes reads your swipes as the wrong direction, open **Settings › Controls** (the gear in the lobby, or Settings in the menu during a match) and tap **My thumb** to run Match my thumb. Twelve swipes measure how yours lean, eight more test the result, and it keeps whichever setting reads you best. It takes about 40 seconds, and you only do it once. The tab and the corner of the swipe pad show whether Standard or My thumb is on. [How it works](docs/MATCH-MY-THUMB.md).
 
 The full rules are in [docs/GAME-RULES.md](docs/GAME-RULES.md).
 
@@ -90,7 +93,10 @@ src/
   render.ts     all the drawing
   audio.ts      sound effects
   title.ts      the title screen's picture: your robot waving, two rivals, a lit bomb
-  main.ts       ties it together: game loop, title screen, menu, screen layout, settings
+  setup.ts      what the lobby and Settings choose, and saving it
+  lobby.ts      the lobby
+  ui.ts         the menus' controls: arrows, sliders, switches, "are you sure?"
+  main.ts       ties it together: game loop, title screen, Settings, the menu during a match, the score
   page.html     the page's markup and styles
 tests/          automatic checks of the rules, the swipe pad, the thumb maths and the CPU players
 experiments/    simulations used to tune the controls and measure the CPU players (not part of the game)

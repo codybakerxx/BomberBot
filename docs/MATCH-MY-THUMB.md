@@ -23,7 +23,7 @@ A thumb is hinged at its base, down in the corner of the phone. When you flick i
 
 All four are turned the same way, clockwise. The amount they are turned is the **lean**.
 
-A right thumb is the mirror image. It pivots at the bottom-right corner, so its swipes are turned anticlockwise: left drifts down, right drifts up. Everything below is described for a left thumb; with **Steering thumb** set to *Right thumb* on the Controls tab, the same things happen the other way round.
+A right thumb is the mirror image. It pivots at the bottom-right corner, so its swipes are turned anticlockwise: left drifts down, right drifts up. Everything below is described for a left thumb; with **Steering thumb** set to *Right thumb* on Settings › Controls, the same things happen the other way round.
 
 <p align="center"><img src="images/lean.svg" alt="The screen's four directions, and the same four as a left thumb swipes them, turned clockwise" width="620"></p>
 
@@ -60,13 +60,13 @@ Tips:
 
 Three places show it:
 
-- **The menu switch.** On the Controls tab, under Swipe direction, either **Standard** or **My thumb** is filled in and tagged **On**.
+- **The menu switch.** On Settings › Controls, under Swipe direction, either **Standard** or **My thumb** is filled in and tagged **On**.
 - **The line under the switch**, which starts "On now: Standard" or "On now: My thumb".
 - **The swipe pad while you play.** Its bottom corner says **Standard swipes**, or **✓ My thumb swipes** in gold.
 
 <p align="center">
-  <img src="screenshots/menu-settings.png" alt="The Controls tab with Standard switched on" width="280">
-  <img src="screenshots/menu-settings-matched.png" alt="The Controls tab with My thumb switched on" width="280">
+  <img src="screenshots/menu-settings.png" alt="Settings › Controls with Standard switched on" width="280">
+  <img src="screenshots/menu-settings-matched.png" alt="Settings › Controls with My thumb switched on" width="280">
 </p>
 
 You only need to match once for each thumb you steer with. The match is saved on the phone and switched on again by itself each time the game opens. The left and right thumb each have their own match and their own Standard / My thumb switch, so changing **Steering thumb** never overwrites one with the other.
@@ -249,7 +249,7 @@ The control settings are saved in the browser's local storage under the key `con
 
 Earlier versions saved one setting, for the left thumb, under the key `controls2`. If there is no `controls3` yet, that is read as the left thumb's setting: a version 2 save as it stands, and a version 1 save (just a measured `lean`) as *one lean*, switched on. A `zone` in an old save is ignored: swipe length is no longer a setting. Saved aims are checked when the game loads; any outside the limits for that thumb are ignored and the standard lean is used instead.
 
-Local storage belongs to one browser on one device. Clearing the browser's site data removes it, and it does not follow the game to another phone. If the browser refuses to store anything at all, the Controls tab says so, and a match then lasts only until the game is closed.
+Local storage belongs to one browser on one device. Clearing the browser's site data removes it, and it does not follow the game to another phone. If the browser refuses to store anything at all, Settings › Controls says so, and a match then lasts only until the game is closed.
 
 ## The standard lean
 
@@ -307,7 +307,7 @@ The result screen shows how it went for *your* thumb, which no simulation can.
 | Aims: `STRAIGHT`, `uniformAims`, `standardAims`, `aimScore`, `nearestDir`, the pad's `aims`, and the `Hand` type | [`src/swipe.ts`](../src/swipe.ts) |
 | Reporting strokes (`onStroke`) | [`src/swipe.ts`](../src/swipe.ts) |
 | The screen: `startTeach`, `teachPrompt`, `teachStroke`, `finishLearning`, `finishTesting`, `closeTeach`; saving, loading, the on/off switch and the steering thumb (`settings`, `thumb`, `activeMatch`, `validAims`, `readThumb`, `applySettings`) | [`src/main.ts`](../src/main.ts) |
-| The panel's markup and styles (`#teach`, `#teachChoices`, `.choice`), the Controls tab (`#paneControls`, `.switch`) and the pad caption (`#padTag`) | [`src/page.html`](../src/page.html) |
+| The panel's markup and styles (`#teach`, `#teachChoices`, `.choice`), Settings › Controls (`#setControls`, `.switch`) and the pad caption (`#padTag`) | [`src/page.html`](../src/page.html) |
 | Checks of the maths, including that a straight swipe always keeps 20° of room with either thumb | [`tests/teach.test.ts`](../tests/teach.test.ts) |
 | Checks that the pad reads leaning swipes correctly and honours per-direction aims | [`tests/swipe.test.ts`](../tests/swipe.test.ts) |
 | The simulation behind the design | [`experiments/match-v2.ts`](../experiments/match-v2.ts) |

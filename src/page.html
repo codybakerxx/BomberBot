@@ -14,14 +14,22 @@
     cv        the arena (a canvas)
     timer     the countdown, centred at the top (beside the arena when the phone is sideways)
     score     the scoreboard: four heads, two each side of the timer, each with the rounds it has won beside it
-    result    the panel shown when you are out or the round is decided; it never covers the arena
-    menuBtn   back to the menu
+    result    the panel shown when you are out or the round is decided; it never covers the arena.
+              Next round and Menu (again, change), or Rematch and Lobby once the match is won
+    menuBtn   opens the menu during a match (pause)
     touch     on-screen controls: dzone (swipe pad, with the dpad cross and the padTag caption inside it), btnA, btnB
-    menu      two tabs and a close button (tabMain, tabControls, menuClose)
-                paneMain: bot picker, CPU level (cpuLevels, cpuBlurb), Play or Resume, New round
-                paneControls: Steering thumb (handLeft, handRight) and Swipe direction (dirStandard, dirMine, matchState, matchStart)
+    lobby     setting up a match (lobby.ts): the bar (lobbyBack, lobbyMode, lobbySound, lobbySettings), the summary,
+              two pages (pgPlayers, pgMatch): lobbyPlayers (your robot youBot with colPrev, colNext and the colour
+              dots youDots; the player cards in slots; allCpus) and lobbyMatch (the arena picture arenaPic with
+              arenaPrev, arenaNext, arenaDots; the rules; rulesReset); then lobbyPrev, lobbyStart, lobbyNext
+    cpuSheet  a CPU player's panel, over the lobby: colour and level (cpuRows), cpuRemove, cpuDone
+    settings  your own settings, three pages: setSound (soundOpts), setControls (Steering thumb: handLeft,
+              handRight; Swipe direction: dirStandard, dirMine, matchState, matchStart; padOpts; keys) and
+              setGraphics (gfxOpts); then setPrev, setDone, setNext
+    pause     the menu during a match: pauseState, pauseTitle, pauseInfo, standings, pauseResume, pauseSettings,
+              pauseRestart, pauseNewMatch, pauseLobby
+    confirm   "are you sure?" before anything that cannot be undone (ui.ts)
     teach     the Match my thumb panel, laid over the arena only
-    result    the panel shown when a round ends
 -->
 <html lang="en">
 <head>
@@ -138,18 +146,19 @@
     position: absolute;
     pointer-events: auto;
     touch-action: none;
-    background: rgba(255, 255, 255, 0.055);
-    border: 1.5px solid rgba(255, 255, 255, 0.2);
+    /* --pad-show: how strongly the controls show (Settings › Controls; 1 is the usual) */
+    background: rgba(255, 255, 255, calc(0.055 * var(--pad-show, 1)));
+    border: 1.5px solid rgba(255, 255, 255, min(0.9, calc(0.2 * var(--pad-show, 1))));
     border-radius: 26px;
     transition: background 60ms;
   }
-  #dzone.on { background: rgba(255, 255, 255, 0.09); }
+  #dzone.on { background: rgba(255, 255, 255, calc(0.09 * var(--pad-show, 1))); }
   .tbtn {
     display: grid;
     place-items: center;
     padding: 0;
     font: 700 34px/1 var(--font-display);
-    color: rgba(255, 255, 255, 0.55);
+    color: rgba(255, 255, 255, min(1, calc(0.55 * var(--pad-show, 1))));
   }
   .tbtn.on { background: rgba(255, 255, 255, 0.3); color: #fff; }
 
@@ -197,7 +206,7 @@
     margin: -52px 0 0 -52px;
     pointer-events: none;
   }
-  #dpad i { position: absolute; background: rgba(255, 255, 255, 0.1); transition: background 60ms; }
+  #dpad i { position: absolute; background: rgba(255, 255, 255, calc(0.1 * var(--pad-show, 1))); transition: background 60ms; }
   #dpad .up, #dpad .down { left: 35%; width: 30%; height: 35%; }
   #dpad .left, #dpad .right { top: 35%; height: 30%; width: 35%; }
   #dpad .up { top: 0; border-radius: 8px 8px 0 0; }
@@ -227,36 +236,6 @@
     gap: 14px;
     align-items: stretch;
   }
-  /* the menu hangs from the top, so its tabs stay put when switching between them */
-  #menu { place-items: start center; }
-  .menu-top { display: flex; align-items: stretch; gap: 10px; }
-  #tabs { flex: 1; display: grid; grid-template-columns: 1fr 1fr; gap: 4px; padding: 4px; background: var(--panel); border: 1.5px solid var(--line); border-radius: 12px; }
-  #tabs button {
-    padding: 10px 6px;
-    font: 700 13px/1 var(--font-display);
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-    color: var(--ink-dim);
-    background: transparent;
-    border: 0;
-    border-radius: 8px;
-    cursor: pointer;
-  }
-  #tabs button[aria-selected="true"] { color: #14100a; background: var(--accent); }
-  #menuClose {
-    flex: 0 0 46px;
-    display: grid;
-    place-items: center;
-    padding: 0;
-    color: var(--ink);
-    background: var(--panel);
-    border: 1.5px solid var(--line);
-    border-radius: 12px;
-    cursor: pointer;
-  }
-  #menuClose svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2.6; stroke-linecap: round; }
-  .pane { display: flex; flex-direction: column; gap: 14px; }
-  .pane[hidden] { display: none; }
   .go[hidden] { display: none; }
   /* the Menu button and the top strip belong to the game screen, not the menu */
   body.menu-open #menuBtn, body.menu-open #timer, body.menu-open #score { visibility: hidden; }
@@ -270,33 +249,6 @@
   .wordmark { text-transform: none; letter-spacing: 0.01em; }
   .wordmark span { color: var(--accent); }
   .sub { margin: 0; color: var(--ink-dim); font-size: 15px; line-height: 1.4; max-width: 60ch; }
-  #picker { display: grid; grid-template-columns: repeat(9, 1fr); gap: 8px; }
-  body.portrait #picker { grid-template-columns: repeat(3, 1fr); }
-  .bot {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 2px;
-    padding: 6px 2px 8px;
-    font: 500 13px/1.1 var(--font-body);
-    color: var(--ink-dim);
-    background: var(--panel);
-    border: 1.5px solid var(--line);
-    border-radius: 12px;
-    cursor: pointer;
-  }
-  .bot canvas { width: 100%; max-width: 72px; height: auto; }
-  body.portrait .bot canvas { max-width: 62px; }
-  body.portrait .bot { padding: 4px 2px 6px; }
-  /* during a round the colours are fixed: the picker shows yours and cannot be pressed */
-  .bot:disabled { opacity: 0.35; }
-  .bot[aria-pressed="true"]:disabled { opacity: 1; }
-  #pickerNote { margin: 8px 0 0; text-align: center; font-size: 13px; color: var(--ink-dim, #aab0c6); }
-  .bot[aria-pressed="true"] {
-    color: var(--ink);
-    border-color: var(--glow);
-    box-shadow: 0 0 14px -2px var(--glow), inset 0 0 18px -10px var(--glow);
-  }
   .tune {
     margin: 0;
     padding: 10px 12px 12px;
@@ -357,11 +309,6 @@
   .switch button[aria-pressed="true"] { color: #3a2c10; background: var(--accent); border-color: var(--accent); }
   .switch button[aria-pressed="true"] b { color: #14100a; }
   .switch button[aria-pressed="true"] .on-tag { display: block; }
-  /* the CPU level: three short buttons in a row, shown with a keyboard too */
-  body:not(.touch) .tune.always { display: flex; }
-  .switch.levels { grid-template-columns: repeat(3, 1fr); gap: 6px; }
-  .switch.levels button { align-items: center; padding: 11px 2px; }
-  .switch.levels b { font-size: 15px; }
   .tune .mini { align-self: flex-start; }
   .tune .mini[hidden] { display: none; }
   .mini {
@@ -428,9 +375,181 @@
   }
   .go.quiet { color: var(--ink); background: transparent; border: 1.5px solid var(--line); }
   button:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
-  .keys { display: none; flex-direction: column; gap: 10px; }
-  body:not(.touch) .keys { display: flex; }
-  .keys h2 { font-size: 18px; }
+  /* ---------- the lobby, settings, the in-match menu ---------- */
+  /* A full screen: a bar at the top, the page names, a part that scrolls, and a bar at the bottom with the
+     main button in the middle (Start, Done) and the next and previous pages either side of it. */
+  .screen { position: fixed; inset: 0; display: flex; flex-direction: column; background: var(--void); }
+  .screen[hidden] { display: none; }
+  .bar { flex: 0 0 auto; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 10px 4px; }
+  .bar-mid { display: flex; flex-direction: column; align-items: center; gap: 3px; min-width: 0; text-align: center; }
+  .bar-end { display: flex; gap: 6px; min-width: 44px; justify-content: flex-end; }
+  .bar-sub { font: 500 12px/1.1 var(--font-body); color: var(--ink-dim); }
+  .icon-btn, .round-btn, .step {
+    display: grid; place-items: center; padding: 0; color: var(--ink); cursor: pointer;
+    background: var(--panel); border: 1px solid var(--line);
+  }
+  .icon-btn { width: 44px; height: 44px; border-radius: 12px; }
+  .icon-btn svg, .round-btn svg, .step svg, .side-btn svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
+  .round-btn { flex: 0 0 auto; width: 52px; height: 52px; border-radius: 50%; background: #151a28; }
+  .round-btn svg { width: 22px; height: 22px; }
+  .icon-btn:active, .round-btn:active, .step:active, .side-btn:active { transform: translateY(1px); }
+  .mode-chip {
+    display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px;
+    font: 700 12px/1 var(--font-display); letter-spacing: 0.18em; text-transform: uppercase;
+    color: var(--accent); background: rgba(255, 197, 106, 0.1); border: 1px solid rgba(255, 197, 106, 0.45); border-radius: 999px;
+  }
+  .mode-chip::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+  .summary { margin: 2px 14px 8px; text-align: center; font: 500 13px/1.3 var(--font-body); color: var(--ink-dim); }
+  .pages { flex: 0 0 auto; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); margin: 0 14px; border-bottom: 1px solid var(--line); }
+  .pages.three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .pages button {
+    padding: 11px 0 9px; margin-bottom: -1px; border: 0; border-bottom: 3px solid transparent; background: transparent; cursor: pointer;
+    font: 700 15px/1 var(--font-display); letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-dim);
+  }
+  .pages button[aria-selected="true"] { color: var(--accent); border-bottom-color: var(--accent); }
+  .scroll { flex: 1 1 auto; min-height: 0; overflow-y: auto; touch-action: pan-y; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
+  .cols { display: grid; grid-template-columns: minmax(0, 1fr); gap: 18px; max-width: 560px; margin: 0 auto; padding: 14px 14px 18px; }
+  .page { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+  .page[hidden] { display: none; }
+  /* a wide screen shows the lobby's two pages side by side, and needs no page names or page arrows */
+  @media (min-width: 820px) and (min-height: 480px) {
+    #lobby .cols { grid-template-columns: repeat(2, minmax(0, 1fr)); max-width: 1040px; }
+    #lobby .page[hidden] { display: flex; }
+    #lobby .pages, #lobby .side-btn { visibility: hidden; }
+    #lobby .pages { height: 0; border: 0; overflow: hidden; }
+  }
+  .foot { flex: 0 0 auto; display: grid; grid-template-columns: 118px minmax(0, 1fr) 118px; align-items: center; gap: 8px; padding: 8px 10px 14px; max-width: 640px; width: 100%; margin: 0 auto; }
+  .foot-note { flex: 0 0 auto; margin: 0 14px; text-align: center; font: 500 13px/1.3 var(--font-body); color: #ff9a9a; min-height: 0; }
+  .foot-note:empty { display: none; }
+  .go.big { padding: 18px 12px; font-size: 22px; letter-spacing: 0.16em; border-radius: 16px; }
+  .go.danger { color: #ff9a9a; background: transparent; border: 1.5px solid #5a2a34; }
+  .go:disabled { opacity: 0.4; cursor: default; }
+  .side-btn {
+    height: 52px; display: flex; align-items: center; justify-content: center; gap: 2px; padding: 0 6px; cursor: pointer;
+    font: 700 13px/1 var(--font-display); letter-spacing: 0.02em; text-transform: uppercase;
+    color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
+  }
+  .side-btn svg { width: 16px; height: 16px; flex: 0 0 auto; }
+  .side-btn span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .side-btn[hidden] { display: flex; visibility: hidden; }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 12px; display: flex; flex-direction: column; align-items: center; gap: 8px; }
+  .you-row { width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+  #youBot { width: 150px; height: 150px; }
+  #arenaPic { width: min(100%, 230px); aspect-ratio: 15 / 13; border-radius: 8px; }
+  .big-name { font: 700 20px/1 var(--font-display); letter-spacing: 0.12em; text-transform: uppercase; }
+  .hint { margin: 0; font: 500 13px/1.35 var(--font-body); color: var(--ink-dim); }
+  .hint.center { text-align: center; }
+  .dots { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
+  .dot { width: 30px; height: 30px; border-radius: 50%; padding: 0; cursor: pointer; background: var(--c); border: 3px solid var(--void); box-shadow: 0 0 0 1px var(--line); }
+  .dot[aria-pressed="true"] { border-color: #fff; box-shadow: 0 0 0 2px var(--c), 0 0 12px var(--c); }
+  .dot:disabled { opacity: 0.2; cursor: default; }
+  .dots.small .dot { width: 14px; height: 14px; border-width: 2px; background: var(--line); }
+  .dots.small .dot[aria-pressed="true"] { background: var(--accent); box-shadow: none; border-color: var(--void); }
+  .sec-head { display: flex; justify-content: space-between; align-items: baseline; padding: 6px 2px 0; font: 700 13px/1 var(--font-display); letter-spacing: 0.18em; text-transform: uppercase; color: var(--ink-dim); }
+  .sec-head span:last-child { letter-spacing: 0.04em; text-transform: none; font-weight: 500; }
+  .host-tag { padding: 3px 8px; border-radius: 6px; color: #14100a !important; background: var(--accent); font-weight: 700 !important; letter-spacing: 0.1em !important; text-transform: uppercase !important; }
+  .slots { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .slot {
+    position: relative; min-height: 96px; display: grid; grid-template-columns: 56px minmax(0, 1fr); align-items: center; gap: 8px; padding: 8px 10px 8px 6px;
+    text-align: left; cursor: pointer; color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 14px;
+  }
+  .slot canvas { width: 56px; height: 72px; }
+  .slot b { display: block; font: 700 16px/1.1 var(--font-display); letter-spacing: 0.06em; }
+  .slot small { display: block; margin-top: 3px; font: 500 12px/1.25 var(--font-body); color: var(--ink-dim); }
+  .slot.me { border-color: var(--accent); cursor: default; }
+  .slot.add { grid-template-columns: 1fr; justify-items: center; align-content: center; gap: 4px; color: var(--ink-dim); background: transparent; border: 1.5px dashed var(--line); }
+  .slot.add svg { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; }
+  .slot.add b { font-size: 14px; }
+  .slot .edit { position: absolute; top: 8px; right: 8px; font: 700 10px/1 var(--font-display); letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-dim); }
+  /* the settings rows (ui.ts) */
+  .opts { display: flex; flex-direction: column; gap: 6px; }
+  .opt-group { display: flex; flex-direction: column; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; }
+  .opts > .opt { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; }
+  .opt { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 54px; padding: 6px 6px 6px 14px; }
+  .opt.off { opacity: 0.45; }
+  .opt-name { display: flex; flex-direction: column; gap: 3px; min-width: 0; flex: 1 1 auto; cursor: default; }
+  .opt-toggle .opt-name { cursor: pointer; }
+  .opt-label { font: 700 14px/1.15 var(--font-display); letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink); }
+  .opt-hint { font: 500 12px/1.3 var(--font-body); color: var(--ink-dim); }
+  .opt-hint:empty { display: none; }
+  .opt-ctl { display: flex; align-items: center; flex: 0 0 auto; }
+  .opt-value { min-width: 96px; text-align: center; font: 700 16px/1.1 var(--font-display); color: var(--ink); outline-offset: 2px; }
+  .opt-slider .opt-value { min-width: 0; text-align: right; color: var(--accent); white-space: nowrap; }
+  .step { width: 44px; height: 44px; border: 0; background: transparent; border-radius: 10px; }
+  .step.small { width: 40px; height: 40px; background: #151a28; border: 1px solid var(--line); }
+  .step:disabled { opacity: 0.3; cursor: default; }
+  .opt-slider { flex-direction: column; align-items: stretch; gap: 6px; padding: 10px 12px 10px 14px; }
+  .opt-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+  .opt-range { display: flex; align-items: center; gap: 10px; }
+  .opt-range input { flex: 1 1 auto; min-width: 0; height: 36px; margin: 0; background: transparent; -webkit-appearance: none; appearance: none; cursor: pointer; }
+  .opt-range input::-webkit-slider-runnable-track { height: 8px; border-radius: 4px; background: linear-gradient(to right, var(--accent) var(--fill, 0%), var(--line) var(--fill, 0%)); }
+  .opt-range input::-moz-range-track { height: 8px; border-radius: 4px; background: linear-gradient(to right, var(--accent) var(--fill, 0%), var(--line) var(--fill, 0%)); }
+  .opt-range input::-webkit-slider-thumb { -webkit-appearance: none; width: 26px; height: 26px; margin-top: -9px; border-radius: 50%; background: #fff; border: 3px solid var(--accent); }
+  .opt-range input::-moz-range-thumb { width: 20px; height: 20px; border-radius: 50%; background: #fff; border: 3px solid var(--accent); }
+  .opt-under { border-top: 1px solid #1d2338; }
+  .opt-under[hidden] { display: none; }
+  .opt-under > .opt + .opt, .opt-under > .opt-group + .opt, .opt-under > .opt + .opt-group { border-top: 1px solid #1d2338; }
+  .opt-under .opt-group { border: 0; border-radius: 0; background: transparent; }
+  .opt-off { margin: 0; padding: 0 14px 12px; font: 500 12px/1.35 var(--font-body); color: var(--ink-dim); }
+  .opt-off[hidden] { display: none; }
+  .switch-btn { flex: 0 0 auto; width: 56px; height: 32px; margin-right: 6px; padding: 3px; border: 0; border-radius: 16px; cursor: pointer; background: var(--line); display: flex; justify-content: flex-start; transition: background 120ms; }
+  .switch-btn .knob { width: 26px; height: 26px; border-radius: 50%; background: var(--ink-dim); transition: transform 120ms; }
+  .switch-btn[aria-checked="true"] { background: var(--accent); }
+  .switch-btn[aria-checked="true"] .knob { background: #14100a; transform: translateX(24px); }
+  .opt-play { flex: 0 0 auto; }
+  .mini.wide { align-self: stretch; padding: 13px 12px; }
+  .row2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .row2 .go { flex: none; padding: 14px 8px; font-size: 15px; }
+  .pause-card .go, .sheet .go, .foot .go { flex: 0 0 auto; }
+  /* panels over a screen: the CPU player's, and "are you sure?" */
+  .sheet-wrap { position: fixed; inset: 0; display: flex; align-items: flex-end; justify-content: center; background: rgba(5, 6, 11, 0.7); touch-action: pan-y; }
+  .sheet-wrap[hidden] { display: none; }
+  .sheet-wrap.middle { align-items: center; padding: 16px; }
+  /* over everything, the menu during a match included */
+  #cpuSheet { z-index: 3; }
+  #confirm { z-index: 5; }
+  .sheet { width: min(100%, 520px); max-height: 92%; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; padding: 16px 14px 18px; background: var(--panel); border: 1px solid var(--line); border-radius: 22px 22px 0 0; }
+  .sheet.small { border-radius: 18px; gap: 12px; }
+  .sheet h2 { font-size: 22px; }
+  .sheet-head { display: flex; align-items: center; gap: 12px; }
+  #cpuBot { width: 72px; height: 92px; flex: 0 0 auto; }
+  .sheet .opts .opt, .sheet .opts .opt-group { background: #131827; }
+  /* the menu during a match */
+  #pause { z-index: 2; display: flex; }
+  #pause[hidden] { display: none; }
+  #pause .pause-card { margin: auto; } /* centred, but scrolls from its top when the screen is too short for it */
+  .pause-card { width: min(100%, 420px); display: flex; flex-direction: column; gap: 10px; padding: 18px 16px 16px; background: var(--panel); border: 1px solid var(--line); border-radius: 20px; }
+  .pause-card h2 { text-align: center; font-size: 26px; }
+  .pause-head { display: flex; justify-content: center; gap: 8px; flex-wrap: wrap; }
+  .state-chip { padding: 4px 10px; font: 700 12px/1 var(--font-display); letter-spacing: 0.14em; text-transform: uppercase; color: var(--ink); border: 1px solid var(--line); border-radius: 999px; }
+  .standings { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+  .standings li { display: grid; grid-template-columns: 34px minmax(0, 1fr) auto auto; align-items: center; gap: 10px; padding: 6px 10px 6px 6px; background: #131827; border-radius: 10px; }
+  .standings canvas { width: 34px; height: 34px; }
+  .standings b { font: 700 14px/1.1 var(--font-display); letter-spacing: 0.04em; }
+  .standings small { display: block; font: 500 12px/1.2 var(--font-body); color: var(--ink-dim); }
+  .standings .st { font: 700 11px/1 var(--font-display); letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-dim); }
+  .standings .st.in { color: #5cff8e; }
+  .standings .wins { min-width: 26px; text-align: right; font: 700 20px/1 var(--font-display); }
+  .divider { display: flex; align-items: center; gap: 10px; margin-top: 4px; font: 700 11px/1 var(--font-display); letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-dim); }
+  .divider::before, .divider::after { content: ''; flex: 1; height: 1px; background: var(--line); }
+  .keys { align-items: stretch; }
+  /* a phone held sideways is short: everything round the scrolling part is made smaller */
+  @media (max-height: 480px) {
+    .bar { padding: 4px 10px 2px; }
+    .bar-sub, .summary { display: none; }
+    .icon-btn { width: 40px; height: 40px; }
+    .pages button { padding: 8px 0 6px; font-size: 13px; }
+    .cols { padding-top: 10px; }
+    .foot { padding: 6px 10px 8px; }
+    .go.big { padding: 12px 10px; font-size: 18px; }
+    .side-btn { height: 44px; }
+    #youBot { width: 110px; height: 110px; }
+    .standings { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .pause-card { width: min(100%, 620px); gap: 8px; padding: 12px 14px; }
+    .pause-card h2 { font-size: 20px; }
+  }
+  /* less movement, for those who ask for it in Settings › Graphics */
+  body.calm *, body.calm *::before, body.calm *::after { animation: none !important; transition: none !important; }
   /* ---------- the title screen ---------- */
   /* Covers the whole screen. The picture (title.ts) is a canvas behind everything; the name, the free space
      the robots stand in (#titleStage) and the buttons are laid out over it. Upright: name, robots, buttons
@@ -537,35 +656,108 @@
   <button id="btnA" class="tbtn" type="button" aria-label="A button, drop bomb">A</button>
 </div>
 
-<div id="menu" class="overlay">
-  <div class="card">
-    <div class="menu-top">
-      <div id="tabs" role="tablist" aria-label="Menu sections">
-        <button type="button" role="tab" id="tabMain" aria-controls="paneMain" aria-selected="true">Main menu</button>
-        <button type="button" role="tab" id="tabControls" aria-controls="paneControls" aria-selected="false">Controls</button>
-      </div>
-      <button type="button" id="menuClose" aria-label="Close the menu">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5l14 14M19 5L5 19"/></svg>
-      </button>
+<!-- The lobby: two pages, Players and Match, with Start always in the middle of the bottom bar.
+     main.ts and lobby.ts fill it in. On a wide screen both pages show side by side. -->
+<div id="lobby" class="screen" hidden>
+  <header class="bar">
+    <button id="lobbyBack" class="icon-btn" type="button" aria-label="Back to the title screen"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></button>
+    <div class="bar-mid">
+      <span class="mode-chip" id="lobbyMode">Local match</span>
+      <span class="bar-sub">You are the host</span>
     </div>
+    <div class="bar-end">
+      <button id="lobbySound" class="icon-btn" type="button" aria-label="Sound settings"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9h4l5-4v14l-5-4H4z"/><path d="M16.5 8.5a5 5 0 0 1 0 7M19 6a8.5 8.5 0 0 1 0 12"/></svg></button>
+      <button id="lobbySettings" class="icon-btn" type="button" aria-label="Settings"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1"/></svg></button>
+    </div>
+  </header>
+  <p class="summary" id="lobbySummary" aria-live="polite"></p>
+  <nav class="pages" role="tablist" aria-label="Lobby pages">
+    <button type="button" role="tab" id="pgPlayers" aria-controls="lobbyPlayers">Players</button>
+    <button type="button" role="tab" id="pgMatch" aria-controls="lobbyMatch">Match</button>
+  </nav>
+  <div class="scroll">
+    <div class="cols">
+      <section id="lobbyPlayers" class="page" role="tabpanel" aria-labelledby="pgPlayers">
+        <div class="panel you">
+          <div class="you-row">
+            <button class="round-btn" id="colPrev" type="button" aria-label="Previous colour"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></button>
+            <canvas id="youBot" role="img" aria-label="Your robot"></canvas>
+            <button class="round-btn" id="colNext" type="button" aria-label="Next colour"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg></button>
+          </div>
+          <div class="big-name" id="youName"></div>
+          <div class="dots" id="youDots" role="group" aria-label="Your colour"></div>
+          <p class="hint center">Tap the arrows or a colour, or swipe across your robot. Colours a CPU wears are greyed out.</p>
+        </div>
+        <div class="sec-head"><span>Players</span><span id="playerCount"></span></div>
+        <div class="slots" id="slots"></div>
+        <div class="opts" id="allCpus"></div>
+        <p class="hint" id="playersNote">Tap a CPU player to change its colour or level, or to remove it. Up to 4 players on this device: online play will take more.</p>
+      </section>
+      <section id="lobbyMatch" class="page" role="tabpanel" aria-labelledby="pgMatch">
+        <div class="sec-head"><span>Arena</span><span id="arenaCount"></span></div>
+        <div class="panel arena">
+          <div class="you-row">
+            <button class="round-btn" id="arenaPrev" type="button" aria-label="Previous arena"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></button>
+            <canvas id="arenaPic" role="img" aria-label="The arena"></canvas>
+            <button class="round-btn" id="arenaNext" type="button" aria-label="Next arena"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg></button>
+          </div>
+          <div class="big-name" id="arenaName"></div>
+          <p class="hint center" id="arenaBlurb"></p>
+          <div class="dots small" id="arenaDots" role="group" aria-label="Arenas"></div>
+        </div>
+        <div class="sec-head"><span>Rules</span><span class="host-tag">Host</span></div>
+        <div class="opts" id="rules"></div>
+        <button class="mini wide" id="rulesReset" type="button">Put the rules back to normal</button>
+      </section>
+    </div>
+  </div>
+  <p class="foot-note" id="startNote" role="status"></p>
+  <footer class="foot">
+    <button id="lobbyPrev" class="side-btn" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg><span>Players</span></button>
+    <button id="lobbyStart" class="go big" type="button">Start</button>
+    <button id="lobbyNext" class="side-btn" type="button"><span>Match</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg></button>
+  </footer>
+</div>
 
-    <section id="paneMain" class="pane" role="tabpanel" aria-labelledby="tabMain">
-      <h1 class="wordmark">Bomber<span>Bot</span></h1>
-      <p class="sub">Be the last bot standing. A drops a bomb. The boot kicks bombs. The glove lets B lift one and throw it within 3 seconds.</p>
-      <div id="picker"></div>
-      <p id="pickerNote" class="note" hidden>Your colour is set for this round. You can change it between rounds.</p>
-      <fieldset class="tune always">
-        <legend>CPU players</legend>
-        <div class="switch levels" id="cpuLevels" role="group" aria-label="How good the three CPU players are"></div>
-        <p class="opt-desc" id="cpuBlurb"></p>
-      </fieldset>
-      <div class="row">
-        <button id="play" class="go" type="button">Play</button>
-        <button id="newRound" class="go quiet" type="button" hidden>New round</button>
+<!-- A CPU player's panel: opens over the lobby when its card is tapped. -->
+<div id="cpuSheet" class="sheet-wrap" hidden>
+  <section class="sheet" role="dialog" aria-modal="true" aria-labelledby="cpuTitle">
+    <div class="sheet-head">
+      <canvas id="cpuBot" aria-hidden="true"></canvas>
+      <div>
+        <h2 id="cpuTitle">CPU 1</h2>
+        <p class="hint" id="cpuDesc"></p>
       </div>
-    </section>
+    </div>
+    <div class="opts" id="cpuRows"></div>
+    <div class="row2">
+      <button class="go danger" id="cpuRemove" type="button">Remove</button>
+      <button class="go" id="cpuDone" type="button">Done</button>
+    </div>
+  </section>
+</div>
 
-    <section id="paneControls" class="pane" role="tabpanel" aria-labelledby="tabControls" hidden>
+<!-- Settings: your own, never anyone else's. Opened from the lobby or from the menu during a match. -->
+<div id="settings" class="screen" hidden>
+  <header class="bar">
+    <button id="setBack" class="icon-btn" type="button" aria-label="Back"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></button>
+    <div class="bar-mid">
+      <span class="mode-chip" id="setMode">Local match</span>
+      <span class="bar-sub">Settings · just for you</span>
+    </div>
+    <div class="bar-end"></div>
+  </header>
+  <nav class="pages three" role="tablist" aria-label="Settings pages">
+    <button type="button" role="tab" id="pgSound" aria-controls="setSound">Sound</button>
+    <button type="button" role="tab" id="pgControls" aria-controls="setControls">Controls</button>
+    <button type="button" role="tab" id="pgGraphics" aria-controls="setGraphics">Graphics</button>
+  </nav>
+  <div class="scroll">
+    <div class="cols one">
+      <section id="setSound" class="page" role="tabpanel" aria-labelledby="pgSound">
+        <div class="opts" id="soundOpts"></div>
+      </section>
+      <section id="setControls" class="page" role="tabpanel" aria-labelledby="pgControls">
       <fieldset class="tune">
         <legend>Steering thumb</legend>
         <p class="opt-desc">The swipe pad goes on this side, and A and B on the other.</p>
@@ -585,13 +777,57 @@
         <button id="matchStart" class="mini" type="button" hidden>Match again</button>
         <p class="opt-note" id="saveNote" hidden>This browser is not saving settings, so they last only until you close the game.</p>
       </fieldset>
-      <div class="keys">
-        <h2>Keyboard</h2>
-        <p class="sub">Arrow keys or W A S D to move. Space drops a bomb. Shift lifts a bomb and throws it. Escape opens and closes the menu.</p>
-        <p class="sub">On a phone or tablet, this tab has the settings for the on-screen swipe pad.</p>
-      </div>
-    </section>
+        <div class="opts" id="padOpts"></div>
+        <div class="panel keys">
+          <div class="sec-head"><span>Keyboard</span></div>
+          <p class="sub">Arrow keys or W A S D to move. Space, X, J or Enter drops a bomb. Shift, Z or K lifts a bomb and throws it. Escape opens the menu and goes back.</p>
+          <p class="sub">In the menus: Tab moves between buttons, ← and → change a setting, Q and E switch pages.</p>
+          <p class="sub">Game controllers are not supported yet.</p>
+        </div>
+      </section>
+      <section id="setGraphics" class="page" role="tabpanel" aria-labelledby="pgGraphics">
+        <div class="opts" id="gfxOpts"></div>
+      </section>
+    </div>
   </div>
+  <footer class="foot">
+    <button id="setPrev" class="side-btn" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg><span></span></button>
+    <button id="setDone" class="go big" type="button">Done</button>
+    <button id="setNext" class="side-btn" type="button"><span></span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg></button>
+  </footer>
+</div>
+
+<!-- The menu during a match: what is going on, then Resume and the rest. -->
+<div id="pause" class="overlay" hidden>
+  <section class="pause-card" role="dialog" aria-modal="true" aria-labelledby="pauseTitle">
+    <div class="pause-head">
+      <span class="mode-chip">Local match</span>
+      <span class="state-chip" id="pauseState">Paused</span>
+    </div>
+    <h2 id="pauseTitle">Round 1</h2>
+    <p class="hint center" id="pauseInfo"></p>
+    <ol class="standings" id="standings" aria-label="Standings"></ol>
+    <button class="go big" id="pauseResume" type="button">Resume</button>
+    <button class="go quiet" id="pauseSettings" type="button">Settings</button>
+    <div class="divider"><span>Match · you are the host</span></div>
+    <div class="row2">
+      <button class="go quiet" id="pauseRestart" type="button">Restart round</button>
+      <button class="go quiet" id="pauseNewMatch" type="button">New match</button>
+    </div>
+    <button class="go danger" id="pauseLobby" type="button">Leave to the lobby</button>
+  </section>
+</div>
+
+<!-- Asking before anything that cannot be undone. ui.ts runs it. -->
+<div id="confirm" class="sheet-wrap middle" hidden>
+  <section class="sheet small" role="alertdialog" aria-modal="true" aria-labelledby="confirmTitle" aria-describedby="confirmText">
+    <h2 id="confirmTitle"></h2>
+    <p class="sub" id="confirmText"></p>
+    <div class="row2">
+      <button class="go quiet" id="confirmNo" type="button">Cancel</button>
+      <button class="go" id="confirmYes" type="button">OK</button>
+    </div>
+  </section>
 </div>
 
 <div id="teach" hidden>

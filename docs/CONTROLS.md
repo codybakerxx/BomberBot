@@ -36,27 +36,34 @@ There used to be a strip at the top left showing your bombs, blast length, speed
 
 The caption on the swipe pad (*Standard swipes* or *My thumb swipes*) is centred along its bottom edge.
 
-## The menu
+## The lobby, Settings and the menu
 
 <p align="center">
-  <img src="screenshots/menu.png" alt="The menu's Main menu tab: the bot picker, the CPU level and Play" width="220">
-  <img src="screenshots/menu-controls.png" alt="The menu's Controls tab: Steering thumb and Swipe direction" width="220">
-  <img src="screenshots/menu-paused.png" alt="The menu opened in the middle of a round: the bot picker switched off with your colour showing, Resume and New round" width="220">
+  <img src="screenshots/lobby.png" alt="The lobby's Players page" width="200">
+  <img src="screenshots/lobby-match.png" alt="The lobby's Match page: arena and rules" width="200">
+  <img src="screenshots/settings-controls.png" alt="Settings, the Controls page: Steering thumb and Swipe direction" width="200">
+  <img src="screenshots/menu-paused.png" alt="The menu opened in the middle of a round" width="200">
 </p>
 
-The menu has two tabs along the top and a close button (✕) beside them.
+**Local** on the title screen opens the **lobby**, where a match is set up. It has two pages, **Players** and **Match**. Start is always in the middle of the bottom bar; the other page's name is beside it, and the page names along the top switch pages too. On a wide screen both pages show side by side.
 
-| Tab | What is on it |
+- **Players:** your robot, with ‹ › either side, a dot for each colour under it, and a swipe across the robot: three ways to change your colour. A colour a CPU player wears is greyed out. Then a card for each player. Tap a CPU player's card for its panel: Colour, Level (with what that level does), Remove (asks first) and Done. **Add CPU player** adds one, up to three. **All CPUs** sets every CPU player's level at once.
+- **Match** (the host's): the arena, with ‹ ›, dots or a swipe (Compact 11 by 9 tiles, Classic 13 by 11, Big 15 by 13; the picture is the real arena, with the bricks the rules ask for), then the rules: Round timer (a switch; when on, Round length and Closing in appear under it), Rounds to win, Bricks, Custom start (a switch; Bombs, Blast and Speed under it), Custom power-ups (a switch; a slider for each power-up under it). **Put the rules back to normal** asks first.
+- Every slider has − and + beside it, and every setting is saved on this device as it changes.
+
+**Settings** are your own and change nobody else's game. Open them with the gear or the speaker in the lobby, or with Settings in the menu during a match. Three pages, with Done in the middle of the bottom bar:
+
+| Page | What is on it |
 |---|---|
-| **Main menu** | The bot picker, **CPU players** (Beginner, Normal or Hard), and **Play**. If a round is in progress: **Resume** and **New round**. If the round has ended for you: **New round**. |
-| **Controls** | On a touch screen: **Steering thumb** and **Swipe direction** (both described below). On a computer: the keyboard keys. |
+| **Sound** | Sound effects on or off, with the volume under it when on. Then a switch for each sound, with ▶ to hear it. |
+| **Controls** | **Steering thumb** and **Swipe direction** (both described below), how strongly the touch controls show, and the keyboard keys. |
+| **Graphics** | Sharpness (Sharpest, Balanced, Battery saver), Ghosts on or off, Less movement. |
 
-Opening the menu during a round pauses it. Nothing is lost: the round waits behind the menu.
+The **menu during a match** (the three bars at the top right, or Escape) pauses the round. It says whether the match is local, whether the round is paused or over, which round it is, the rules and the time left, and every player's state (in or out) and rounds won. Then **Resume** (back into the round, or back to its result), **Settings**, and the host's choices: **Restart round** (the score stays), **New match** (the score goes back to 0) and **Leave to the lobby**. Those three ask first.
 
-- **✕** closes the menu and goes back to the game as it was: into the paused round if there is one. If the round has ended for you (you are out, or it is decided), ✕ goes back to watching it, with the result panel showing again. It does not start a new round; **New round** does. Only before the first round does ✕ start one.
-- **Resume** does the same as ✕ when a round is paused. **New round** abandons it and starts afresh.
-- **Your colour is yours for the whole round.** While a round is in play the bot picker shows your colour and cannot be pressed. Between rounds (before the first one, or once a round has ended for you) you can pick another; it applies from the next round. If a CPU player was wearing that colour, it takes your old one. (At first a pick while paused recoloured your bot in the same round; that was taken out in play-testing.)
-- On a computer, **Escape** opens and closes the menu, and does the same as ✕.
+When a round ends, the result panel offers **Next round** and **Menu**. When someone has won the match it offers **Rematch** (same players and rules, the score back to 0) and **Lobby**.
+
+Keys in the menus: Tab moves between buttons, ← and → change the setting in focus, Q and E turn the pages, and Escape goes back one step (closes a question or a panel, leaves Settings, resumes from the menu, goes from the lobby to the title).
 
 On a computer the touch controls are hidden and the keyboard is used:
 
@@ -65,7 +72,7 @@ On a computer the touch controls are hidden and the keyboard is used:
 | Move | Arrow keys, or W A S D |
 | A (drop a bomb) | Space, X, J or Enter |
 | B (lift and throw) | Shift, Z or K |
-| Open or close the menu | Escape |
+| Open the menu, go back | Escape |
 
 ## Using the swipe pad
 
@@ -112,11 +119,11 @@ Whichever of up, down, left and right the leg points nearest to. Three details m
 
 The game reads the controls 60 times a second. A quick flick or a tap on A or B can begin and end between two of those readings. `src/input.ts` remembers any new direction or button press until the game has read it once, so even the shortest tap counts.
 
-## The settings on the Controls tab
+## The settings on Settings › Controls
 
 <p align="center">
-  <img src="screenshots/menu-settings.png" alt="The Controls tab with Left thumb and Standard switched on" width="300">
-  <img src="screenshots/menu-settings-matched.png" alt="The Controls tab with My thumb switched on, and a Match again button" width="300">
+  <img src="screenshots/menu-settings.png" alt="Settings › Controls with Left thumb and Standard switched on" width="300">
+  <img src="screenshots/menu-settings-matched.png" alt="Settings › Controls with My thumb switched on, and a Match again button" width="300">
 </p>
 
 Both settings are two-sided switches. The side in use is filled in and tagged **On**.

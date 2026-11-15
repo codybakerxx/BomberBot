@@ -2,7 +2,7 @@
 Retakes the screenshots used in the documentation (docs/screenshots/).
 
 It opens the built game in a phone-sized browser window, drives it with
-simulated touches and key presses, and saves the pictures: the title screen (upright and sideways), the menu and its
+simulated touches and key presses, and saves the pictures: the title screen (upright and sideways), the lobby, Settings, the menu and its
 Controls tab (on Standard, and on My thumb), the right-thumb layout, the menu
 opened mid-round, a round in progress, the Match my thumb screens, the
 sideways layout, a close-up of the power-ups, blocks falling after the
@@ -98,13 +98,26 @@ async def main():
         chrome = os.environ.get("CHROME")
         browser = await p.chromium.launch(executable_path=chrome, args=["--no-sandbox"]) if chrome else await p.chromium.launch()
 
-        # --- upright phone: menu
+        # --- upright phone: the lobby's two pages, a CPU player's panel, then Settings
         context, page = await phone(browser, 393, 740, title="title.png")
-        await page.screenshot(path=str(OUT / "menu.png"))
-        await page.tap("#tabControls")
+        await page.screenshot(path=str(OUT / "lobby.png"))
+        await page.tap("#slot-2")
         await page.wait_for_timeout(100)
-        await page.screenshot(path=str(OUT / "menu-controls.png"))
-        await page.locator("#paneControls").screenshot(path=str(OUT / "menu-settings.png"))
+        await page.screenshot(path=str(OUT / "lobby-cpu.png"))
+        await page.tap("#cpuDone")
+        await page.tap("#lobbyNext")
+        await page.wait_for_timeout(100)
+        await page.screenshot(path=str(OUT / "lobby-match.png"))
+        await page.tap("#lobbyPrev")
+        await page.tap("#lobbySettings")
+        await page.wait_for_timeout(100)
+        await page.screenshot(path=str(OUT / "settings-sound.png"))
+        await page.tap("#pgGraphics")
+        await page.screenshot(path=str(OUT / "settings-graphics.png"))
+        await page.tap("#pgControls")
+        await page.wait_for_timeout(100)
+        await page.screenshot(path=str(OUT / "settings-controls.png"))
+        await page.locator("#setControls").screenshot(path=str(OUT / "menu-settings.png"))
 
         # --- Match my thumb: the prompt, then twenty swipes leaning about 30 degrees clockwise.
         # Sideways swipes lean a little more than up and down ones, as many thumbs do.
@@ -136,11 +149,11 @@ async def main():
         )
         await page.tap("#teachClose")
         await page.wait_for_timeout(150)
-        await page.locator("#paneControls").screenshot(path=str(OUT / "menu-settings-matched.png"))
-        await page.tap("#tabMain")
+        await page.locator("#setControls").screenshot(path=str(OUT / "menu-settings-matched.png"))
+        await page.tap("#setDone")
 
         # --- a round in progress: power-ups in the open, a blast along the top row
-        await page.tap("#play")
+        await page.tap("#lobbyStart")
         await page.wait_for_timeout(200)
         await page.evaluate(
             """() => {
@@ -173,10 +186,11 @@ async def main():
 
         # --- right thumb steering: the controls mirrored
         context, page = await phone(browser, 393, 740)
-        await page.tap("#tabControls")
+        await page.tap("#lobbySettings")
+        await page.tap("#pgControls")
         await page.tap("#handRight")
-        await page.tap("#tabMain")
-        await page.tap("#play")
+        await page.tap("#setDone")
+        await page.tap("#lobbyStart")
         await page.wait_for_timeout(300)
         await page.screenshot(path=str(OUT / "right-thumb.png"))
         # --- and the menu as it looks when opened in the middle of a round
@@ -187,14 +201,14 @@ async def main():
 
         # --- the same game held sideways
         context, page = await phone(browser, 844, 390, title="title-sideways.png")
-        await page.tap("#play")
+        await page.tap("#lobbyStart")
         await page.wait_for_timeout(300)
         await page.screenshot(path=str(OUT / "sideways.png"))
         await context.close()
 
         # --- the seven power-ups in a row, and what a shield and a curse look like on a robot
         context, page = await phone(browser, 393, 740)
-        await page.tap("#play")
+        await page.tap("#lobbyStart")
         await page.wait_for_timeout(200)
         await page.evaluate(
             """() => {
@@ -219,7 +233,7 @@ async def main():
 
         # --- after the timer reaches 0: blocks falling round the edge
         context, page = await phone(browser, 393, 740)
-        await page.tap("#play")
+        await page.tap("#lobbyStart")
         await page.wait_for_timeout(200)
         await page.evaluate(
             """() => {
@@ -241,7 +255,7 @@ async def main():
         # --- knocked out, then the round won: three robots caught a third of a second apart, so the
         # picture shows three moments of the knocked-out animation; then the winner and the result panel
         context, page = await phone(browser, 393, 740)
-        await page.tap("#play")
+        await page.tap("#lobbyStart")
         await page.wait_for_timeout(200)
         await page.evaluate(
             """() => {

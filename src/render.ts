@@ -168,7 +168,7 @@ export function drawStatic(ctx: Ctx, world: World, T: number): void {
   }
 }
 
-const ITEM_COLOR: Record<ItemKind, string> = {
+export const ITEM_COLOR: Record<ItemKind, string> = {
   bomb: '#5fd6ff',
   fire: '#ff8a3c',
   speed: '#6dff8a',

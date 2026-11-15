@@ -4,6 +4,17 @@
  */
 let ac: AudioContext | null = null;
 
+/**
+ * Your sound settings (Settings › Sound, `Prefs` in setup.ts): every sound is scaled by `level` (0 to 1),
+ * and a sound whose id is in `muted` is not played at all. `level` 0 is silence.
+ */
+let level = 0.8;
+let muted = new Set<string>();
+export function setSound(on: boolean, volume: number, off: string[]): void {
+  level = on ? Math.max(0, Math.min(1, volume / 100)) : 0;
+  muted = new Set(off);
+}
+
 /** Switch sound on. Browsers only allow this from a tap or key press, so it is called from those. */
 export function initAudio(): void {
   try {
@@ -16,7 +27,8 @@ export function initAudio(): void {
 
 /** A tone that slides from one pitch to another while fading out. */
 function tone(from: number, to: number, dur: number, type: OscillatorType, vol: number): void {
-  if (!ac || ac.state !== 'running') return;
+  if (!ac || ac.state !== 'running' || level <= 0) return;
+  vol *= level;
   const t = ac.currentTime;
   const o = ac.createOscillator();
   const g = ac.createGain();
@@ -32,7 +44,8 @@ function tone(from: number, to: number, dur: number, type: OscillatorType, vol: 
 
 /** A burst of low rumbling noise, for blasts. */
 function noise(dur: number, vol: number): void {
-  if (!ac || ac.state !== 'running') return;
+  if (!ac || ac.state !== 'running' || level <= 0) return;
+  vol *= level;
   const n = Math.floor(ac.sampleRate * dur);
   const buf = ac.createBuffer(1, n, ac.sampleRate);
   const d = buf.getChannelData(0);
@@ -48,8 +61,8 @@ function noise(dur: number, vol: number): void {
   src.start();
 }
 
-/** One function per sound. main.ts calls these for the events the rules report. */
-export const sfx = {
+/** The sounds themselves, one function each, by id. */
+const sounds = {
   place: (): void => tone(300, 160, 0.09, 'square', 0.06),
   kick: (): void => tone(220, 520, 0.12, 'square', 0.07),
   lift: (): void => tone(180, 260, 0.07, 'triangle', 0.12),
@@ -89,3 +102,16 @@ export const sfx = {
   },
   death: (): void => tone(600, 60, 0.6, 'sawtooth', 0.1),
 };
+
+export type SoundId = keyof typeof sounds;
+
+/**
+ * One function per sound. main.ts calls these for the events the rules report. A sound switched off in
+ * Settings › Sound stays quiet; `preview` plays one whatever its switch says, for the Settings list.
+ */
+export const sfx = Object.fromEntries(
+  (Object.keys(sounds) as SoundId[]).map((id) => [id, (): void => (muted.has(id) ? undefined : sounds[id]())]),
+) as Record<SoundId, () => void>;
+export function preview(id: string): void {
+  if (id in sounds) sounds[id as SoundId]();
+}
