@@ -160,28 +160,41 @@ export function createLobby(host: LobbyHost): {
     dots.append(cell);
   }
   $('colOk').addEventListener('click', readyUp);
-  // your own name: shown on your card. Online, every real player will type theirs here.
+  // Your own name: the pencil beside the name over the colours swaps it for a box to type in (the owner's
+  // design). Your name then shows there and on your card in place of the robot's. Emptied, it goes back to
+  // the robot's name. Online, every real player will type theirs the same way.
   const nameBox = $<HTMLInputElement>('myName');
+  function editName(on: boolean): void {
+    if (on) {
+      nameBox.value = host.myName;
+      nameBox.hidden = false;
+      $('youName').hidden = true;
+      nameBox.focus();
+      nameBox.select();
+    } else if (!nameBox.hidden) {
+      host.myName = nameBox.value.replace(/\s+/g, ' ').trim().slice(0, 12);
+      nameBox.hidden = true;
+      $('youName').hidden = false;
+      changed();
+    }
+  }
+  $('editName').addEventListener('pointerdown', (e) => e.preventDefault()); // keep the box's focus: the pencil then finishes the edit
+  $('editName').addEventListener('click', () => editName(nameBox.hidden === true));
   nameBox.addEventListener('input', () => {
     host.myName = nameBox.value.replace(/\s+/g, ' ').trimStart().slice(0, 12);
     buildSlots();
   });
-  nameBox.addEventListener('change', () => {
-    host.myName = host.myName.trim();
-    nameBox.value = host.myName;
-    buildSlots();
-  });
+  nameBox.addEventListener('blur', () => editName(false));
   nameBox.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') nameBox.blur();
+    if (e.key === 'Enter' || e.key === 'Escape') {
+      e.stopPropagation();
+      editName(false);
+    }
   });
 
   const allCpus: Opt[] = [
     choice({
       label: 'All CPUs',
-      hint: () => {
-        const lv = new Set(s().cpus.map((c) => c.level));
-        return lv.size > 1 ? 'Mixed levels. Set them all at once here, or one at a time on their cards.' : 'Sets every CPU player at once. Each can also be set on its own card.';
-      },
       values: () => BOT_LEVELS.map((l) => LEVELS[l].label),
       get: () => {
         const lv = new Set(s().cpus.map((c) => c.level));
@@ -566,15 +579,9 @@ export function createLobby(host: LobbyHost): {
     // your robot, in the colour being looked at, and the dots with who wears each colour under them
     drawBotOn($<HTMLCanvasElement>('youBot'), pick, 0.95);
     $('youBot').setAttribute('aria-label', `Your robot, in ${shown.name}${mine ? '' : ' (not yours until you press OK)'}`);
-    $('youName').textContent = botName(shown);
-    $('youState').textContent =
-      mine && ready
-        ? 'P1 · ready'
-        : mine
-          ? 'P1 · your colour. Press Ready when you are happy with it.'
-          : wearer >= 0
-            ? `${botName(shown)} is P${wearer + 2}, a CPU player, now. Ready takes it, and that CPU player becomes ${botName(colorById(host.myColor))}.`
-            : 'Not yours yet: Ready takes it.';
+    $('youName').textContent = host.myName || botName(shown);
+    // no explanations on this page (the owner's call): only a short note when Ready would swap with a CPU player
+    $('youState').textContent = !mine && wearer >= 0 ? `Swaps with P${wearer + 2}` : '';
     const ok = $<HTMLButtonElement>('colOk');
     ok.disabled = mine && ready;
     ok.textContent = mine && ready ? '✓ Ready' : 'Ready'; // just Ready (the owner's wording): the robot's name is right above it
@@ -634,7 +641,8 @@ export function createLobby(host: LobbyHost): {
         p = p ?? 'players';
       }
       $('lobby').hidden = false;
-      ($('myName') as HTMLInputElement).value = host.myName;
+      nameBox.hidden = true;
+      $('youName').hidden = false;
       setPage(p ?? page);
       $('lobbyStart').focus({ preventScroll: true });
     },
