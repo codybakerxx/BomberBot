@@ -1158,9 +1158,9 @@ for (let seed = 1; seed <= 40; seed++) {
   }
 }
 
-// 22. up to nine players: everyone starts on a clear tile of their own, spread over the arena
+// 22. up to eight players: everyone starts on a clear tile of their own, spread over the arena
 {
-  assert.equal(MAX_PLAYERS, 9);
+  assert.equal(MAX_PLAYERS, 8);
   for (const [cols, rows] of [[11, 9], [13, 11], [15, 13], [17, 15]]) {
     for (let n = 1; n <= MAX_PLAYERS; n++) {
       const players = Array.from({ length: n }, (_, i) => ({ colorId: String(i) }));
@@ -1178,5 +1178,5 @@ for (let seed = 1; seed <= 40; seed++) {
     }
   }
   // the first four are always the corners, in the usual order
-  assert.deepEqual(spawnPoints(15, 13, 9).slice(0, 4), [{ x: 1, y: 1 }, { x: 13, y: 11 }, { x: 13, y: 1 }, { x: 1, y: 11 }]);
+  assert.deepEqual(spawnPoints(15, 13, 8).slice(0, 4), [{ x: 1, y: 1 }, { x: 13, y: 11 }, { x: 13, y: 1 }, { x: 1, y: 11 }]);
 }

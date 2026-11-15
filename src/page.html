@@ -23,9 +23,9 @@
               dots youDots; the player cards in slots; allCpus) and lobbyMatch (the arena picture arenaPic with
               arenaPrev, arenaNext, arenaDots; the rules; rulesReset); then lobbyPrev, lobbyStart, lobbyNext
     cpuSheet  a CPU player's panel, over the lobby: colour and level (cpuRows), cpuRemove, cpuDone
-    settings  your own settings, three pages: setSound (soundOpts), setControls (Steering thumb: handLeft,
-              handRight; Swipe direction: dirStandard, dirMine, matchState, matchStart; padOpts; keys) and
-              setGraphics (gfxOpts); then setPrev, setDone, setNext
+    settings  your own settings, three pages: setControls (Steering thumb: handLeft, handRight; Swipe
+              direction: dirStandard, dirMine, matchState, matchStart; padOpts; keys), setSound (soundOpts)
+              and setGraphics (gfxOpts); then setPrev, setDone, setNext
     pause     the menu during a match: pauseState, pauseTitle, pauseInfo, standings, pauseResume, pauseSettings,
               pauseRestart, pauseNewMatch, pauseLobby
     confirm   "are you sure?" before anything that cannot be undone (ui.ts)
@@ -422,7 +422,7 @@
   .foot-note { flex: 0 0 auto; margin: 0 14px; text-align: center; font: 500 13px/1.3 var(--font-body); color: #ff9a9a; min-height: 0; }
   .foot-note:empty { display: none; }
   .foot-note.info { color: var(--accent); }
-  .rdy { display: inline-block; margin-top: 5px; padding: 2px 6px; font: 700 11px/1.2 var(--font-display); letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-dim); border: 1px solid var(--line); border-radius: 6px; }
+  .rdy { display: inline-block; white-space: nowrap; margin-top: 5px; padding: 2px 6px; font: 700 11px/1.2 var(--font-display); letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-dim); border: 1px solid var(--line); border-radius: 6px; }
   .rdy.on { color: #5cff8e; border-color: rgba(92, 255, 142, 0.45); }
   .go.big { padding: 18px 12px; font-size: 22px; letter-spacing: 0.16em; border-radius: 16px; }
   .go.danger { color: #ff9a9a; background: transparent; border: 1.5px solid #5a2a34; }
@@ -474,6 +474,15 @@
   .slot.add { grid-template-columns: 1fr; justify-items: center; align-content: center; gap: 4px; color: var(--ink-dim); background: transparent; border: 1.5px dashed var(--line); }
   .slot.add svg { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; }
   .slot.add b { font-size: 14px; }
+  .slot-wrap { position: relative; display: grid; }
+  .slot-wrap .slot { padding-right: 8px; }
+  .slot-wrap .slot b, .slot-wrap .slot small { padding-right: 32px; }
+  .bin { position: absolute; top: 6px; right: 6px; width: 36px; height: 36px; display: grid; place-items: center; padding: 0; cursor: pointer; color: #ff9a9a; background: #151a28; border: 1px solid #3a2530; border-radius: 10px; }
+  .bin svg { width: 19px; height: 19px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  .bin:disabled { opacity: 0.25; cursor: default; }
+  .undo { flex: 0 0 auto; display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 4px 12px 0; padding: 6px 6px 6px 14px; font: 500 13px/1.3 var(--font-body); background: #1d2338; border: 1px solid var(--line); border-radius: 12px; }
+  .undo[hidden] { display: none; }
+  .undo .mini { color: var(--accent); border-color: rgba(255, 197, 106, 0.45); }
   .slot .edit { position: absolute; top: 8px; right: 8px; font: 700 10px/1 var(--font-display); letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-dim); }
   /* the settings rows (ui.ts) */
   .opts { display: flex; flex-direction: column; gap: 6px; }
@@ -707,7 +716,7 @@
         <div class="sec-head"><span>Players</span><span id="playerCount"></span></div>
         <div class="slots" id="slots"></div>
         <div class="opts" id="allCpus"></div>
-        <p class="hint" id="playersNote">Tap a CPU player to change its colour or level, or to remove it. Up to 9 players: you and 8 CPU players. With more than 6, the arena grows by two tiles each way. CPU players are always ready.</p>
+        <p class="hint" id="playersNote">Tap a CPU player to change its colour or level. The bin removes it at once (Undo brings it back). Up to 8 players: you and 7 CPU players. With more than 6, the arena grows by two tiles each way. CPU players are always ready.</p>
       </section>
       <section id="lobbyMatch" class="page" role="tabpanel" aria-labelledby="pgMatch">
         <div class="sec-head"><span>Arena</span><span id="arenaCount"></span></div>
@@ -727,6 +736,7 @@
       </section>
     </div>
   </div>
+  <div class="undo" id="undoBar" role="status" hidden><span id="undoText"></span><button class="mini" id="undoBtn" type="button">Undo</button></div>
   <p class="foot-note" id="startNote" role="status"></p>
   <footer class="foot">
     <button id="lobbyPrev" class="side-btn" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg><span>Players</span></button>
@@ -764,15 +774,12 @@
     <div class="bar-end"></div>
   </header>
   <nav class="pages three" role="tablist" aria-label="Settings pages">
-    <button type="button" role="tab" id="pgSound" aria-controls="setSound">Sound</button>
     <button type="button" role="tab" id="pgControls" aria-controls="setControls">Controls</button>
+    <button type="button" role="tab" id="pgSound" aria-controls="setSound">Sound</button>
     <button type="button" role="tab" id="pgGraphics" aria-controls="setGraphics">Graphics</button>
   </nav>
   <div class="scroll">
     <div class="cols one">
-      <section id="setSound" class="page" role="tabpanel" aria-labelledby="pgSound">
-        <div class="opts" id="soundOpts"></div>
-      </section>
       <section id="setControls" class="page" role="tabpanel" aria-labelledby="pgControls">
       <fieldset class="tune">
         <legend>Steering thumb</legend>
@@ -800,6 +807,9 @@
           <p class="sub">In the menus: Tab moves between buttons, ← and → change a setting, Q and E switch pages.</p>
           <p class="sub">Game controllers are not supported yet.</p>
         </div>
+      </section>
+      <section id="setSound" class="page" role="tabpanel" aria-labelledby="pgSound">
+        <div class="opts" id="soundOpts"></div>
       </section>
       <section id="setGraphics" class="page" role="tabpanel" aria-labelledby="pgGraphics">
         <div class="opts" id="gfxOpts"></div>

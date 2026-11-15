@@ -23,13 +23,13 @@ Working today:
 - Bombs, blasts, chain reactions and seven power-ups, two of them very rare
 - Kicking bombs, and lifting and throwing them
 - Touch controls made for one thumb on each side, steered with the left or the right thumb, with a swipe pad that can be matched to your own thumb
-- One to eight CPU players, each with its own colour and level: Beginner, Normal or Hard (nine players in all; past six the arena grows)
+- One to seven CPU players, each with its own colour and level: Beginner, Normal or Hard (eight players in all; past six the arena grows)
 - A round timer (1 minute 30 unless the lobby says otherwise): when it reaches zero, blocks fall round the edge and inward for 50 seconds, leaving a 5 by 5 square in the middle to fight it out in
 - A scoreboard of four heads beside the timer that counts the rounds each player has won, with a crown for whoever is in the lead
 - A knock-out that burns the bot to ash while its ghost floats away, and a winner that jumps and dances
 - A title screen: your robot in your colour, waving, with two rivals and a lit bomb, and a choice of Local or Online (online is coming)
 - A lobby to set up a match: your colour, the CPU players, the arena (three sizes), and the rules: round timer and how fast the blocks close in, rounds to win the match, bricks, what everyone starts with, and how often each power-up turns up
-- Settings of your own: sound (volume, and a switch for each sound), controls, and graphics
+- Settings of your own: controls, sound (volume, and a switch for each sound) and graphics
 - A menu during a match that says what is going on, with Resume, Settings, Restart round, New match and Leave to the lobby (those last three ask first)
 - Keyboard controls for playing on a computer
 - Sound effects

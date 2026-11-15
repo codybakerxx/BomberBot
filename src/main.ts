@@ -1114,10 +1114,10 @@ $('change').addEventListener('click', () => (matchWinner >= 0 ? showLobby(true) 
 // ------------------------------------------------ Settings
 
 type SetTab = 'sound' | 'controls' | 'graphics';
-const SET_TABS: SetTab[] = ['sound', 'controls', 'graphics'];
+const SET_TABS: SetTab[] = ['controls', 'sound', 'graphics']; // the owner's order
 const SET_NAMES: Record<SetTab, string> = { sound: 'Sound', controls: 'Controls', graphics: 'Graphics' };
 const SET_IDS: Record<SetTab, [string, string]> = { sound: ['pgSound', 'setSound'], controls: ['pgControls', 'setControls'], graphics: ['pgGraphics', 'setGraphics'] };
-let setTab: SetTab = 'sound';
+let setTab: SetTab = 'controls';
 /** where Settings goes back to: the lobby, or the menu during a match */
 let setFrom: 'lobby' | 'pause' = 'lobby';
 

@@ -232,7 +232,7 @@ export interface WorldConfig {
   /** playable columns and rows, not counting the outer wall (odd numbers). Default 13 by 11. */
   cols?: number;
   rows?: number;
-  /** one entry per player, up to nine (MAX_PLAYERS); where each starts is `spawnPoints` */
+  /** one entry per player, up to eight (MAX_PLAYERS); where each starts is `spawnPoints` */
   players: { colorId: string }[];
   /** share of open tiles that start as bricks, 0 to 1. Default 0.78. */
   softDensity?: number;
@@ -319,14 +319,14 @@ export function makeRng(seed: number): () => number {
   };
 }
 
-/** The most players a round can have: one for each bot colour. */
-export const MAX_PLAYERS = 9;
+/** The most players a round can have (the owner's limit: eight in all). */
+export const MAX_PLAYERS = 8;
 
 /**
  * Start tiles for `n` players (1 to MAX_PLAYERS), spread out as the owner asked: four players start in
  * the corners; a fifth in the middle; six put two in the middle row instead, a third of the way in from
  * each side; seven add the middle of the top and bottom edges to five; eight use the corners and the middle
- * of all four edges; nine add the middle again. In player order: you (top-left), bottom-right, top-right,
+ * of all four edges. In player order: you (top-left), bottom-right, top-right,
  * bottom-left, then the rest. A tile on a pillar is moved one to the right.
  */
 export function spawnPoints(w: number, h: number, n = 4): { x: number; y: number }[] {
@@ -344,8 +344,7 @@ export function spawnPoints(w: number, h: number, n = 4): { x: number; y: number
   if (n === 5) return [...corners, middle];
   if (n === 6) return [...corners, at(third, cy), at(w - 1 - third, cy)];
   if (n === 7) return [...corners, middle, top, bottom];
-  if (n === 8) return [...corners, top, bottom, left, right];
-  return [...corners, top, bottom, left, right, middle];
+  return [...corners, top, bottom, left, right];
 }
 
 /**

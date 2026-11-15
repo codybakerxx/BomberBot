@@ -12,7 +12,7 @@ The game runs at a fixed 60 ticks a second. Times below are given in seconds wit
 - **Solid blocks** never break. They are the outer wall plus a pillar on every second tile in both directions. The pillars turn the arena into a grid of lanes.
 - **Bricks** can be blasted away. At the start each open tile has a 78% chance of holding a brick. The lobby's Bricks setting changes that: Few 50%, Some 65%, Normal 78%, Lots 86%, Packed 93%.
 - Each player's starting tile and the tiles next to it are always left clear, so nobody starts boxed in.
-- Two to nine players (you and one to eight CPU players, as the lobby says). The first four start in the corners, in this order: top-left, bottom-right, top-right, bottom-left. You are always top-left. A fifth starts in the middle. With six, the fifth and sixth start in the middle row, a third of the way in from each side. Seven add the middle of the top and bottom edges to the five; eight use the corners and the middle of all four edges; nine add the middle. With more than six players the arena is two tiles wider and taller.
+- Two to eight players (you and one to seven CPU players, as the lobby says). The first four start in the corners, in this order: top-left, bottom-right, top-right, bottom-left. You are always top-left. A fifth starts in the middle. With six, the fifth and sixth start in the middle row, a third of the way in from each side. Seven add the middle of the top and bottom edges to the five; eight use the corners and the middle of all four edges. With more than six players the arena is two tiles wider and taller.
 - The layout comes from a seed number. The same seed always builds the same arena. The game picks a new random seed for every round.
 
 ## Moving

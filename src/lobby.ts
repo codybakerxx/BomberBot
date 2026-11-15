@@ -20,6 +20,7 @@ import { BOT_LEVELS, LEVELS } from './bot';
 import { COLORS, colorById, drawRobot, drawStatic, drawDynamic, ROBOT } from './render';
 import { createWorld, MAX_BOMBS, MAX_FIRE, MAX_SPEED_ITEMS, START_FIRE } from './sim';
 import {
+  CpuSlot,
   ARENAS,
   BRICKS,
   CLOSE_IN,
@@ -205,7 +206,7 @@ export function createLobby(host: LobbyHost): {
     me.setAttribute('aria-label', `You, P1, ${colorById(host.myColor).name}, ${ready ? 'ready' : 'not ready'}`);
     const mc = document.createElement('canvas');
     const mt = document.createElement('div');
-    mt.innerHTML = `<b>You · P1</b><small>${colorById(host.myColor).name}</small><span class="rdy${ready ? ' on' : ''}">${ready ? '✓ Ready' : 'Not ready'}</span>`;
+    mt.innerHTML = `<b>You</b><small>P1 · ${colorById(host.myColor).name}</small><span class="rdy${ready ? ' on' : ''}">${ready ? '✓ Ready' : 'Not ready'}</span>`;
     me.append(mc, mt);
     box.append(me);
     const cvs: [HTMLCanvasElement, string][] = [[mc, host.myColor]];
@@ -217,13 +218,23 @@ export function createLobby(host: LobbyHost): {
       b.setAttribute('aria-label', `CPU ${i + 1}, P${i + 2}, ${colorById(c.colorId).name}, ${LEVELS[c.level].label}, ready. Tap to change.`);
       const cv = document.createElement('canvas');
       const t = document.createElement('div');
-      t.innerHTML = `<b>CPU ${i + 1} · P${i + 2}</b><small>${LEVELS[c.level].label} · ${colorById(c.colorId).name}</small><span class="rdy on">✓ Ready</span>`;
-      const edit = document.createElement('span');
-      edit.className = 'edit';
-      edit.textContent = 'Edit';
-      b.append(cv, t, edit);
+      t.innerHTML = `<b>CPU ${i + 1}</b><small>P${i + 2} · ${LEVELS[c.level].label} · ${colorById(c.colorId).name}</small><span class="rdy on">✓ Ready</span>`;
+      b.append(cv, t);
       b.addEventListener('click', () => openSheet(i));
-      box.append(b);
+      // the bin: removes this CPU player at once (Undo brings it back)
+      const bin = document.createElement('button');
+      bin.type = 'button';
+      bin.className = 'bin';
+      bin.id = `bin-${i + 1}`;
+      bin.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V4.5h6V7M6.5 7l1 13h9l1-13M10 11v5.5M14 11v5.5"/></svg>';
+      const only = s().cpus.length <= 1;
+      bin.disabled = only;
+      bin.setAttribute('aria-label', only ? 'A match needs at least one CPU player' : `Remove CPU ${i + 1}`);
+      bin.addEventListener('click', () => removeCpu(i));
+      const wrap = document.createElement('div');
+      wrap.className = 'slot-wrap';
+      wrap.append(b, bin);
+      box.append(wrap);
       cvs.push([cv, c.colorId]);
     });
     if (s().cpus.length < MAX_CPUS) {
@@ -283,16 +294,43 @@ export function createLobby(host: LobbyHost): {
     if (e.target === sheet) closeSheet();
   });
   $('cpuRemove').addEventListener('click', () => {
-    if (s().cpus.length <= 1) return;
     const i = editing;
-    confirmFirst(`Remove CPU ${i + 1}?`, `${colorById(s().cpus[i].colorId).name} leaves the match. You can add a CPU player again at any time.`, 'Remove', (yes) => {
-      if (!yes) return;
-      s().cpus.splice(i, 1);
-      sheet.hidden = true;
-      editing = -1;
-      changed();
-      $('slotAdd')?.focus({ preventScroll: true });
-    });
+    sheet.hidden = true;
+    editing = -1;
+    removeCpu(i);
+  });
+
+  // ------------------------------------------------------------ removing, and Undo
+  /** The CPU player removed last, and where it was, until Undo is pressed or the bar goes away. */
+  let removed: { cpu: CpuSlot; at: number } | null = null;
+  let undoTimer = 0;
+  /**
+   * Remove a CPU player at once (the bin on its card, or Remove on its panel): the owner asked for a quick
+   * way. A bar with Undo shows for a few seconds instead of asking first. The last CPU player stays.
+   */
+  function removeCpu(i: number): void {
+    if (s().cpus.length <= 1 || !s().cpus[i]) return;
+    const [cpu] = s().cpus.splice(i, 1);
+    removed = { cpu, at: i };
+    $('undoText').textContent = `CPU ${i + 1} (${colorById(cpu.colorId).name}) removed.`;
+    $('undoBar').hidden = false;
+    clearTimeout(undoTimer);
+    undoTimer = window.setTimeout(hideUndo, 6000);
+    changed();
+    ($(`bin-${Math.min(i + 1, s().cpus.length)}`) ?? $('slotAdd'))?.focus({ preventScroll: true });
+  }
+  function hideUndo(): void {
+    removed = null;
+    $('undoBar').hidden = true;
+  }
+  $('undoBtn').addEventListener('click', () => {
+    if (!removed || s().cpus.length >= MAX_CPUS) return hideUndo();
+    const { cpu, at } = removed;
+    // its colour back if nobody has taken it meanwhile, else a free one
+    const free = freeFor(-1);
+    s().cpus.splice(Math.min(at, s().cpus.length), 0, { ...cpu, colorId: free.includes(cpu.colorId) ? cpu.colorId : free[0] });
+    hideUndo();
+    changed();
   });
   function refreshSheet(): void {
     if (editing < 0 || !s().cpus[editing]) return;
@@ -575,6 +613,7 @@ export function createLobby(host: LobbyHost): {
       $('lobbyStart').focus({ preventScroll: true });
     },
     hide(): void {
+      hideUndo();
       $('lobby').hidden = true;
       sheet.hidden = true;
       editing = -1;

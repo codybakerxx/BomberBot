@@ -67,8 +67,8 @@ export const ITEM_NAMES: [ItemKind, string, string][] = [
 export const ROUND_MIN = 30;
 export const ROUND_MAX = 300;
 export const ROUND_STEP = 15;
-/** The most CPU players a local match can have: nine players in all, one for each colour. */
-export const MAX_CPUS = 8;
+/** The most CPU players a local match can have: eight players in all (MAX_PLAYERS in sim.ts). */
+export const MAX_CPUS = 7;
 /** With more players than this, every arena is two tiles wider and taller (the owner's plan: past six, the map gets bigger). */
 export const GROW_AFTER = 6;
 /** Rounds to win a match: first to 1 to 9. */
