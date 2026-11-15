@@ -33,6 +33,7 @@ import {
   ROUND_MIN,
   ROUND_STEP,
   arenaOf,
+  pickArena,
   arenaSize,
   GROW_AFTER,
   clockText,
@@ -133,7 +134,7 @@ export function createLobby(host: LobbyHost): {
   }
   function stepArena(d: number): void {
     const i = ARENAS.findIndex((a) => a.id === s().arena);
-    s().arena = ARENAS[(i + d + ARENAS.length) % ARENAS.length].id;
+    pickArena(s(), ARENAS[(i + d + ARENAS.length) % ARENAS.length].id);
     changed();
   }
 
@@ -385,7 +386,7 @@ export function createLobby(host: LobbyHost): {
     b.className = 'dot';
     b.setAttribute('aria-label', `${a.name} arena`);
     b.addEventListener('click', () => {
-      s().arena = a.id;
+      pickArena(s(), a.id);
       changed();
     });
     b.dataset.arena = a.id;

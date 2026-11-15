@@ -20,11 +20,17 @@ export interface CpuSlot {
   level: BotLevel;
 }
 
-/** The arenas to choose from: the same build in three sizes. Classic is the one the game has always had. */
+/**
+ * The arenas to choose from: the same build in three sizes. Classic is the one the game has always had.
+ * Each brings its own round length and closing-in speed (an index into CLOSE_IN), put in whenever it is
+ * picked in the lobby and changeable after: the owner's choices, scaled to the arena's size. Compact: 1:00
+ * and Quick; Classic: 1:30 and Normal; Big: 2:00 and Normal. Bricks and power-ups are a share of the tiles,
+ * so they already scale with the size and are left alone.
+ */
 export const ARENAS = [
-  { id: 'compact', name: 'Compact', cols: 11, rows: 9, blurb: 'Small and close: you meet the others fast.' },
-  { id: 'classic', name: 'Classic', cols: 13, rows: 11, blurb: 'The standard arena.' },
-  { id: 'big', name: 'Big', cols: 15, rows: 13, blurb: 'More room to run, more bricks to clear.' },
+  { id: 'compact', name: 'Compact', cols: 11, rows: 9, roundSecs: 60, closeIn: 3, blurb: 'Small and close: you meet the others fast.' },
+  { id: 'classic', name: 'Classic', cols: 13, rows: 11, roundSecs: 90, closeIn: 2, blurb: 'The standard arena.' },
+  { id: 'big', name: 'Big', cols: 15, rows: 13, roundSecs: 120, closeIn: 2, blurb: 'More room to run, more bricks to clear.' },
 ] as const;
 export type ArenaId = (typeof ARENAS)[number]['id'];
 
@@ -39,8 +45,10 @@ export const BRICKS = [
 
 /** How fast the blocks close in once the timer runs out: how long they take, in seconds (50 is the game's usual). */
 export const CLOSE_IN = [
-  { name: 'Slow', secs: 75 },
+  { name: 'Very slow', secs: 75 },
+  { name: 'Slow', secs: 60 },
   { name: 'Normal', secs: 50 },
+  { name: 'Quick', secs: 42 },
   { name: 'Fast', secs: 32 },
 ];
 
@@ -76,9 +84,10 @@ export const MAX_FIRST_TO = 9;
 
 /**
  * Which version of the defaults a saved setup was made with. 2: Rounds to win defaults to 1 (the owner's
- * call; it was 3), so a setup saved before then has its Rounds to win put back to 1.
+ * call; it was 3), so a setup saved before then has its Rounds to win put back to 1. 3: Closing in has five
+ * steps in place of three (Slow, Normal, Fast became Very slow, Normal, Fast).
  */
-export const SETUP_VERSION = 2;
+export const SETUP_VERSION = 3;
 
 export interface MatchSetup {
   /** SETUP_VERSION when it was saved */
@@ -111,8 +120,8 @@ export function defaultSetup(myColor: string): MatchSetup {
     cpus: others.slice(0, 3).map((colorId) => ({ colorId, level: 'normal' as BotLevel })),
     arena: 'classic',
     timerOn: true,
-    roundSecs: 90,
-    closeIn: 1,
+    roundSecs: ARENAS[1].roundSecs,
+    closeIn: ARENAS[1].closeIn,
     v: SETUP_VERSION,
     firstTo: 1,
     bricks: 2,
@@ -123,6 +132,14 @@ export function defaultSetup(myColor: string): MatchSetup {
     itemsOn: false,
     items: { bomb: 2, fire: 2, speed: 2, kick: 2, grab: 2, shield: 2, curse: 2 },
   };
+}
+
+/** Pick an arena, and put in its round length and closing-in speed (they can be changed after). */
+export function pickArena(s: MatchSetup, id: ArenaId): void {
+  const a = ARENAS.find((x) => x.id === id) ?? ARENAS[1];
+  s.arena = a.id;
+  s.roundSecs = a.roundSecs;
+  s.closeIn = a.closeIn;
 }
 
 /** The rules of a setup, put back to the usual ones. The players are left as they are. */
@@ -212,9 +229,11 @@ export function readSetup(raw: unknown, myColor: string, colorIds: string[]): Ma
   if (typeof r.timerOn === 'boolean') out.timerOn = r.timerOn;
   out.roundSecs = clampInt(r.roundSecs, ROUND_MIN, ROUND_MAX, d.roundSecs);
   out.roundSecs -= out.roundSecs % ROUND_STEP;
-  out.closeIn = clampInt(r.closeIn, 0, CLOSE_IN.length - 1, d.closeIn);
+  // before version 3 Closing in had three steps: Slow (75 s), Normal, Fast (32 s)
+  const oldClose = typeof r.v !== 'number' || r.v < 3;
+  out.closeIn = oldClose ? ([0, 2, 4][clampInt(r.closeIn, 0, 2, 1)] ?? d.closeIn) : clampInt(r.closeIn, 0, CLOSE_IN.length - 1, d.closeIn);
   // saved before Rounds to win defaulted to 1: it goes back to 1
-  out.firstTo = r.v === SETUP_VERSION ? clampInt(r.firstTo, 1, MAX_FIRST_TO, d.firstTo) : d.firstTo;
+  out.firstTo = typeof r.v === 'number' && r.v >= 2 ? clampInt(r.firstTo, 1, MAX_FIRST_TO, d.firstTo) : d.firstTo;
   out.bricks = clampInt(r.bricks, 0, BRICKS.length - 1, d.bricks);
   if (typeof r.startOn === 'boolean') out.startOn = r.startOn;
   out.startBombs = clampInt(r.startBombs, 1, MAX_BOMBS, 1);

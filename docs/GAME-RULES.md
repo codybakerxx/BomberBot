@@ -265,9 +265,9 @@ The host can change these before a match. Left alone, every one is the usual rul
 
 | Setting | Choices | What it changes |
 |---|---|---|
-| Arena | Compact 11×9, Classic 13×11, Big 15×13 | The size of the arena (`cols`, `rows`) |
+| Arena | Compact 11×9, Classic 13×11, Big 15×13 | The size of the arena (`cols`, `rows`). Picking one also puts in its round length and closing-in speed: Compact 1:00 and Quick, Classic 1:30 and Normal, Big 2:00 and Normal |
 | Round timer | On or off; 0:30 to 5:00 in steps of 15 seconds | `roundTicks`. Off: no timer and no falling blocks; a round lasts until one robot is left |
-| Closing in | Slow 75 s, Normal 50 s, Fast 32 s | How long the falling blocks take (`shrinkTicks`) |
+| Closing in | Very slow 75 s, Slow 60 s, Normal 50 s, Quick 42 s, Fast 32 s | How long the falling blocks take (`shrinkTicks`). Compact has 60 blocks to fall, Classic 94, Big 134 |
 | Rounds to win | 1 to 9 | The match ends when someone reaches it |
 | Bricks | Few, Some, Normal, Lots, Packed | `softDensity` (see The arena) |
 | Custom start | Bombs 1 to 8, blast 1 to 8 tiles, speed +0 to +6 | What everyone starts each round with (`startBombs`, `startFire`, `startSpeed`) |
