@@ -21,7 +21,7 @@
     lobby     setting up a match (lobby.ts): the bar (lobbyBack, lobbyMode, lobbySound, lobbySettings), the summary,
               two pages (pgPlayers, pgMatch): lobbyPlayers (your robot youBot with colPrev, colNext and the colour
               dots youDots; the player cards in slots; allCpus) and lobbyMatch (the arena picture arenaPic with
-              arenaPrev, arenaNext, arenaDots; the rules; rulesReset); then lobbyPrev, lobbyStart, lobbyNext
+              arenaPrev, arenaNext, arenaDots, and a Start under it, arenaStart; the rules; rulesReset); then lobbyPrev, lobbyStart, lobbyNext
     cpuSheet  a CPU player's panel, over the lobby: colour and level (cpuRows), cpuRemove, cpuDone
     settings  your own settings, three pages: setControls (Steering thumb: handLeft, handRight; Swipe
               direction: dirStandard, dirMine, matchState, matchStart; padOpts; keys), setSound (soundOpts)
@@ -452,6 +452,7 @@
   .ptag.me { color: #14100a; background: var(--accent); }
   .ptag.pop { animation: ptag-pop 420ms cubic-bezier(.2, 1.6, .4, 1); }
   @keyframes ptag-pop { 0% { transform: scale(0.3); } 60% { transform: scale(1.45); } 100% { transform: scale(1); } }
+  .go.arena-start { flex: 0 0 auto; align-self: stretch; padding: 15px 12px; font-size: 20px; letter-spacing: 0.16em; }
   .go.ok { flex: 0 0 auto; align-self: stretch; padding: 13px 12px; font-size: 16px; }
   .go.ok:disabled { opacity: 1; color: var(--accent); background: transparent; border: 1.5px solid rgba(255, 197, 106, 0.45); }
   .dot { width: 30px; height: 30px; border-radius: 50%; padding: 0; cursor: pointer; background: var(--c); border: 3px solid var(--void); box-shadow: 0 0 0 1px var(--line); }
@@ -729,6 +730,7 @@
           <div class="big-name" id="arenaName"></div>
           <p class="hint center" id="arenaBlurb"></p>
           <div class="dots small" id="arenaDots" role="group" aria-label="Arenas"></div>
+          <button class="go arena-start" id="arenaStart" type="button">Start</button>
         </div>
         <div class="sec-head"><span>Rules</span><span class="host-tag">Host</span></div>
         <div class="opts" id="rules"></div>

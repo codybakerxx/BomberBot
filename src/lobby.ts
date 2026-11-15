@@ -516,6 +516,12 @@ export function createLobby(host: LobbyHost): {
       setPage('match');
       return;
     }
+    tryStart();
+  });
+  // a second Start right under the arena picture, close to hand (the owner's ask); the same as the one in the bar
+  $('arenaStart').addEventListener('click', tryStart);
+  /** Start the match, asking first if you have not pressed Ready. */
+  function tryStart(): void {
     if (problem(s())) return;
     if (ready) {
       host.start();
@@ -533,7 +539,7 @@ export function createLobby(host: LobbyHost): {
         host.start();
       },
     );
-  });
+  }
 
   function refresh(): void {
     const shown = colorById(pick);
@@ -594,6 +600,7 @@ export function createLobby(host: LobbyHost): {
     go.setAttribute('aria-label', toMatch ? 'Go on to the Match page' : 'Start the match');
     const why = problem(s());
     go.disabled = !toMatch && !!why;
+    ($('arenaStart') as HTMLButtonElement).disabled = !!why;
     const note = $('startNote');
     note.textContent = why || (!ready && !toMatch ? 'You are not ready yet: press Ready on the Players page.' : '');
     note.classList.toggle('info', !why);
