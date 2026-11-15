@@ -624,9 +624,10 @@ export function createLobby(host: LobbyHost): {
   $('lobbyBack').addEventListener('click', () => host.back());
   $('lobbySound').addEventListener('click', () => host.settings('sound'));
   $('lobbySettings').addEventListener('click', () => host.settings());
-  // The main button, Start: on the Match page, or a wide screen showing both. The Players page has no bottom
-  // bar at all (the owner's ask): its ways on are Next › (Ready, once pressed), the Match page name, and RB or E.
+  // No bottom bar (the owner's ask): Start is at the end of the Match page (and under the arena), and Next › at
+  // the end of the Players page, lit once you are ready. Other ways on: Ready's own Next ›, the page name, RB or E.
   $('lobbyStart').addEventListener('click', tryStart);
+  $('playersNext').addEventListener('click', () => setPage('match'));
   // a second Start right under the arena picture, close to hand (the owner's ask); the same as the one in the bar
   $('arenaStart').addEventListener('click', tryStart);
   /** The other players here who have not pressed Ready (with the robot they are showing). */
@@ -777,11 +778,14 @@ export function createLobby(host: LobbyHost): {
     refreshRules();
     // the summary at the top, and whether Start can be pressed
     $('lobbySummary').textContent = summary(s(), G);
-    // the main button: Start on the Match page (or a wide screen); none on the Players page
+    // Start at the end of the Match page, Next › at the end of the Players page (lit once you are ready;
+    // not needed on a wide screen, which shows both pages)
     const go = $<HTMLButtonElement>('lobbyStart');
     const toMatch = page === 'players' && !wide();
-    go.parentElement!.hidden = toMatch;
-    go.dataset.pad = '≡'; // its hint
+    const nx = $<HTMLButtonElement>('playersNext');
+    nx.hidden = wide();
+    nx.disabled = !(ready && pick === host.myColor);
+    nx.setAttribute('aria-label', nx.disabled ? 'Next: press Ready first' : 'Next: the Match page');
     const why = problem(s(), G);
     go.disabled = !!why;
     ($('arenaStart') as HTMLButtonElement).disabled = !!why;
@@ -810,7 +814,7 @@ export function createLobby(host: LobbyHost): {
       nameBox.hidden = true;
       $('youName').hidden = false;
       setPage(p ?? page);
-      $(page === 'players' && !wide() ? 'colOk' : 'lobbyStart').focus({ preventScroll: true });
+      $(page === 'players' && !wide() ? 'colOk' : 'arenaStart').focus({ preventScroll: true });
     },
     hide(): void {
       hideUndo();

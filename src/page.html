@@ -21,7 +21,7 @@
     lobby     setting up a match (lobby.ts): the bar (lobbyBack, lobbyMode, lobbySound, lobbySettings), the summary,
               lobbyPrev (‹ beside the page names) and two pages (pgPlayers, pgMatch): lobbyPlayers (your robot youBot with colPrev, colNext and the colour
               dots youDots; the name over them, youName, with editName, the pencil that swaps it for a box (myName) to type your own; the player cards in slots; allCpus) and lobbyMatch (the arena picture arenaPic with
-              arenaPrev, arenaNext, arenaDots, and a Start under it, arenaStart; the rules; rulesReset); then lobbyStart
+              arenaPrev, arenaNext, arenaDots, and a Start under it, arenaStart; the rules; rulesReset; startNote and lobbyStart, Start again at the end); playersNext ends lobbyPlayers
     cpuSheet  a CPU player's panel, over the lobby: colour and level (cpuRows), cpuRemove, cpuDone
     settings  your own settings, four pages: setControls (Steering thumb: handLeft, handRight; Swipe
               direction: dirStandard, dirMine, matchState, matchStart; padOpts; keys: remapKeys, resetKeys),
@@ -480,6 +480,9 @@
   }
   .name-field input::placeholder { color: #5d6788; font-weight: 500; }
   .name-field input:focus { outline: none; border-color: var(--accent); }
+  /* the button at the end of a lobby page: Next › (Players), Start (Match) */
+  .go.page-end { flex: 0 0 auto; align-self: stretch; margin: 18px 0 calc(10px + env(safe-area-inset-bottom)); padding: 15px 12px; font-size: 20px; letter-spacing: 0.16em; }
+  #lobby .foot-note { margin: 14px 0 0; }
   .go.arena-start { flex: 0 0 auto; align-self: stretch; padding: 15px 12px; font-size: 20px; letter-spacing: 0.16em; }
   .go.ok { flex: 0 0 auto; align-self: stretch; padding: 13px 12px; font-size: 16px; }
   .go.ok:disabled { opacity: 1; color: var(--accent); background: transparent; border: 1.5px solid rgba(255, 197, 106, 0.45); }
@@ -733,7 +736,7 @@
   <button id="btnA" class="tbtn" type="button" aria-label="A button, drop bomb">A</button>
 </div>
 
-<!-- The lobby: two pages, Players and Match, with one slim Start in the bottom bar on the Match page (none on the Players page).
+<!-- The lobby: two pages, Players and Match, with no bottom bar: each page ends with its button (Next ›, Start).
      main.ts and lobby.ts fill it in. On a wide screen both pages show side by side. -->
 <div id="lobby" class="screen" hidden>
   <header class="bar">
@@ -777,6 +780,8 @@
         <div class="sec-head"><span>Players</span><span id="playerCount"></span></div>
         <div class="slots" id="slots"></div>
         <div class="opts" id="allCpus"></div>
+        <!-- at the end of the page, not always on screen (the owner's ask): lit up once you have pressed Ready -->
+        <button class="go page-end" id="playersNext" type="button">Next ›</button>
       </section>
       <section id="lobbyMatch" class="page" role="tabpanel" aria-labelledby="pgMatch">
         <div class="sec-head"><span>Arena</span><span id="arenaCount"></span></div>
@@ -794,14 +799,13 @@
         <div class="sec-head"><span>Rules</span><span class="host-tag">Host</span></div>
         <div class="opts" id="rules"></div>
         <button class="mini wide" id="rulesReset" type="button">Put the rules back to normal</button>
+        <!-- Start again at the end of the page, not always on screen (the owner's ask) -->
+        <p class="foot-note" id="startNote" role="status"></p>
+        <button id="lobbyStart" class="go page-end" type="button" data-pad="≡">Start</button>
       </section>
     </div>
   </div>
   <div class="undo" id="undoBar" role="status" hidden><span id="undoText"></span><button class="mini" id="undoBtn" type="button">Undo</button></div>
-  <p class="foot-note" id="startNote" role="status"></p>
-  <footer class="foot one">
-    <button id="lobbyStart" class="go big" type="button" data-pad="≡">Start</button>
-  </footer>
 </div>
 
 <!-- A CPU player's panel: opens over the lobby when its card is tapped. -->
