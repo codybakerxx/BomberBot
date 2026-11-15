@@ -652,15 +652,15 @@ export function createLobby(host: LobbyHost): {
       host.start();
     };
     if (!others.length) {
-      confirmFirst(`Ready as ${want}?`, `You have not pressed Ready on the Players page. Everyone must be ready to start.`, `Ready as ${want} and start`, go);
+      confirmFirst(`Ready as ${want}?`, `You have not pressed Ready on the Players page. Everyone must be ready to start.`, 'Ready & Start', go); // the owner's wording: short, the name is in the question
       return;
     }
     const names = [...(ready ? [] : ['You']), ...others.map((g) => `P${guests().indexOf(g) + 2}`)];
     const list = names.length === 1 ? names[0] : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
     confirmFirst(
       'Not everyone is ready',
-      `${list} ${names.length === 1 && names[0] !== 'You' ? 'has' : 'have'} not pressed Ready. Start anyway, with the robots showing now?`,
-      'Start anyway',
+      `${list} ${names.length === 1 && names[0] !== 'You' ? 'has' : 'have'} not pressed Ready. They play as the robots showing now.`,
+      'Ready & Start',
       go,
     );
   }
