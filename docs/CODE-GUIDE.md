@@ -166,7 +166,7 @@ Everything that ties the game to the page:
 - the title screen, where the game opens: showing it (`showTitle`), drawing it each frame instead of the arena (`renderTitle`, with the picture from `title.ts`), and leaving it for the lobby (`leaveTitle`, from Local; Online is switched off in `page.html` until online play is built). The lobby's back button goes back to it
 - the lobby's host (`lobbyHost`, handed to `createLobby` in `lobby.ts`) and opening it (`showLobby`): it holds `setup` and `myColor`, and saves them
 - the match: `newMatch` (score to 0, round 1), `start` (the next round), `resume`, `watch`, the score (`wins`, `roundNo`, `matchWinner`; `setup.firstTo` wins take the match) and the result panel (`finish`). A round's players, colours and levels are set in `newWorld`, from the setup, and nowhere else
-- the menu during a match (`openPause`, `showPause`, `fillPause`, `closePause`), and its Restart round, New match and Leave to the lobby, which ask first (`confirmFirst` in `ui.ts`)
+- the menu during a match (`openPause`, `showPause`, `fillPause`, `closePause`), and its Restart (the whole match, `newMatch`) and Leave to the lobby, which ask first (`confirmFirst` in `ui.ts`)
 - Settings (`showSettings`, `showSetTab`, `closeSettings`): the Sound and Graphics pages are built from `ui.ts` controls (`soundOpts`, `gfxOpts`, `padOpts`); your settings are `prefs`, put into effect by `applyPrefs`
 - the keys for the menus: Escape back one step, Q and E to turn pages
 - the layer the ghosts float up on (`ghosts`, placed by `layout`, drawn in `render`)

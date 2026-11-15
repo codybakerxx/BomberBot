@@ -1007,8 +1007,8 @@ function watch(): void {
 /**
  * The menu during a match (the three bars at the top, or Escape). The round waits behind it. It says
  * what is going on: local or online, paused or over, which round, the rules, the time left, and every
- * player's state and score. Then Resume and Settings, and the host's choices: restart the round, start a
- * new match, or leave to the lobby. Those three ask first.
+ * player's state and score. Then Resume and Settings, and the host's choices: Restart (the whole match
+ * again, from 0: the owner's call, in place of restarting only the round) or leave to the lobby. Both ask first.
  */
 function openPause(): void {
   if (mode !== 'playing' && mode !== 'over') return;
@@ -1035,7 +1035,6 @@ function fillPause(): void {
   const time = world.over || left === Infinity ? '' : left > 0 ? ` · ${clockText(Math.ceil(left / TICK_HZ))} left` : ' · Blocks falling';
   $('pauseInfo').textContent = `${summary(setup)}${time}`;
   $('pauseResume').textContent = roundLive ? 'Resume' : 'Back to the round';
-  ($('pauseRestart') as HTMLButtonElement).disabled = !roundLive;
   const list = $('standings');
   list.textContent = '';
   const dpr = density();
@@ -1068,14 +1067,7 @@ $('menuBtn').addEventListener('click', openPause);
 $('pauseResume').addEventListener('click', closePause);
 $('pauseSettings').addEventListener('click', () => showSettings(undefined, 'pause'));
 $('pauseRestart').addEventListener('click', () =>
-  confirmFirst('Restart this round?', 'Everyone starts again from their corner, in a new arena. The score stays as it is.', 'Restart round', (yes) => {
-    if (!yes) return;
-    roundNo--; // the same round, played again
-    start();
-  }),
-);
-$('pauseNewMatch').addEventListener('click', () =>
-  confirmFirst('Start a new match?', 'The score goes back to 0 for everyone and round 1 starts, with the same players and rules.', 'New match', (yes) => {
+  confirmFirst('Restart the match?', 'Everyone’s score goes back to 0 and round 1 starts in a new arena, with the same players and rules.', 'Restart', (yes) => {
     if (yes) newMatch();
   }),
 );

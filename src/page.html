@@ -27,7 +27,7 @@
               direction: dirStandard, dirMine, matchState, matchStart; padOpts; keys), setSound (soundOpts)
               and setGraphics (gfxOpts); then setPrev, setDone, setNext
     pause     the menu during a match: pauseState, pauseTitle, pauseInfo, standings, pauseResume, pauseSettings,
-              pauseRestart, pauseNewMatch, pauseLobby
+              pauseRestart (the whole match again, from 0), pauseLobby
     confirm   "are you sure?" before anything that cannot be undone (ui.ts)
     teach     the Match my thumb panel, laid over the arena only
 -->
@@ -836,10 +836,7 @@
     <button class="go big" id="pauseResume" type="button">Resume</button>
     <button class="go quiet" id="pauseSettings" type="button">Settings</button>
     <div class="divider"><span>Match · you are the host</span></div>
-    <div class="row2">
-      <button class="go quiet" id="pauseRestart" type="button">Restart round</button>
-      <button class="go quiet" id="pauseNewMatch" type="button">New match</button>
-    </div>
+    <button class="go quiet" id="pauseRestart" type="button">Restart</button>
     <button class="go danger" id="pauseLobby" type="button">Leave to the lobby</button>
   </section>
 </div>

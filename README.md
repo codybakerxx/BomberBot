@@ -30,7 +30,7 @@ Working today:
 - A title screen: your robot in your colour, waving, with two rivals and a lit bomb, and a choice of Local or Online (online is coming)
 - A lobby to set up a match: your colour, the CPU players, the arena (three sizes), and the rules: round timer and how fast the blocks close in, rounds to win the match, bricks, what everyone starts with, and how often each power-up turns up
 - Settings of your own: controls, sound (volume, and a switch for each sound) and graphics
-- A menu during a match that says what is going on, with Resume, Settings, Restart round, New match and Leave to the lobby (those last three ask first)
+- A menu during a match that says what is going on, with Resume, Settings, Restart (the whole match again) and Leave to the lobby (those last two ask first)
 - Keyboard controls for playing on a computer
 - Sound effects
 
