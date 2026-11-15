@@ -74,7 +74,15 @@ export const GROW_AFTER = 6;
 /** Rounds to win a match: first to 1 to 9. */
 export const MAX_FIRST_TO = 9;
 
+/**
+ * Which version of the defaults a saved setup was made with. 2: Rounds to win defaults to 1 (the owner's
+ * call; it was 3), so a setup saved before then has its Rounds to win put back to 1.
+ */
+export const SETUP_VERSION = 2;
+
 export interface MatchSetup {
+  /** SETUP_VERSION when it was saved */
+  v: number;
   cpus: CpuSlot[];
   arena: ArenaId;
   /** the round timer: off means no timer and no falling blocks, so a round lasts until one bot is left */
@@ -105,7 +113,8 @@ export function defaultSetup(myColor: string): MatchSetup {
     timerOn: true,
     roundSecs: 90,
     closeIn: 1,
-    firstTo: 3,
+    v: SETUP_VERSION,
+    firstTo: 1,
     bricks: 2,
     startOn: false,
     startBombs: 1,
@@ -204,7 +213,8 @@ export function readSetup(raw: unknown, myColor: string, colorIds: string[]): Ma
   out.roundSecs = clampInt(r.roundSecs, ROUND_MIN, ROUND_MAX, d.roundSecs);
   out.roundSecs -= out.roundSecs % ROUND_STEP;
   out.closeIn = clampInt(r.closeIn, 0, CLOSE_IN.length - 1, d.closeIn);
-  out.firstTo = clampInt(r.firstTo, 1, MAX_FIRST_TO, d.firstTo);
+  // saved before Rounds to win defaulted to 1: it goes back to 1
+  out.firstTo = r.v === SETUP_VERSION ? clampInt(r.firstTo, 1, MAX_FIRST_TO, d.firstTo) : d.firstTo;
   out.bricks = clampInt(r.bricks, 0, BRICKS.length - 1, d.bricks);
   if (typeof r.startOn === 'boolean') out.startOn = r.startOn;
   out.startBombs = clampInt(r.startBombs, 1, MAX_BOMBS, 1);
