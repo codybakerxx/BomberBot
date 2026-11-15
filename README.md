@@ -23,7 +23,7 @@ Working today:
 - Bombs, blasts, chain reactions and seven power-ups, two of them very rare
 - Kicking bombs, and lifting and throwing them
 - Touch controls made for one thumb on each side, steered with the left or the right thumb, with a swipe pad that can be matched to your own thumb
-- One to three CPU players, each with its own colour and level: Beginner, Normal or Hard
+- One to eight CPU players, each with its own colour and level: Beginner, Normal or Hard (nine players in all; past six the arena grows)
 - A round timer (1 minute 30 unless the lobby says otherwise): when it reaches zero, blocks fall round the edge and inward for 50 seconds, leaving a 5 by 5 square in the middle to fight it out in
 - A scoreboard of four heads beside the timer that counts the rounds each player has won, with a crown for whoever is in the lead
 - A knock-out that burns the bot to ash while its ghost floats away, and a winner that jumps and dances
@@ -34,7 +34,7 @@ Working today:
 - Keyboard controls for playing on a computer
 - Sound effects
 
-Not built yet: teams, more than four players, and playing online. The plan is in [docs/ROADMAP.md](docs/ROADMAP.md).
+Not built yet: teams and playing online. The plan is in [docs/ROADMAP.md](docs/ROADMAP.md).
 
 ## How to play
 

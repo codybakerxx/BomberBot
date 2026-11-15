@@ -12,7 +12,7 @@ The game runs at a fixed 60 ticks a second. Times below are given in seconds wit
 - **Solid blocks** never break. They are the outer wall plus a pillar on every second tile in both directions. The pillars turn the arena into a grid of lanes.
 - **Bricks** can be blasted away. At the start each open tile has a 78% chance of holding a brick. The lobby's Bricks setting changes that: Few 50%, Some 65%, Normal 78%, Lots 86%, Packed 93%.
 - Each player's starting tile and the tiles next to it are always left clear, so nobody starts boxed in.
-- Two to four players (you and one to three CPU players, as the lobby says) start in the corners, in this order: top-left, bottom-right, top-right, bottom-left. You are always top-left.
+- Two to nine players (you and one to eight CPU players, as the lobby says). The first four start in the corners, in this order: top-left, bottom-right, top-right, bottom-left. You are always top-left. A fifth starts in the middle. With six, the fifth and sixth start in the middle row, a third of the way in from each side. Seven add the middle of the top and bottom edges to the five; eight use the corners and the middle of all four edges; nine add the middle. With more than six players the arena is two tiles wider and taller.
 - The layout comes from a seed number. The same seed always builds the same arena. The game picks a new random seed for every round.
 
 ## Moving
@@ -201,7 +201,7 @@ The blocks were made 20% faster on 11 November 2026, after play-testing: they to
 
 *`drawScore`, `tick` and `finish` in main.ts*
 
-- **The scoreboard** is in the top bar: four heads, two on each side of the timer, each in its player's colour with the rounds that player has won to its right. Yours is the first on the left. (Sideways, the four are in a row under the timer.)
+- **The scoreboard** is in the top bar: four heads, two on each side of the timer (with more than four players, one head per player, in the line under the top bar; sideways, rows of five), each in its player's colour with the rounds that player has won to its right. Yours is the first on the left. (Sideways, the four are in a row under the timer.)
 - **The player in the lead wears a crown**, sitting crooked on its head, on the scoreboard and on its robot in the arena. Nobody has it until someone wins a round. It changes hands only when another player gets ahead: drawing level with the leader does not take it.
 - A player knocked out of the round in play is dimmed, with crosses for eyes. A place with no player in it (when fewer than four are playing) is a grey head with no number.
 - **Winning a round adds one** to the winner's number, which is shown in the winner's colour until the next round starts. A draw adds nothing.
@@ -275,4 +275,4 @@ The host can change these before a match. Left alone, every one is the usual rul
 
 ## Not in the game yet
 
-Teams, more than four players, playing online, more arenas, and setting bombs off by remote. See [ROADMAP.md](ROADMAP.md).
+Teams, playing online, more arenas, and setting bombs off by remote. See [ROADMAP.md](ROADMAP.md).

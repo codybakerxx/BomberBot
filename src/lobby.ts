@@ -2,10 +2,12 @@
  * The lobby: where a match is set up before it starts. Two pages, with Start always in the middle of the
  * bottom bar and the other page's name beside it:
  *
- * - Players: your robot (‹ › arrows, a dot for each colour, or a swipe across it) and OK, then a card for
- *   each player. Browsing shows a colour on your robot; OK makes it yours, and a P1 tag pops up under its
- *   dot (P2 to P4 sit under the CPU players' colours). If a CPU player wears the colour you take, it takes
- *   the one you had. Start with a colour picked but not OK'd asks which you mean. Tap a CPU player's card for its panel: its colour, its level, and Remove. An empty card adds a
+ * - Players: your robot (‹ › arrows, a dot for each colour, or a swipe across it) and Ready, then a card
+ *   for each player with a check mark once that player is ready (CPU players always are). Browsing shows a
+ *   colour on your robot; Ready makes it yours and pops up a P1 tag under its dot (P2 to P9 sit under the
+ *   CPU players' colours). Picking another colour takes Ready away until it is pressed again. If a CPU
+ *   player wears the colour you take, it takes the one you had. This page has no Start: its main button
+ *   goes on to the Match page. Online, every player will pick and press Ready the same way. Tap a CPU player's card for its panel: its colour, its level, and Remove. An empty card adds a
  *   CPU player. "All CPUs" sets every CPU player's level at once.
  * - Match: the arena (‹ ›, dots or a swipe; the picture is the real arena, drawn with the bricks the rules
  *   ask for), then the rules, which the host sets: the round timer and how fast the blocks close in, rounds
@@ -30,6 +32,8 @@ import {
   ROUND_MIN,
   ROUND_STEP,
   arenaOf,
+  arenaSize,
+  GROW_AFTER,
   clockText,
   defaultRules,
   problem,
@@ -61,7 +65,8 @@ const PREVIEW_SEED = 20261114;
 export type LobbyPage = 'players' | 'match';
 
 export function createLobby(host: LobbyHost): {
-  show(page?: LobbyPage): void;
+  /** `fresh`: arriving from the title or from a match, when everyone is not ready yet; not when coming back from Settings */
+  show(page?: LobbyPage, fresh?: boolean): void;
   hide(): void;
   page(): LobbyPage;
   turn(d: number): void;
@@ -75,8 +80,11 @@ export function createLobby(host: LobbyHost): {
    * Online, every player will pick and OK their own the same way, and can pick and OK again until the start.
    */
   let pick = host.myColor;
-  /** set by OK, so the next redraw makes the P1 tag pop up */
+  /** set by Ready, so the next redraw makes the P1 tag pop up */
   let popMine = false;
+  /** whether you have pressed Ready (with the colour you are showing). Lost when another colour is picked. */
+  let ready = false;
+  const wide = (): boolean => window.matchMedia('(min-width: 820px) and (min-height: 480px)').matches;
   /** the CPU player whose panel is open, or -1 */
   let editing = -1;
   const s = (): MatchSetup => host.setup;
@@ -92,21 +100,23 @@ export function createLobby(host: LobbyHost): {
     const used = new Set([host.myColor, ...s().cpus.filter((_, i) => i !== except).map((c) => c.colorId)]);
     return COLORS.map((c) => c.id).filter((id) => !used.has(id));
   }
-  /** Show a colour on your robot (not yours until OK). Any colour, a CPU player's included. */
+  /** Show a colour on your robot (not yours until Ready). Any colour, a CPU player's included. */
   function setPick(id: string): void {
     pick = id;
+    if (id !== host.myColor) ready = false;
     refresh();
   }
   function stepMine(d: number): void {
     const ids = COLORS.map((c) => c.id);
     setPick(ids[(ids.indexOf(pick) + d + ids.length) % ids.length]);
   }
-  /** OK: the colour on your robot becomes yours. A CPU player wearing it takes the colour you had. */
-  function confirmPick(): void {
-    if (pick === host.myColor) return;
+  /** Ready: the colour on your robot becomes yours, and you are ready. A CPU player wearing it takes the colour you had. */
+  function readyUp(): void {
+    if (ready && pick === host.myColor) return;
     const old = host.myColor;
-    for (const c of s().cpus) if (c.colorId === pick) c.colorId = old;
+    if (pick !== old) for (const c of s().cpus) if (c.colorId === pick) c.colorId = old;
     host.myColor = pick;
+    ready = true;
     popMine = true;
     changed();
   }
@@ -139,14 +149,14 @@ export function createLobby(host: LobbyHost): {
     b.id = `dot-${c.id}`;
     b.style.setProperty('--c', c.body);
     b.addEventListener('click', () => setPick(c.id));
-    b.addEventListener('dblclick', () => confirmPick()); // a double tap is a quick OK
+    b.addEventListener('dblclick', () => readyUp()); // a double tap is a quick Ready
     const tag = document.createElement('span');
     tag.className = 'ptag';
     tag.id = `ptag-${c.id}`;
     cell.append(b, tag);
     dots.append(cell);
   }
-  $('colOk').addEventListener('click', confirmPick);
+  $('colOk').addEventListener('click', readyUp);
 
   const allCpus: Opt[] = [
     choice({
@@ -192,10 +202,10 @@ export function createLobby(host: LobbyHost): {
     const me = document.createElement('div');
     me.className = 'slot me';
     me.setAttribute('role', 'group');
-    me.setAttribute('aria-label', `You, ${colorById(host.myColor).name}`);
+    me.setAttribute('aria-label', `You, P1, ${colorById(host.myColor).name}, ${ready ? 'ready' : 'not ready'}`);
     const mc = document.createElement('canvas');
     const mt = document.createElement('div');
-    mt.innerHTML = `<b>You · P1</b><small>${colorById(host.myColor).name}</small>`;
+    mt.innerHTML = `<b>You · P1</b><small>${colorById(host.myColor).name}</small><span class="rdy${ready ? ' on' : ''}">${ready ? '✓ Ready' : 'Not ready'}</span>`;
     me.append(mc, mt);
     box.append(me);
     const cvs: [HTMLCanvasElement, string][] = [[mc, host.myColor]];
@@ -204,10 +214,10 @@ export function createLobby(host: LobbyHost): {
       b.type = 'button';
       b.className = 'slot';
       b.id = `slot-${i + 1}`;
-      b.setAttribute('aria-label', `CPU ${i + 1}, ${colorById(c.colorId).name}, ${LEVELS[c.level].label}. Tap to change.`);
+      b.setAttribute('aria-label', `CPU ${i + 1}, P${i + 2}, ${colorById(c.colorId).name}, ${LEVELS[c.level].label}, ready. Tap to change.`);
       const cv = document.createElement('canvas');
       const t = document.createElement('div');
-      t.innerHTML = `<b>CPU ${i + 1} · P${i + 2}</b><small>${LEVELS[c.level].label} · ${colorById(c.colorId).name}</small>`;
+      t.innerHTML = `<b>CPU ${i + 1} · P${i + 2}</b><small>${LEVELS[c.level].label} · ${colorById(c.colorId).name}</small><span class="rdy on">✓ Ready</span>`;
       const edit = document.createElement('span');
       edit.className = 'edit';
       edit.textContent = 'Edit';
@@ -444,8 +454,9 @@ export function createLobby(host: LobbyHost): {
     $('pgMatch').setAttribute('aria-selected', String(p === 'match'));
     $('lobbyPlayers').hidden = p !== 'players';
     $('lobbyMatch').hidden = p !== 'match';
+    // the Players page's only way on is its main button (Match ›), so it has no › beside it
     $('lobbyPrev').hidden = p === 'players';
-    $('lobbyNext').hidden = p === 'match';
+    $('lobbyNext').hidden = true;
     const sc = document.querySelector('#lobby .scroll');
     if (sc) sc.scrollTop = 0;
     refresh();
@@ -460,19 +471,30 @@ export function createLobby(host: LobbyHost): {
   $('lobbyBack').addEventListener('click', () => host.back());
   $('lobbySound').addEventListener('click', () => host.settings('sound'));
   $('lobbySettings').addEventListener('click', () => host.settings());
+  // The main button: on the Players page it goes on to the Match page (the owner's call: a match cannot be
+  // started from the Players page). On the Match page, or a wide screen showing both, it starts the match.
   $('lobbyStart').addEventListener('click', () => {
+    if (page === 'players' && !wide()) {
+      setPage('match');
+      return;
+    }
     if (problem(s())) return;
-    if (pick === host.myColor) {
+    if (ready) {
       host.start();
       return;
     }
-    // a colour picked but not OK'd: ask which is meant rather than guess
+    // not ready yet: ask rather than guess
     const want = colorById(pick).name;
-    confirmFirst(`Play as ${want}?`, `${want} is on your robot, but you have not pressed OK, so you are still ${colorById(host.myColor).name}.`, `Play as ${want}`, (yes) => {
-      if (!yes) return;
-      confirmPick();
-      host.start();
-    });
+    confirmFirst(
+      `Ready as ${want}?`,
+      `You have not pressed Ready on the Players page. Everyone must be ready to start.`,
+      `Ready as ${want} and start`,
+      (yes) => {
+        if (!yes) return;
+        readyUp();
+        host.start();
+      },
+    );
   });
 
   function refresh(): void {
@@ -483,14 +505,17 @@ export function createLobby(host: LobbyHost): {
     drawBotOn($<HTMLCanvasElement>('youBot'), pick, 0.95);
     $('youBot').setAttribute('aria-label', `Your robot, in ${shown.name}${mine ? '' : ' (not yours until you press OK)'}`);
     $('youName').textContent = shown.name;
-    $('youState').textContent = mine
-      ? 'P1 · your colour'
-      : wearer >= 0
-        ? `P${wearer + 2} wears it now. OK to take it: CPU ${wearer + 1} gets ${colorById(host.myColor).name}.`
-        : `Not yours yet: press OK to take it.`;
+    $('youState').textContent =
+      mine && ready
+        ? 'P1 · ready'
+        : mine
+          ? 'P1 · your colour. Press Ready when you are happy with it.'
+          : wearer >= 0
+            ? `P${wearer + 2} wears it now. Ready takes it, and CPU ${wearer + 1} gets ${colorById(host.myColor).name}.`
+            : 'Not yours yet: Ready takes it.';
     const ok = $<HTMLButtonElement>('colOk');
-    ok.disabled = mine;
-    ok.textContent = mine ? `✓ ${shown.name} is yours` : `OK: play as ${shown.name}`;
+    ok.disabled = mine && ready;
+    ok.textContent = mine && ready ? '✓ Ready' : mine ? 'Ready' : `Ready as ${shown.name}`;
     for (const c of COLORS) {
       const b = $<HTMLButtonElement>(`dot-${c.id}`);
       const cpu = s().cpus.findIndex((x) => x.colorId === c.id);
@@ -512,23 +537,39 @@ export function createLobby(host: LobbyHost): {
     refreshAll();
     // the arena
     const a = arenaOf(s());
+    const size = arenaSize(s());
     $('arenaName').textContent = a.name;
-    $('arenaBlurb').textContent = `${a.cols} by ${a.rows} tiles. ${a.blurb}`;
+    $('arenaBlurb').textContent = size.grown
+      ? `${size.cols} by ${size.rows} tiles: grown by two each way for more than ${GROW_AFTER} players. ${a.blurb}`
+      : `${a.cols} by ${a.rows} tiles. ${a.blurb}`;
     $('arenaCount').textContent = `${ARENAS.indexOf(a) + 1} of ${ARENAS.length}`;
     for (const b of $('arenaDots').querySelectorAll<HTMLButtonElement>('.dot')) b.setAttribute('aria-pressed', String(b.dataset.arena === a.id));
     if (!$('lobbyMatch').hidden || window.matchMedia('(min-width: 820px) and (min-height: 480px)').matches) drawArena();
     refreshRules();
     // the summary at the top, and whether Start can be pressed
     $('lobbySummary').textContent = summary(s());
+    // the main button: Match › on the Players page, Start on the Match page (or a wide screen)
+    const go = $<HTMLButtonElement>('lobbyStart');
+    const toMatch = page === 'players' && !wide();
+    go.textContent = toMatch ? 'Match ›' : 'Start';
+    go.parentElement!.classList.toggle('solo', toMatch);
+    go.setAttribute('aria-label', toMatch ? 'Go on to the Match page' : 'Start the match');
     const why = problem(s());
-    ($('lobbyStart') as HTMLButtonElement).disabled = !!why;
-    $('startNote').textContent = why;
+    go.disabled = !toMatch && !!why;
+    const note = $('startNote');
+    note.textContent = why || (!ready && !toMatch ? 'You are not ready yet: press Ready on the Players page.' : '');
+    note.classList.toggle('info', !why);
     refreshSheet();
   }
 
   return {
-    show(p?: LobbyPage): void {
-      pick = host.myColor;
+    show(p?: LobbyPage, fresh = false): void {
+      if (fresh) {
+        // a new visit: Ready again for every match, as every player will be online
+        pick = host.myColor;
+        ready = false;
+        p = p ?? 'players';
+      }
       $('lobby').hidden = false;
       setPage(p ?? page);
       $('lobbyStart').focus({ preventScroll: true });

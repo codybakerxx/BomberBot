@@ -31,6 +31,8 @@ import {
   keptOpen,
   TICK_HZ,
   ITEM_CHANCE,
+  MAX_PLAYERS,
+  spawnPoints,
   MAX_BOMBS,
   ItemKind,
   SHIELD_TICKS,
@@ -1154,4 +1156,27 @@ for (let seed = 1; seed <= 40; seed++) {
     assert.ok(big.shrinkOrder.length > 0);
     assert.ok(big.shrinkOrder.every((i) => !keptOpen(big.w, big.h, i)));
   }
+}
+
+// 22. up to nine players: everyone starts on a clear tile of their own, spread over the arena
+{
+  assert.equal(MAX_PLAYERS, 9);
+  for (const [cols, rows] of [[11, 9], [13, 11], [15, 13], [17, 15]]) {
+    for (let n = 1; n <= MAX_PLAYERS; n++) {
+      const players = Array.from({ length: n }, (_, i) => ({ colorId: String(i) }));
+      const w = createWorld({ seed: 40 + n, players, cols, rows });
+      const spots = w.players.map((p) => p.y * w.w + p.x);
+      assert.equal(new Set(spots).size, n, `${cols}x${rows}, ${n} players: each on its own tile`);
+      for (const p of w.players) {
+        assert.equal(w.tiles[p.y * w.w + p.x], FLOOR, `${cols}x${rows}, ${n} players: player ${p.id} starts on open floor`);
+        // and has somewhere to step to
+        const open = [[0, -1], [0, 1], [-1, 0], [1, 0]].filter(([dx, dy]) => w.tiles[(p.y + dy) * w.w + p.x + dx] === FLOOR);
+        assert.ok(open.length >= 1, `${cols}x${rows}, ${n} players: player ${p.id} is not boxed in`);
+      }
+      // nobody starts right next to anyone else
+      for (const a of w.players) for (const b of w.players) if (a !== b) assert.ok(Math.abs(a.x - b.x) + Math.abs(a.y - b.y) >= 4, `${cols}x${rows}, ${n} players: ${a.id} and ${b.id} start apart`);
+    }
+  }
+  // the first four are always the corners, in the usual order
+  assert.deepEqual(spawnPoints(15, 13, 9).slice(0, 4), [{ x: 1, y: 1 }, { x: 13, y: 11 }, { x: 13, y: 1 }, { x: 1, y: 11 }]);
 }

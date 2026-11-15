@@ -172,7 +172,7 @@
   body.portrait #btnA { right: 0; bottom: 0; width: calc(34% - 4px); top: calc(var(--b-height) + 8px); }
 
   /* sideways: pad down the left edge, B over A down the right edge */
-  body:not(.portrait) #dzone { left: 6px; bottom: 6px; top: max(18%, 88px); width: calc(var(--side) - 8px); }
+  body:not(.portrait) #dzone { left: 6px; bottom: 6px; top: max(18%, var(--pad-top, 88px)); width: calc(var(--side) - 8px); }
   body:not(.portrait) #btnB { right: 6px; top: 56px; width: calc(var(--side) - 12px); height: 24%; }
   body:not(.portrait) #btnA { right: 6px; bottom: 6px; width: calc(var(--side) - 12px); top: calc(56px + 24% + 8px); }
 
@@ -421,6 +421,9 @@
   .foot { flex: 0 0 auto; display: grid; grid-template-columns: 118px minmax(0, 1fr) 118px; align-items: center; gap: 8px; padding: 8px 10px 14px; max-width: 640px; width: 100%; margin: 0 auto; }
   .foot-note { flex: 0 0 auto; margin: 0 14px; text-align: center; font: 500 13px/1.3 var(--font-body); color: #ff9a9a; min-height: 0; }
   .foot-note:empty { display: none; }
+  .foot-note.info { color: var(--accent); }
+  .rdy { display: inline-block; margin-top: 5px; padding: 2px 6px; font: 700 11px/1.2 var(--font-display); letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-dim); border: 1px solid var(--line); border-radius: 6px; }
+  .rdy.on { color: #5cff8e; border-color: rgba(92, 255, 142, 0.45); }
   .go.big { padding: 18px 12px; font-size: 22px; letter-spacing: 0.16em; border-radius: 16px; }
   .go.danger { color: #ff9a9a; background: transparent; border: 1.5px solid #5a2a34; }
   .go:disabled { opacity: 0.4; cursor: default; }
@@ -432,6 +435,9 @@
   .side-btn svg { width: 16px; height: 16px; flex: 0 0 auto; }
   .side-btn span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .side-btn[hidden] { display: flex; visibility: hidden; }
+  /* the lobby's Players page: no page arrows, and its one way on (Match ›) takes the whole bar */
+  .foot.solo .side-btn { display: none; }
+  .foot.solo .go.big { grid-column: 1 / -1; }
   .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 12px; display: flex; flex-direction: column; align-items: center; gap: 8px; }
   .you-row { width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 6px; }
   #youBot { width: 150px; height: 150px; }
@@ -695,13 +701,13 @@
           <div class="big-name" id="youName"></div>
           <p class="hint center" id="youState" aria-live="polite"></p>
           <div class="dots" id="youDots" role="group" aria-label="Colours: under each, the player who wears it"></div>
-          <button class="go ok" id="colOk" type="button">OK</button>
-          <p class="hint center">Pick a colour with the arrows, a dot or a swipe across your robot, then OK (or double-tap the dot). If a CPU wears it, the CPU takes your old colour. Online, each player will OK their own colour, and can change it until the match starts.</p>
+          <button class="go ok" id="colOk" type="button">Ready</button>
+          <p class="hint center">Pick a colour with the arrows, a dot or a swipe across your robot, then Ready (or double-tap the dot). If a CPU wears it, the CPU takes your old colour. Picking another colour takes Ready away until you press it again. Online, each player will do the same.</p>
         </div>
         <div class="sec-head"><span>Players</span><span id="playerCount"></span></div>
         <div class="slots" id="slots"></div>
         <div class="opts" id="allCpus"></div>
-        <p class="hint" id="playersNote">Tap a CPU player to change its colour or level, or to remove it. Up to 4 players on this device: online play will take more.</p>
+        <p class="hint" id="playersNote">Tap a CPU player to change its colour or level, or to remove it. Up to 9 players: you and 8 CPU players. With more than 6, the arena grows by two tiles each way. CPU players are always ready.</p>
       </section>
       <section id="lobbyMatch" class="page" role="tabpanel" aria-labelledby="pgMatch">
         <div class="sec-head"><span>Arena</span><span id="arenaCount"></span></div>

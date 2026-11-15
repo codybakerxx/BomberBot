@@ -75,6 +75,17 @@ class Thumb:
             await self.page.wait_for_timeout(90)
 
 
+async def start_round(page):
+    """From the lobby (as a fresh visit leaves it, on the Players page): Ready, Match ›, then Start."""
+    if await page.evaluate("document.getElementById('lobbyMatch').hidden"):
+        if not await page.evaluate("document.getElementById('colOk').disabled"):
+            await page.tap("#colOk")  # Ready
+        await page.tap("#lobbyStart")  # Match ›
+    await page.tap("#lobbyStart")
+    if await page.evaluate("!document.getElementById('confirm').hidden"):
+        await page.tap("#confirmYes")
+
+
 async def phone(browser, width, height, title=None):
     """A phone-sized page with the game open. The game opens on the title screen: it is saved as `title`
     (once the robot is waving) if given, then Local is tapped, which leads to the menu."""
@@ -105,7 +116,10 @@ async def main():
         await page.wait_for_timeout(100)
         await page.screenshot(path=str(OUT / "lobby-cpu.png"))
         await page.tap("#cpuDone")
-        await page.tap("#lobbyNext")
+        await page.tap("#colOk")
+        await page.wait_for_timeout(500)
+        await page.screenshot(path=str(OUT / "lobby-ready.png"))
+        await page.tap("#lobbyStart")  # Match ›
         await page.wait_for_timeout(100)
         await page.screenshot(path=str(OUT / "lobby-match.png"))
         await page.tap("#lobbyPrev")
@@ -153,7 +167,7 @@ async def main():
         await page.tap("#setDone")
 
         # --- a round in progress: power-ups in the open, a blast along the top row
-        await page.tap("#lobbyStart")
+        await start_round(page)
         await page.wait_for_timeout(200)
         await page.evaluate(
             """() => {
@@ -190,7 +204,7 @@ async def main():
         await page.tap("#pgControls")
         await page.tap("#handRight")
         await page.tap("#setDone")
-        await page.tap("#lobbyStart")
+        await start_round(page)
         await page.wait_for_timeout(300)
         await page.screenshot(path=str(OUT / "right-thumb.png"))
         # --- and the menu as it looks when opened in the middle of a round
@@ -201,14 +215,14 @@ async def main():
 
         # --- the same game held sideways
         context, page = await phone(browser, 844, 390, title="title-sideways.png")
-        await page.tap("#lobbyStart")
+        await start_round(page)
         await page.wait_for_timeout(300)
         await page.screenshot(path=str(OUT / "sideways.png"))
         await context.close()
 
         # --- the seven power-ups in a row, and what a shield and a curse look like on a robot
         context, page = await phone(browser, 393, 740)
-        await page.tap("#lobbyStart")
+        await start_round(page)
         await page.wait_for_timeout(200)
         await page.evaluate(
             """() => {
@@ -233,7 +247,7 @@ async def main():
 
         # --- after the timer reaches 0: blocks falling round the edge
         context, page = await phone(browser, 393, 740)
-        await page.tap("#lobbyStart")
+        await start_round(page)
         await page.wait_for_timeout(200)
         await page.evaluate(
             """() => {
@@ -255,7 +269,7 @@ async def main():
         # --- knocked out, then the round won: three robots caught a third of a second apart, so the
         # picture shows three moments of the knocked-out animation; then the winner and the result panel
         context, page = await phone(browser, 393, 740)
-        await page.tap("#lobbyStart")
+        await start_round(page)
         await page.wait_for_timeout(200)
         await page.evaluate(
             """() => {

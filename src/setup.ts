@@ -67,8 +67,10 @@ export const ITEM_NAMES: [ItemKind, string, string][] = [
 export const ROUND_MIN = 30;
 export const ROUND_MAX = 300;
 export const ROUND_STEP = 15;
-/** The most CPU players a local match can have: the arena has four corners to start in. */
-export const MAX_CPUS = 3;
+/** The most CPU players a local match can have: nine players in all, one for each colour. */
+export const MAX_CPUS = 8;
+/** With more players than this, every arena is two tiles wider and taller (the owner's plan: past six, the map gets bigger). */
+export const GROW_AFTER = 6;
 /** Rounds to win a match: first to 1 to 9. */
 export const MAX_FIRST_TO = 9;
 
@@ -123,6 +125,13 @@ export function arenaOf(s: MatchSetup): (typeof ARENAS)[number] {
   return ARENAS.find((a) => a.id === s.arena) ?? ARENAS[1];
 }
 
+/** The size the arena is played at: as chosen, or two tiles bigger each way with more than GROW_AFTER players. */
+export function arenaSize(s: MatchSetup): { cols: number; rows: number; grown: boolean } {
+  const a = arenaOf(s);
+  const grown = s.cpus.length + 1 > GROW_AFTER;
+  return { cols: a.cols + (grown ? 2 : 0), rows: a.rows + (grown ? 2 : 0), grown };
+}
+
 /** The chance of each power-up for this setup (the usual ones unless the mix is custom). */
 export function itemChances(s: MatchSetup): [ItemKind, number][] {
   if (!s.itemsOn) return ITEM_CHANCE;
@@ -131,11 +140,11 @@ export function itemChances(s: MatchSetup): [ItemKind, number][] {
 
 /** The config sim.ts builds a round from: you first, then the CPU players in their lobby order. */
 export function worldConfig(s: MatchSetup, myColor: string, seed: number): WorldConfig {
-  const arena = arenaOf(s);
+  const size = arenaSize(s);
   return {
     seed,
-    cols: arena.cols,
-    rows: arena.rows,
+    cols: size.cols,
+    rows: size.rows,
     players: [{ colorId: myColor }, ...s.cpus.map((c) => ({ colorId: c.colorId }))],
     softDensity: BRICKS[s.bricks].density,
     roundTicks: s.timerOn ? s.roundSecs * TICK_HZ : 0,

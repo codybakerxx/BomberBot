@@ -89,7 +89,7 @@ const CRUSHED = -2;
 /** true once this round's "blocks are falling" warning has sounded */
 let hurried = false;
 /** Rounds won in this match by each of the four places on the scoreboard. Place 0 is you. */
-const wins = [0, 0, 0, 0];
+const wins = Array<number>(9).fill(0);
 /** Which round of the match this is: 1 for the first. */
 let roundNo = 0;
 /** The player who has won the match (reached `setup.firstTo` wins), or -1 while it goes on. */
@@ -258,10 +258,14 @@ function newWorld(): void {
 const INFO_ROWS = 1;
 /** The biggest a head on the scoreboard is drawn, centre to edge, in screen pixels. */
 const HEAD_R = 13;
-/** Where each of the four places on the scoreboard goes: the left edge and width of its cell, in screen pixels from the scoreboard's own left edge. */
-let scoreCells: { x: number; w: number }[] = [];
-/** How far down the scoreboard the middle of the heads is, in screen pixels. */
-let scoreMid = 0;
+/**
+ * Where each place on the scoreboard goes: the left edge and width of its cell, and how far down the middle
+ * of its head is, in screen pixels from the scoreboard's own top left. Four places, or one per player when
+ * more than four are playing.
+ */
+let scoreCells: { x: number; w: number; y: number }[] = [];
+/** The most a head on the scoreboard may be, centre to edge, so it fits the height it has. */
+let scoreHeadMax = 13;
 
 /**
  * How many of the screen's pixels make one of the page's: what every canvas is drawn at. A phone at 3 can
@@ -327,20 +331,35 @@ function layout(): void {
   // takes at the far right, so the two pairs match. Otherwise it is a row under the timer, over the
   // column beside the arena.
   const side = Math.max(150, (W - cw) / 2);
-  const box = stacked ? { left: 0, top: 0, width: W, height: topBar } : { left: 6, top: 40, width: Math.min(side - 12, 260), height: 44 };
-  if (stacked) {
+  const places = Math.max(4, world.players.length);
+  const perRow = 5; // sideways, with more than four players: rows of up to five
+  const rows = places > 4 ? Math.ceil(places / perRow) : 1;
+  const box =
+    stacked && places > 4
+      ? // more than four players, upright: the scoreboard takes the free line under the top bar, one place each across the screen
+        { left: 0, top: topBar, width: W, height: Math.max(16, infoRow) }
+      : stacked
+        ? { left: 0, top: 0, width: W, height: topBar }
+        : { left: 6, top: 40, width: Math.min(side - 12, places > 4 ? 300 : 260), height: 44 * rows };
+  scoreHeadMax = HEAD_R;
+  if (stacked && places > 4) {
+    const cell = (W - 12) / places;
+    scoreCells = Array.from({ length: places }, (_, i) => ({ x: 6 + i * cell, w: cell, y: box.height / 2 }));
+    scoreHeadMax = Math.max(6, Math.min(HEAD_R, box.height * 0.42));
+  } else if (stacked) {
     const half = (timer.offsetWidth || 80) / 2 + 5;
     const btn = $('menuBtn').getBoundingClientRect();
     const edge = (btn.width ? Math.min(W - btn.left, 60) : 48) + 4;
     const cell = Math.max(24, (W / 2 - half - edge) / 2);
-    scoreCells = [edge, edge + cell, W / 2 + half, W / 2 + half + cell].map((x) => ({ x, w: cell }));
-    scoreMid = topBar / 2 + 3;
+    scoreCells = [edge, edge + cell, W / 2 + half, W / 2 + half + cell].map((x) => ({ x, w: cell, y: topBar / 2 + 3 }));
   } else {
     box.left = Math.round((side - box.width) / 2);
-    const cell = box.width / 4;
-    scoreCells = [0, 1, 2, 3].map((i) => ({ x: i * cell, w: cell }));
-    scoreMid = box.height / 2 + 4;
+    const across = places > 4 ? perRow : 4;
+    const cell = box.width / across;
+    scoreCells = Array.from({ length: places }, (_, i) => ({ x: (i % across) * cell, w: cell, y: 44 * Math.floor(i / across) + 26 }));
   }
+  // sideways with more than four players the scoreboard has two rows: the swipe pad starts under them
+  touch.style.setProperty('--pad-top', `${stacked ? 88 : Math.max(88, box.top + box.height + 6)}px`);
   score.style.left = `${box.left}px`;
   score.style.top = `${box.top}px`;
   score.style.width = `${box.width}px`;
@@ -353,7 +372,7 @@ function layout(): void {
   const cardWidth = stacked ? W - 16 : Math.min(side - 12, 320);
   resultCard.style.width = `${cardWidth}px`;
   resultCard.style.left = `${stacked ? 8 : Math.round((side - cardWidth) / 2)}px`;
-  resultCard.style.top = `${stacked ? Math.round(topBar + infoRow + ch + 14) : 92}px`;
+  resultCard.style.top = `${stacked ? Math.round(topBar + infoRow + ch + 14) : box.top + box.height + 8}px`;
   teach.style.left = canvas.style.left;
   teach.style.top = canvas.style.top;
   teach.style.width = canvas.style.width;
@@ -383,7 +402,7 @@ let scoreKey = '';
  * Only redrawn when something it shows has changed.
  */
 function drawScore(): void {
-  const places = [0, 1, 2, 3].map((i) => world.players[i]);
+  const places = Array.from({ length: Math.max(4, world.players.length) }, (_, i) => world.players[i]);
   const winner = world.over ? world.over.winner : -1;
   const key = places.map((p, i) => (p ? `${p.colorId}${p.alive ? '' : 'x'}${wins[i]}` : '-')).join('|') + `|${winner}|${leader}|${score.width}x${score.height}`;
   if (key === scoreKey) return;
@@ -402,17 +421,17 @@ function drawScore(): void {
     const col = p ? colorById(p.colorId) : NOBODY;
     const label = p ? String(wins[i]) : '';
     // the head is as big as its cell allows once the number has its room (an empty place keeps room for one digit, so the heads line up)
-    let size = Math.round(HEAD_R * 1.35);
+    let size = Math.round(scoreHeadMax * 1.35);
     sctx.font = `700 ${size}px "Chakra Petch", system-ui, sans-serif`;
     let numW = sctx.measureText(label || '0').width;
-    const r = Math.max(6, Math.min(HEAD_R, (cell.w - gap - numW - 8) / 2)); // 8: breathing room between one place and the next
-    if (r < HEAD_R) {
+    const r = Math.max(5, Math.min(scoreHeadMax, (cell.w - gap - numW - 8) / 2)); // 8: breathing room between one place and the next
+    if (r < scoreHeadMax) {
       size = Math.max(10, Math.round(r * 1.35));
       sctx.font = `700 ${size}px "Chakra Petch", system-ui, sans-serif`;
       numW = sctx.measureText(label || '0').width;
     }
     const cx = cell.x + (cell.w - (2 * r + gap + numW)) / 2 + r;
-    const cy = scoreMid;
+    const cy = cell.y;
     const dim = !p ? 0.45 : p.alive ? 1 : 0.45;
     // the helmet has a rim in the player's colour, which is what shows it against the dark screen
     // (the first robot's helmet was all black, and needed a disc behind it and a ring round it here)
@@ -627,7 +646,7 @@ function leaveTitle(): void {
   title.hidden = true;
   document.body.classList.remove('title-open');
   closeTitle();
-  showLobby();
+  showLobby(true);
 }
 $('titleLocal').addEventListener('click', leaveTitle);
 
@@ -931,13 +950,16 @@ const lobbyHost: LobbyHost = {
 };
 const lobby = createLobby(lobbyHost);
 
-/** Open the lobby. It is only reached between matches: leaving a match for it ends the match. */
-function showLobby(): void {
+/**
+ * Open the lobby. It is only reached between matches: leaving a match for it ends the match. `fresh` when
+ * arriving from the title or a match (Ready has to be pressed again); not when coming back from Settings.
+ */
+function showLobby(fresh = false): void {
   hideScreens();
   mode = 'lobby';
   roundLive = false;
   document.body.classList.add('menu-open');
-  lobby.show();
+  lobby.show(undefined, fresh);
 }
 
 // ------------------------------------------------ rounds and the match
@@ -1059,7 +1081,7 @@ $('pauseNewMatch').addEventListener('click', () =>
 );
 $('pauseLobby').addEventListener('click', () =>
   confirmFirst('Leave to the lobby?', 'This match ends and its score is not kept. In the lobby you can change the players and the rules.', 'Leave match', (yes) => {
-    if (yes) showLobby();
+    if (yes) showLobby(true);
   }),
 );
 /**
@@ -1087,7 +1109,7 @@ $('again').addEventListener('click', () => {
   if (matchWinner >= 0) newMatch();
   else if (settleUnfinished()) start();
 });
-$('change').addEventListener('click', () => (matchWinner >= 0 ? showLobby() : openPause()));
+$('change').addEventListener('click', () => (matchWinner >= 0 ? showLobby(true) : openPause()));
 
 // ------------------------------------------------ Settings
 

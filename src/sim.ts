@@ -232,7 +232,7 @@ export interface WorldConfig {
   /** playable columns and rows, not counting the outer wall (odd numbers). Default 13 by 11. */
   cols?: number;
   rows?: number;
-  /** one entry per player, up to four for now; they start in the corners */
+  /** one entry per player, up to nine (MAX_PLAYERS); where each starts is `spawnPoints` */
   players: { colorId: string }[];
   /** share of open tiles that start as bricks, 0 to 1. Default 0.78. */
   softDensity?: number;
@@ -319,14 +319,33 @@ export function makeRng(seed: number): () => number {
   };
 }
 
-/** Start tiles for up to four players: the four corners. */
-export function spawnPoints(w: number, h: number): { x: number; y: number }[] {
-  return [
-    { x: 1, y: 1 },
-    { x: w - 2, y: h - 2 },
-    { x: w - 2, y: 1 },
-    { x: 1, y: h - 2 },
-  ];
+/** The most players a round can have: one for each bot colour. */
+export const MAX_PLAYERS = 9;
+
+/**
+ * Start tiles for `n` players (1 to MAX_PLAYERS), spread out as the owner asked: four players start in
+ * the corners; a fifth in the middle; six put two in the middle row instead, a third of the way in from
+ * each side; seven add the middle of the top and bottom edges to five; eight use the corners and the middle
+ * of all four edges; nine add the middle again. In player order: you (top-left), bottom-right, top-right,
+ * bottom-left, then the rest. A tile on a pillar is moved one to the right.
+ */
+export function spawnPoints(w: number, h: number, n = 4): { x: number; y: number }[] {
+  const at = (x: number, y: number): { x: number; y: number } => (x % 2 === 0 && y % 2 === 0 ? { x: x + 1, y } : { x, y });
+  const cx = Math.floor((w - 1) / 2);
+  const cy = Math.floor((h - 1) / 2);
+  const corners = [at(1, 1), at(w - 2, h - 2), at(w - 2, 1), at(1, h - 2)];
+  const middle = at(cx, cy);
+  const top = at(cx, 1);
+  const bottom = at(cx, h - 2);
+  const left = at(1, cy);
+  const right = at(w - 2, cy);
+  const third = Math.round((w - 1) / 3);
+  if (n <= 4) return corners.slice(0, Math.max(0, n));
+  if (n === 5) return [...corners, middle];
+  if (n === 6) return [...corners, at(third, cy), at(w - 1 - third, cy)];
+  if (n === 7) return [...corners, middle, top, bottom];
+  if (n === 8) return [...corners, top, bottom, left, right];
+  return [...corners, top, bottom, left, right, middle];
 }
 
 /**
@@ -339,7 +358,7 @@ export function createWorld(cfg: WorldConfig): World {
   const h = (cfg.rows ?? 11) + 2;
   const rng = makeRng(cfg.seed);
   const tiles = new Uint8Array(w * h);
-  const spawns = spawnPoints(w, h).slice(0, cfg.players.length);
+  const spawns = spawnPoints(w, h, cfg.players.length);
 
   const safe = new Set<number>();
   for (const s of spawns) {
