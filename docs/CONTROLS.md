@@ -3,7 +3,7 @@
 How the game is controlled, how the swipe pad turns a moving thumb into a direction, and how to tune it.
 
 - The swipe pad's logic is in [`src/swipe.ts`](../src/swipe.ts).
-- The wiring to touches and keys is in [`src/input.ts`](../src/input.ts).
+- The wiring to touches, keys and a game controller is in [`src/input.ts`](../src/input.ts); the keys and buttons each action starts with are in [`src/bindings.ts`](../src/bindings.ts); getting round the menus with a controller is [`src/padnav.ts`](../src/padnav.ts); changing keys and buttons in Settings is [`src/remap.ts`](../src/remap.ts).
 - What the robot does with a direction is in `movePlayer` in [`src/sim.ts`](../src/sim.ts), described under "Turning" in [GAME-RULES.md](GAME-RULES.md).
 
 ## The layout
@@ -55,7 +55,7 @@ The caption on the swipe pad (*Standard swipes* or *My thumb swipes*) is centred
 
 | Page | What is on it |
 |---|---|
-| **Controls** | **Steering thumb** and **Swipe direction** (both described below), how strongly the touch controls show, and the keyboard keys. |
+| **Controls** | **Steering thumb** and **Swipe direction** (both described below), how strongly the touch controls show, then **Keyboard** and **Controller**: the keys and buttons for each action, which can be changed (below), and **Rumble**. |
 | **Sound** | Sound effects on or off, with the volume under it when on. Then a switch for each sound, with ▶ to hear it. |
 | **Graphics** | Sharpness (Sharpest, Balanced, Battery saver), Ghosts on or off, Less movement. |
 
@@ -65,14 +65,31 @@ When a round ends, the result panel offers **Next round** and **Menu**. When som
 
 Keys in the menus: Tab moves between buttons, ← and → change the setting in focus, Q and E turn the pages, and Escape goes back one step (closes a question or a panel, leaves Settings, resumes from the menu, goes from the lobby to the title).
 
-On a computer the touch controls are hidden and the keyboard is used:
+## Keyboard and game controller
 
-| Action | Keys |
-|---|---|
-| Move | Arrow keys, or W A S D |
-| A (drop a bomb) | Space, X, J or Enter |
-| B (lift and throw) | Shift, Z or K |
-| Open the menu, go back | Escape |
+On a computer the touch controls are hidden and the keyboard is used. An Xbox controller (or any controller the browser knows as a standard one) works too, for playing and for every menu; it is noticed as soon as one of its buttons is pressed. These are what each action starts with:
+
+| Action | Keys | Controller |
+|---|---|---|
+| Move | W A S D, or the arrow keys | Left stick or D-pad |
+| Drop a bomb (A) | Space, J or X | A or RT |
+| Lift and throw (B) | Shift, K or Z | B or LT |
+| Pause, open the menu | P (and Escape, always) | ≡ (Menu) |
+
+In the menus with a controller: the stick or D-pad moves the highlight, and held it keeps going; on a slider or a ‹ value › setting, left and right change it. **A** presses the highlighted button, **B** goes back one step, **LB** and **RB** turn the pages, **Y** is Ready in the lobby, and **≡** is Start in the lobby and opens or closes the menu in a round. The controller shakes (rumble) when your robot is knocked out and when a blast goes off within two tiles of it, unless Rumble is off in Settings › Controls.
+
+**Hints follow the last thing used.** After a controller button, small chips show which button does what (B on the back arrow, Y on Ready, RB on Match ›, ≡ on Start, LB and RB on the page arrows) and the highlighted button has a clear outline. After a key, the chips show the keys instead (Q, E, Escape). After a touch or a click, they go.
+
+### Changing keys and buttons
+
+In **Settings › Controls**, each action has a row of boxes: up to three keys and up to two controller buttons. Tap a box (or highlight it and press A or Enter) and press the new key or button. A box with + adds one more. While a box is waiting:
+
+- **Backspace** or **Delete** empties it; **Escape** leaves it as it was; tapping it again leaves it too. After 8 seconds with nothing pressed it gives up.
+- A key or button that another action already has asks first: **Swap** gives that action this box's old one (or, if the box was empty, it just moves).
+- Escape and Tab keep their own jobs and cannot be given to an action. The stick and D-pad always move. The menu buttons above (A pick, B back, LB and RB pages, Y Ready, ≡ Start) stay the same in the menus whatever is changed: changing buttons changes only what they do in a round.
+- **Reset** beside Keyboard or Controller puts them all back, and asks first.
+
+Changes are saved on this device. One controller plays as you; more controllers joining as more players on the same screen is next (see the roadmap).
 
 ## Using the swipe pad
 

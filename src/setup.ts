@@ -10,6 +10,7 @@
  * Every option here is used by the game: nothing is shown in a menu that does not do something.
  */
 import { BotLevel, BOT_LEVELS } from './bot';
+import { KeyMap, PadMap, defaultKeys, defaultPad, readKeys, readPad } from './bindings';
 import { ItemKind, ITEM_CHANCE, MAX_BOMBS, MAX_FIRE, MAX_SPEED_ITEMS, START_FIRE, TICK_HZ, WorldConfig } from './sim';
 
 // ---------------------------------------------------------------- the match
@@ -284,10 +285,15 @@ export interface Prefs {
   calm: boolean;
   /** how strongly the touch controls show: 40 to 200 (per cent of the usual) */
   padShow: number;
+  /** the keyboard's keys and the controller's buttons (bindings.ts; Settings › Controls) */
+  keys: KeyMap;
+  padKeys: PadMap;
+  /** shake the controller on a knockout or a blast close by */
+  rumble: boolean;
 }
 
 export function defaultPrefs(): Prefs {
-  return { soundOn: true, volume: 80, muted: [], sharpness: 2, ghosts: true, calm: false, padShow: 100 };
+  return { soundOn: true, volume: 80, muted: [], sharpness: 2, ghosts: true, calm: false, padShow: 100, keys: defaultKeys(), padKeys: defaultPad(), rumble: true };
 }
 
 export function readPrefs(raw: unknown): Prefs {
@@ -302,6 +308,9 @@ export function readPrefs(raw: unknown): Prefs {
     ghosts: typeof r.ghosts === 'boolean' ? r.ghosts : d.ghosts,
     calm: typeof r.calm === 'boolean' ? r.calm : d.calm,
     padShow: clampInt(r.padShow, 40, 200, d.padShow),
+    keys: readKeys(r.keys),
+    padKeys: readPad(r.padKeys),
+    rumble: typeof r.rumble === 'boolean' ? r.rumble : d.rumble,
   };
 }
 

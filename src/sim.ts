@@ -170,7 +170,8 @@ export type GameEvent =
   | { type: 'lift' }
   | { type: 'throw' }
   | { type: 'land' }
-  | { type: 'explode' }
+  /** a bomb went off on this tile */
+  | { type: 'explode'; cx: number; cy: number }
   | { type: 'pickup'; player: number; kind: ItemKind }
   /** a shield took a blast for this player and is used up */
   | { type: 'shield'; player: number }
@@ -1002,7 +1003,7 @@ function explode(world: World, bomb: Bomb): void {
   world.bombs.splice(world.bombs.indexOf(bomb), 1);
   const owner = world.players[bomb.owner];
   if (owner) owner.activeBombs = Math.max(0, owner.activeBombs - 1);
-  world.events.push({ type: 'explode' });
+  world.events.push({ type: 'explode', cx: bomb.cx, cy: bomb.cy });
 
   bomb.slide = 0;
   const carrier = world.players[bomb.heldBy];

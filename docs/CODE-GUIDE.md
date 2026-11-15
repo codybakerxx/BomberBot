@@ -97,9 +97,21 @@ Pure logic like the rules. Given the world, `botInput(world, bot)` returns one `
 
 It uses `cloneWorld` and `step` from `sim.ts` to play moves forward. Plain-words version: [CPU-PLAYERS.md](CPU-PLAYERS.md).
 
-### `src/input.ts`: keyboard and touch wiring
+### `src/input.ts`: keyboard, touch and controller wiring
 
-The `Input` class listens to the keyboard, the swipe pad area and the two buttons, and merges them. `state()` returns `{ dir, a, b }` once per tick.
+The `Input` class listens to the keyboard, the swipe pad area and the two buttons, reads the first game controller once a frame (`pollGamepad`), and merges them. `state()` returns `{ dir, a, b }` once per tick. Keys and buttons go through the player's bindings (`setBindings`). `onDevice` reports whether a key, a controller or a touch was used last (for the hints). While Settings waits for a new key or button, `capture` gets the next press and nothing else does. `rumble` shakes the controller.
+
+### `src/bindings.ts`: which keys and buttons do what
+
+The actions (up, down, left, right, bomb, lift, pause), what each starts with, the names shown for keys and buttons, and `readKeys`/`readPad`, which check saved bindings and fill in anything missing. No page or browser in it.
+
+### `src/padnav.ts`: menus with a controller
+
+`createPadNav` moves the highlight to the nearest button in the direction pushed, within whatever is on top (`PadNavHost.top`), changes sliders and ‹ value › settings with left and right, presses with A, and hands B, LB, RB, Y and ≡ to `main.ts`.
+
+### `src/remap.ts`: changing keys and buttons
+
+Draws the Keyboard and Controller rows in Settings › Controls and does the press-to-change: waiting, swapping (asks first), emptying, Reset, Rumble.
 
 It also **latches**: a tap or flick that begins and ends between two ticks is remembered until the game has read it once, so nothing is missed.
 

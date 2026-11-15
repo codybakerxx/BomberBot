@@ -576,6 +576,26 @@
   .divider { display: flex; align-items: center; gap: 10px; margin-top: 4px; font: 700 11px/1 var(--font-display); letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-dim); }
   .divider::before, .divider::after { content: ''; flex: 1; height: 1px; background: var(--line); }
   .keys { align-items: stretch; }
+  /* Settings › Controls: a box per key or button (remap.ts) */
+  .bind-row { gap: 10px; }
+  .bind-boxes { display: flex; gap: 6px; flex: 0 0 auto; }
+  .bind { min-width: 52px; height: 40px; padding: 0 8px; cursor: pointer; font: 700 14px/1 var(--font-display); color: var(--ink); background: #151a28; border: 1px solid var(--line); border-radius: 9px; }
+  .bind.empty { color: var(--ink-dim); border-style: dashed; background: transparent; }
+  .bind.waiting { color: #14100a; background: var(--accent); border-color: var(--accent); animation: bind-wait 0.9s ease-in-out infinite; }
+  @keyframes bind-wait { 50% { opacity: 0.6; } }
+  #remapNote:empty { display: none; }
+  .sec-head .mini { padding: 6px 12px; font-size: 12px; letter-spacing: 0.08em; }
+  /* with a controller, the button the highlight is on is ringed */
+  body.via-pad :focus { outline: 3px solid var(--accent); outline-offset: 3px; }
+  /* hints on the menus' buttons: which key or controller button does the same (shown for the kind used last) */
+  [data-pad], [data-key] { position: relative; }
+  body.via-pad [data-pad]::after, body.via-keys [data-key]::after {
+    position: absolute; top: -8px; right: -6px; z-index: 1; padding: 3px 6px; pointer-events: none;
+    font: 700 11px/1 var(--font-display); letter-spacing: 0.02em; text-transform: none; white-space: nowrap;
+    color: #14100a; background: #e8ecff; border: 1px solid #05060b; border-radius: 6px;
+  }
+  body.via-pad [data-pad]::after { content: attr(data-pad); }
+  body.via-keys [data-key]::after { content: attr(data-key); }
   /* a phone held sideways is short: everything round the scrolling part is made smaller */
   @media (max-height: 480px) {
     .bar { padding: 4px 10px 2px; }
@@ -703,7 +723,7 @@
      main.ts and lobby.ts fill it in. On a wide screen both pages show side by side. -->
 <div id="lobby" class="screen" hidden>
   <header class="bar">
-    <button id="lobbyBack" class="icon-btn" type="button" aria-label="Back to the title screen"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></button>
+    <button id="lobbyBack" class="icon-btn" type="button" aria-label="Back to the title screen" data-pad="B" data-key="Esc"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></button>
     <div class="bar-mid">
       <span class="mode-chip" id="lobbyMode">Local match</span>
       <span class="bar-sub">You are the host</span>
@@ -734,7 +754,7 @@
           </div>
           <p class="hint center" id="youState" aria-live="polite"></p>
           <div class="dots" id="youDots" role="group" aria-label="Colours: under each, the player who wears it"></div>
-          <button class="go ok" id="colOk" type="button">Ready</button>
+          <button class="go ok" id="colOk" type="button" data-pad="Y">Ready</button>
         </div>
         <div class="sec-head"><span>Players</span><span id="playerCount"></span></div>
         <div class="slots" id="slots"></div>
@@ -751,7 +771,7 @@
           <div class="big-name" id="arenaName"></div>
           <p class="hint center" id="arenaBlurb"></p>
           <div class="dots small" id="arenaDots" role="group" aria-label="Arenas"></div>
-          <button class="go arena-start" id="arenaStart" type="button">Start</button>
+          <button class="go arena-start" id="arenaStart" type="button" data-pad="≡">Start</button>
         </div>
         <div class="sec-head"><span>Rules</span><span class="host-tag">Host</span></div>
         <div class="opts" id="rules"></div>
@@ -762,9 +782,9 @@
   <div class="undo" id="undoBar" role="status" hidden><span id="undoText"></span><button class="mini" id="undoBtn" type="button">Undo</button></div>
   <p class="foot-note" id="startNote" role="status"></p>
   <footer class="foot">
-    <button id="lobbyPrev" class="side-btn" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg><span>Players</span></button>
+    <button id="lobbyPrev" class="side-btn" type="button" data-pad="LB" data-key="Q"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg><span>Players</span></button>
     <button id="lobbyStart" class="go big" type="button">Start</button>
-    <button id="lobbyNext" class="side-btn" type="button"><span>Match</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg></button>
+    <button id="lobbyNext" class="side-btn" type="button" data-pad="RB" data-key="E"><span>Match</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg></button>
   </footer>
 </div>
 
@@ -789,7 +809,7 @@
 <!-- Settings: your own, never anyone else's. Opened from the lobby or from the menu during a match. -->
 <div id="settings" class="screen" hidden>
   <header class="bar">
-    <button id="setBack" class="icon-btn" type="button" aria-label="Back"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></button>
+    <button id="setBack" class="icon-btn" type="button" aria-label="Back" data-pad="B" data-key="Esc"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></button>
     <div class="bar-mid">
       <span class="mode-chip" id="setMode">Local match</span>
       <span class="bar-sub">Settings · just for you</span>
@@ -824,12 +844,19 @@
         <p class="opt-note" id="saveNote" hidden>This browser is not saving settings, so they last only until you close the game.</p>
       </fieldset>
         <div class="opts" id="padOpts"></div>
-        <div class="panel keys">
-          <div class="sec-head"><span>Keyboard</span></div>
-          <p class="sub">Arrow keys or W A S D to move. Space, X, J or Enter drops a bomb. Shift, Z or K lifts a bomb and throws it. Escape opens the menu and goes back.</p>
-          <p class="sub">In the menus: Tab moves between buttons, ← and → change a setting, Q and E switch pages.</p>
-          <p class="sub">Game controllers are not supported yet.</p>
+        <div class="sec-head"><span>Keyboard</span><button class="mini" id="resetKeys" type="button">Reset</button></div>
+        <div class="opts" id="remapKeys"></div>
+        <div class="sec-head"><span>Controller</span><button class="mini" id="resetPad" type="button">Reset</button></div>
+        <p class="hint" id="padStatus" role="status"></p>
+        <div class="opts" id="remapPad"></div>
+        <div class="opt-group">
+          <div class="opt opt-toggle">
+            <div class="opt-name"><span class="opt-label">Rumble</span><span class="opt-hint">On a knockout or a blast close by, if the controller can</span></div>
+            <button class="switch-btn" id="rumbleBtn" type="button" role="switch" aria-label="Rumble"><span class="knob"></span></button>
+          </div>
         </div>
+        <p class="hint" id="remapNote" role="status" aria-live="polite"></p>
+        <p class="hint">Tap a box, then press the new key or button. Moving with the stick or D-pad, Escape, and the menu buttons (A pick, B back, LB and RB pages, Y Ready, ≡ Start) stay as they are.</p>
       </section>
       <section id="setSound" class="page" role="tabpanel" aria-labelledby="pgSound">
         <div class="opts" id="soundOpts"></div>
@@ -840,9 +867,9 @@
     </div>
   </div>
   <footer class="foot">
-    <button id="setPrev" class="side-btn" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg><span></span></button>
+    <button id="setPrev" class="side-btn" type="button" data-pad="LB" data-key="Q"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg><span></span></button>
     <button id="setDone" class="go big" type="button">Done</button>
-    <button id="setNext" class="side-btn" type="button"><span></span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg></button>
+    <button id="setNext" class="side-btn" type="button" data-pad="RB" data-key="E"><span></span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg></button>
   </footer>
 </div>
 
@@ -856,7 +883,7 @@
     <h2 id="pauseTitle">Round 1</h2>
     <p class="hint center" id="pauseInfo"></p>
     <ol class="standings" id="standings" aria-label="Standings"></ol>
-    <button class="go big" id="pauseResume" type="button">Resume</button>
+    <button class="go big" id="pauseResume" type="button" data-pad="≡" data-key="Esc">Resume</button>
     <button class="go quiet" id="pauseSettings" type="button">Settings</button>
     <div class="divider"><span>Match · you are the host</span></div>
     <button class="go quiet" id="pauseRestart" type="button">Restart</button>
@@ -911,7 +938,7 @@
     </header>
     <div id="titleStage" role="img" aria-label="Your robot waving, with two rivals behind it and a lit bomb at its feet"></div>
     <div class="title-actions">
-      <button id="titleLocal" class="go" type="button">Local<small>On this phone, against CPU players</small></button>
+      <button id="titleLocal" class="go" type="button" data-pad="≡">Local<small>On this phone, against CPU players</small></button>
       <button id="titleOnline" class="go quiet" type="button" disabled>Online<small>With friends, by room code: coming soon</small></button>
     </div>
   </div>

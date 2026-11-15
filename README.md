@@ -32,7 +32,7 @@ Working today:
 - A lobby to set up a match: your colour, the CPU players, the arena (three sizes), and the rules: round timer and how fast the blocks close in, rounds to win the match, bricks, what everyone starts with, and how often each power-up turns up
 - Settings of your own: controls, sound (volume, and a switch for each sound) and graphics
 - A menu during a match that says what is going on, with Resume, Settings, Restart (the whole match again) and Leave to the lobby (those last two ask first)
-- Keyboard controls for playing on a computer
+- Keyboard and Xbox controller support, for playing and for every menu, with keys and buttons you can change and hints that follow what you last used
 - Sound effects
 
 Not built yet: teams and playing online. The plan is in [docs/ROADMAP.md](docs/ROADMAP.md).
@@ -90,7 +90,10 @@ src/
   swipe.ts      the swipe pad: turns thumb movement into up, down, left or right
   teach.ts      the maths behind Match my thumb: measuring, testing, choosing
   bot.ts        the CPU players: how they dodge, dig, hunt and the three levels
-  input.ts      keyboard and touch wiring
+  input.ts      keyboard, touch and game controller wiring
+  bindings.ts   which keys and buttons do what, to start with
+  padnav.ts     getting round the menus with a controller
+  remap.ts      changing keys and buttons in Settings
   render.ts     all the drawing
   audio.ts      sound effects
   title.ts      the title screen's picture: your robot waving, two rivals, a lit bomb

@@ -17,6 +17,8 @@ import { Input, typing } from './input';
 import { drawTitle, closeTitle } from './title';
 import { initAudio, preview, setSound, sfx } from './audio';
 import { createLobby, LobbyHost } from './lobby';
+import { createPadNav } from './padnav';
+import { createRemap } from './remap';
 import { MatchSetup, Prefs, SHARPNESS, SOUND_NAMES, arenaOf, clockText, defaultSetup, load, readPrefs, readSetup, save, summary, worldConfig } from './setup';
 import { Opt, answerConfirm, choice, confirmFirst, confirmOpen, heading, mount, note, slider, toggle, wireConfirm } from './ui';
 import { Hand, STRAIGHT, standardAims, uniformAims } from './swipe';
@@ -540,7 +542,11 @@ function tick(): void {
   const me = world.players[0];
   for (const e of world.events) {
     if (e.type === 'place') sfx.place();
-    else if (e.type === 'explode') sfx.explode();
+    else if (e.type === 'explode') {
+      sfx.explode();
+      // a light shake for a blast within two tiles of you
+      if (prefs.rumble && me.alive && Math.abs(e.cx - Math.round(me.x)) + Math.abs(e.cy - Math.round(me.y)) <= 2) input.rumble(0.2, 0.5, 120);
+    }
     else if (e.type === 'pickup') e.kind === 'curse' ? sfx.curse() : sfx.pickup();
     else if (e.type === 'shield') sfx.shield();
     else if (e.type === 'kick' || e.type === 'throw') sfx.kick();
@@ -551,7 +557,10 @@ function tick(): void {
       redrawStatic();
     } else if (e.type === 'death') {
       sfx.death();
-      if (e.player === 0) blastedBy = e.cause === 'block' ? CRUSHED : e.by;
+      if (e.player === 0) {
+        blastedBy = e.cause === 'block' ? CRUSHED : e.by;
+        if (prefs.rumble) input.rumble(1, 0.7, 380); // a strong shake: you are out
+      }
     }
   }
   // the moment the first block starts to fall
@@ -594,6 +603,8 @@ function frame(now: number): void {
   last = now;
   keepSharp();
   input.pad.poll(now); // notice a thumb that has stopped, in every mode
+  input.pollGamepad(); // a controller: its stick and buttons, for the round and the menus
+  padNav.step(now, mode !== 'playing');
   if (mode === 'playing' || mode === 'over') {
     acc += dt;
     const stepLen = 1 / TICK_HZ;
@@ -1166,6 +1177,7 @@ function stepSettings(d: number): void {
   if (i >= 0 && i < SET_TABS.length) showSetTab(SET_TABS[i]);
 }
 function closeSettings(): void {
+  remap.cancel();
   if (setFrom === 'pause') showPause();
   else showLobby();
 }
@@ -1184,6 +1196,7 @@ function prefsChanged(): void {
 /** Put your settings into effect. (Sharpness is picked up by keepSharp on the next frame.) */
 function applyPrefs(): void {
   setSound(prefs.soundOn, prefs.volume, prefs.muted);
+  input.setBindings(prefs.keys, prefs.padKeys);
   document.body.classList.toggle('calm', prefs.calm);
   document.documentElement.style.setProperty('--pad-show', String(prefs.padShow / 100));
 }
@@ -1298,6 +1311,7 @@ const refreshSound = mount($('soundOpts'), soundOpts);
 const refreshPad = mount($('padOpts'), padOpts);
 const refreshGfx = mount($('gfxOpts'), gfxOpts);
 function refreshPrefs(): void {
+  remap?.refresh();
   refreshSound();
   refreshPad();
   refreshGfx();
@@ -1307,15 +1321,27 @@ function refreshPrefs(): void {
 
 // Escape goes back one step: closes a question or a panel, leaves Settings, resumes from the menu, opens the
 // menu during a round, and goes from the lobby back to the title. Q and E turn the pages of the lobby and Settings.
+/** Back one step, the same from Escape or a controller's B: a question or a panel first, then the screen. */
+function goBack(): void {
+  if (confirmOpen()) answerConfirm(false);
+  else if (mode === 'lobby' && lobby.sheetOpen()) lobby.closeSheet();
+  else if (mode === 'lobby') showTitle();
+  else if (mode === 'settings') closeSettings();
+  else if (mode === 'pause') closePause();
+  else if (mode === 'playing' || mode === 'over') openPause();
+  else if (mode === 'teach') closeTeach();
+}
+/** The key or button given to Pause (P, or ≡ on a controller): opens the menu in a round, closes it again. */
+function pauseKey(): void {
+  if (confirmOpen()) return;
+  if (mode === 'playing' || mode === 'over') openPause();
+  else if (mode === 'pause') closePause();
+}
+input.onPause = pauseKey;
+
 window.addEventListener('keydown', (e) => {
   if (e.code === 'Escape') {
-    if (confirmOpen()) answerConfirm(false);
-    else if (mode === 'lobby' && lobby.sheetOpen()) lobby.closeSheet();
-    else if (mode === 'lobby') showTitle();
-    else if (mode === 'settings') closeSettings();
-    else if (mode === 'pause') closePause();
-    else if (mode === 'playing' || mode === 'over') openPause();
-    else if (mode === 'teach') closeTeach();
+    goBack();
     return;
   }
   if ((e.code === 'KeyQ' || e.code === 'KeyE') && !confirmOpen() && !e.repeat && !typing(e)) {
@@ -1325,6 +1351,67 @@ window.addEventListener('keydown', (e) => {
   }
 });
 input.onFirstGesture = initAudio;
+
+// ------------------------------------------------ a controller in the menus, and button hints
+
+/** What the controller's highlight moves round: whatever is on top. */
+function padTop(): HTMLElement | null {
+  if (confirmOpen()) return $('confirm');
+  if (mode === 'lobby' && lobby.sheetOpen()) return $('cpuSheet');
+  const screens: Partial<Record<typeof mode, string>> = { title: 'title', lobby: 'lobby', settings: 'settings', pause: 'pause', over: 'result', teach: 'teach' };
+  const id = screens[mode];
+  return id ? $(id) : null;
+}
+const padNav = createPadNav(input, {
+  top: padTop,
+  back: goBack,
+  turn: (d) => {
+    if (confirmOpen()) return;
+    if (mode === 'lobby' && !lobby.sheetOpen()) lobby.turn(d);
+    else if (mode === 'settings') stepSettings(d);
+  },
+  ready: () => {
+    if (mode === 'lobby' && !lobby.sheetOpen() && !confirmOpen()) $('colOk').click();
+  },
+  menu: () => {
+    if (confirmOpen()) return;
+    if (mode === 'title') leaveTitle();
+    else if (mode === 'lobby' && !lobby.sheetOpen()) $('arenaStart').click();
+    else if (mode === 'settings') closeSettings();
+    else pauseKey();
+  },
+});
+// The hints on the menus' buttons follow the kind of control used last: controller buttons, keys, or none for touch.
+input.onDevice = (d) => {
+  document.body.classList.toggle('via-pad', d === 'pad');
+  document.body.classList.toggle('via-keys', d === 'keys');
+  if (d === 'pad' && mode !== 'playing') {
+    // give the highlight somewhere to start
+    const top = padTop();
+    if (top && !top.contains(document.activeElement)) top.querySelector<HTMLElement>('.go.big:not([disabled]), button:not([disabled])')?.focus({ preventScroll: true });
+  }
+};
+window.addEventListener('pointerdown', () => input.touched(), true);
+
+// ------------------------------------------------ Settings › Controls: keys and buttons (remap.ts)
+
+const remap = createRemap(input, {
+  keys: () => prefs.keys,
+  pad: () => prefs.padKeys,
+  setKeys: (k) => {
+    prefs.keys = k;
+    prefsChanged();
+  },
+  setPad: (p) => {
+    prefs.padKeys = p;
+    prefsChanged();
+  },
+  rumble: () => prefs.rumble,
+  setRumble: (on) => {
+    prefs.rumble = on;
+    prefsChanged();
+  },
+});
 
 document.addEventListener('contextmenu', (e) => e.preventDefault());
 document.addEventListener('gesturestart', (e) => e.preventDefault());

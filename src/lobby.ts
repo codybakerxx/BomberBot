@@ -623,6 +623,10 @@ export function createLobby(host: LobbyHost): {
     const toMatch = page === 'players' && !wide();
     go.textContent = toMatch ? 'Match ›' : 'Start';
     go.parentElement!.classList.toggle('solo', toMatch);
+    // its hint: RB (or E) turns to the Match page; ≡ starts
+    go.dataset.pad = toMatch ? 'RB' : '≡';
+    if (toMatch) go.dataset.key = 'E';
+    else delete go.dataset.key;
     go.setAttribute('aria-label', toMatch ? 'Go on to the Match page' : 'Start the match');
     const why = problem(s());
     go.disabled = !toMatch && !!why;
