@@ -12,8 +12,8 @@
  */
 import { createWorld, step, ticksLeft, World, PlayerInput, Dir, TICK_HZ, DEATH_TICKS } from './sim';
 import { Bot, BotLevel, BOT_LEVELS, LEVELS, createBot, botInput } from './bot';
-import { COLORS, NOBODY, colorById, drawHead, drawStatic, drawDynamic, drawGhosts, warmSprites } from './render';
-import { Input } from './input';
+import { COLORS, NOBODY, botName, colorById, drawHead, drawStatic, drawDynamic, drawGhosts, warmSprites } from './render';
+import { Input, typing } from './input';
 import { drawTitle, closeTitle } from './title';
 import { initAudio, preview, setSound, sfx } from './audio';
 import { createLobby, LobbyHost } from './lobby';
@@ -76,6 +76,13 @@ try {
     setup = defaultSetup(myColor);
     for (const c of setup.cpus) c.level = old;
   }
+} catch {
+  /* storage is optional */
+}
+/** The name you have typed in the lobby, or '' for none. Remembered on this device under the key "playerName". */
+let myName = '';
+try {
+  myName = (localStorage.getItem('playerName') ?? '').slice(0, 12);
 } catch {
   /* storage is optional */
 }
@@ -443,7 +450,7 @@ function drawScore(): void {
     if (i === leader) drawHead(sctx, cx, cy, r, col, { crownOnly: true });
     sctx.fillStyle = i === winner ? col.glow : p.alive ? '#eef1fb' : '#8a90a3';
     sctx.fillText(label, cx + r + gap, cy + 1);
-    said.push(`${i === 0 ? 'You' : col.name} ${wins[i]}${i === leader ? ' (in the lead)' : ''}`);
+    said.push(`${i === 0 ? 'You' : botName(col)} ${wins[i]}${i === leader ? ' (in the lead)' : ''}`);
   });
   score.setAttribute('aria-label', `Rounds won: ${said.join(', ')}`);
 }
@@ -515,9 +522,9 @@ function finish(title: string, text: string): void {
 function scoreLine(): string {
   return world.players.map((_, i) => wins[i]).join('–');
 }
-/** A player's name as the menus say it: You, or the colour of a CPU player. */
+/** A player's name as the results say it: You, or a CPU player's robot name (Volt, Fizz...). */
 function nameOf(i: number): string {
-  return i === 0 ? 'You' : colorById(world.players[i].colorId).name;
+  return i === 0 ? 'You' : botName(colorById(world.players[i].colorId));
 }
 
 /** One step of the game rules: read the input, advance the world, play its sounds, check for the end. */
@@ -555,7 +562,7 @@ function tick(): void {
 
   const who = world.players[blastedBy];
   const crushed = blastedBy === CRUSHED;
-  const how = crushed ? 'A falling block landed on you.' : !who || who === me ? 'Caught in your own blast.' : `Caught in ${colorById(who.colorId).name}'s blast.`;
+  const how = crushed ? 'A falling block landed on you.' : !who || who === me ? 'Caught in your own blast.' : `Caught in ${botName(colorById(who.colorId))}'s blast.`;
   if (world.over && !counted) {
     // The round is decided: one more win on the scoreboard (none for a draw), and the result.
     counted = true;
@@ -932,6 +939,17 @@ const lobbyHost: LobbyHost = {
   get myColor() {
     return myColor;
   },
+  get myName() {
+    return myName;
+  },
+  set myName(v: string) {
+    myName = v;
+    try {
+      localStorage.setItem('playerName', v);
+    } catch {
+      /* storage is optional */
+    }
+  },
   set myColor(v: string) {
     myColor = v;
   },
@@ -1047,9 +1065,9 @@ function fillPause(): void {
     if (i === leader) drawHead(cv.getContext('2d')!, cv.width / 2, cv.height / 2, cv.width * 0.42, col, { crownOnly: true });
     const who = document.createElement('div');
     const name = document.createElement('b');
-    name.textContent = i === 0 ? 'You' : `CPU ${i}`;
+    name.textContent = i === 0 ? myName || 'You' : botName(col);
     const sub = document.createElement('small');
-    sub.textContent = i === 0 ? col.name : `${col.name} · ${LEVELS[setup.cpus[i - 1]?.level ?? 'normal'].label}`;
+    sub.textContent = i === 0 ? `P1 · you` : `P${i + 1} · CPU · ${LEVELS[setup.cpus[i - 1]?.level ?? 'normal'].label}`;
     who.append(name, sub);
     const st = document.createElement('span');
     const won = world.over && world.over.winner === i;
@@ -1300,7 +1318,7 @@ window.addEventListener('keydown', (e) => {
     else if (mode === 'teach') closeTeach();
     return;
   }
-  if ((e.code === 'KeyQ' || e.code === 'KeyE') && !confirmOpen() && !e.repeat) {
+  if ((e.code === 'KeyQ' || e.code === 'KeyE') && !confirmOpen() && !e.repeat && !typing(e)) {
     const d = e.code === 'KeyQ' ? -1 : 1;
     if (mode === 'lobby' && !lobby.sheetOpen()) lobby.turn(d);
     else if (mode === 'settings') stepSettings(d);

@@ -17,7 +17,7 @@
  * main.ts owns the match itself; it hands this file a `LobbyHost` to read and change what it needs.
  */
 import { BOT_LEVELS, LEVELS } from './bot';
-import { COLORS, colorById, drawRobot, drawStatic, drawDynamic, ROBOT } from './render';
+import { COLORS, botName, colorById, drawRobot, drawStatic, drawDynamic, ROBOT } from './render';
 import { createWorld, MAX_BOMBS, MAX_FIRE, MAX_SPEED_ITEMS, START_FIRE } from './sim';
 import {
   CpuSlot,
@@ -46,6 +46,8 @@ import { Opt, choice, confirmFirst, heading, mount, note, slider, swipeable, tog
 export interface LobbyHost {
   setup: MatchSetup;
   myColor: string;
+  /** the name you typed, or '' (shown on your card in place of "You"); saved when set */
+  myName: string;
   /** save the setup and your colour */
   save(): void;
   /** the screen's pixel density, as every canvas is drawn at */
@@ -158,6 +160,20 @@ export function createLobby(host: LobbyHost): {
     dots.append(cell);
   }
   $('colOk').addEventListener('click', readyUp);
+  // your own name: shown on your card. Online, every real player will type theirs here.
+  const nameBox = $<HTMLInputElement>('myName');
+  nameBox.addEventListener('input', () => {
+    host.myName = nameBox.value.replace(/\s+/g, ' ').trimStart().slice(0, 12);
+    buildSlots();
+  });
+  nameBox.addEventListener('change', () => {
+    host.myName = host.myName.trim();
+    nameBox.value = host.myName;
+    buildSlots();
+  });
+  nameBox.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') nameBox.blur();
+  });
 
   const allCpus: Opt[] = [
     choice({
@@ -203,10 +219,11 @@ export function createLobby(host: LobbyHost): {
     const me = document.createElement('div');
     me.className = 'slot me';
     me.setAttribute('role', 'group');
-    me.setAttribute('aria-label', `You, P1, ${colorById(host.myColor).name}, ${ready ? 'ready' : 'not ready'}`);
+    me.setAttribute('aria-label', `${host.myName || 'You'}, P1, playing as ${botName(colorById(host.myColor))}, ${ready ? 'ready' : 'not ready'}`);
     const mc = document.createElement('canvas');
     const mt = document.createElement('div');
-    mt.innerHTML = `<b>You</b><small>P1</small><span class="rdy${ready ? ' on' : ''}">${ready ? '✓ Ready' : 'Not ready'}</span>`;
+    mt.innerHTML = `<b></b><small>P1 · you</small><span class="rdy${ready ? ' on' : ''}">${ready ? '✓ Ready' : 'Not ready'}</span>`;
+    mt.querySelector('b')!.textContent = host.myName || 'You'; // typed by the player: set as text, never as markup
     me.append(mc, mt);
     box.append(me);
     const cvs: [HTMLCanvasElement, string][] = [[mc, host.myColor]];
@@ -215,10 +232,10 @@ export function createLobby(host: LobbyHost): {
       b.type = 'button';
       b.className = 'slot';
       b.id = `slot-${i + 1}`;
-      b.setAttribute('aria-label', `CPU ${i + 1}, P${i + 2}, ${colorById(c.colorId).name}, ${LEVELS[c.level].label}, ready. Tap to change.`);
+      b.setAttribute('aria-label', `${botName(colorById(c.colorId))}, CPU player, P${i + 2}, ${LEVELS[c.level].label}, ready. Tap to change.`);
       const cv = document.createElement('canvas');
       const t = document.createElement('div');
-      t.innerHTML = `<b>CPU ${i + 1}</b><small>P${i + 2} · ${LEVELS[c.level].label}</small><span class="rdy on">✓ Ready</span>`;
+      t.innerHTML = `<b>${botName(colorById(c.colorId))}</b><small>P${i + 2} · ${LEVELS[c.level].label}</small><span class="rdy on">✓ Ready</span>`;
       b.append(cv, t);
       b.addEventListener('click', () => openSheet(i));
       // the bin: removes this CPU player at once (Undo brings it back)
@@ -229,7 +246,7 @@ export function createLobby(host: LobbyHost): {
       bin.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V4.5h6V7M6.5 7l1 13h9l1-13M10 11v5.5M14 11v5.5"/></svg>';
       const only = s().cpus.length <= 1;
       bin.disabled = only;
-      bin.setAttribute('aria-label', only ? 'A match needs at least one CPU player' : `Remove CPU ${i + 1}`);
+      bin.setAttribute('aria-label', only ? 'A match needs at least one CPU player' : `Remove ${botName(colorById(c.colorId))}`);
       bin.addEventListener('click', () => removeCpu(i));
       const wrap = document.createElement('div');
       wrap.className = 'slot-wrap';
@@ -255,8 +272,9 @@ export function createLobby(host: LobbyHost): {
   const sheet = $('cpuSheet');
   const cpuOpts: Opt[] = [
     choice({
-      label: 'Colour',
-      values: () => freeFor(editing).map((id) => colorById(id).name),
+      label: 'Robot',
+      hint: () => (s().cpus[editing] ? `${colorById(s().cpus[editing].colorId).name}. Each colour is a robot of its own.` : ''),
+      values: () => freeFor(editing).map((id) => botName(colorById(id))),
       get: () => freeFor(editing).indexOf(s().cpus[editing]?.colorId ?? ''),
       set: (i) => {
         s().cpus[editing].colorId = freeFor(editing)[i];
@@ -312,7 +330,7 @@ export function createLobby(host: LobbyHost): {
     if (s().cpus.length <= 1 || !s().cpus[i]) return;
     const [cpu] = s().cpus.splice(i, 1);
     removed = { cpu, at: i };
-    $('undoText').textContent = `CPU ${i + 1} (${colorById(cpu.colorId).name}) removed.`;
+    $('undoText').textContent = `${botName(colorById(cpu.colorId))} removed.`;
     $('undoBar').hidden = false;
     clearTimeout(undoTimer);
     undoTimer = window.setTimeout(hideUndo, 6000);
@@ -335,8 +353,8 @@ export function createLobby(host: LobbyHost): {
   function refreshSheet(): void {
     if (editing < 0 || !s().cpus[editing]) return;
     const c = s().cpus[editing];
-    $('cpuTitle').textContent = `CPU ${editing + 1}`;
-    $('cpuDesc').textContent = `${colorById(c.colorId).name} · ${LEVELS[c.level].label}. Changes are saved as you make them.`;
+    $('cpuTitle').textContent = botName(colorById(c.colorId));
+    $('cpuDesc').textContent = `CPU player · P${editing + 2} · ${LEVELS[c.level].label}. Changes are saved as you make them.`;
     drawBotOn($<HTMLCanvasElement>('cpuBot'), c.colorId);
     const only = s().cpus.length <= 1;
     ($('cpuRemove') as HTMLButtonElement).disabled = only;
@@ -528,7 +546,7 @@ export function createLobby(host: LobbyHost): {
       return;
     }
     // not ready yet: ask rather than guess
-    const want = colorById(pick).name;
+    const want = botName(colorById(pick));
     confirmFirst(
       `Ready as ${want}?`,
       `You have not pressed Ready on the Players page. Everyone must be ready to start.`,
@@ -548,18 +566,18 @@ export function createLobby(host: LobbyHost): {
     // your robot, in the colour being looked at, and the dots with who wears each colour under them
     drawBotOn($<HTMLCanvasElement>('youBot'), pick, 0.95);
     $('youBot').setAttribute('aria-label', `Your robot, in ${shown.name}${mine ? '' : ' (not yours until you press OK)'}`);
-    $('youName').textContent = shown.name;
+    $('youName').textContent = botName(shown);
     $('youState').textContent =
       mine && ready
         ? 'P1 · ready'
         : mine
           ? 'P1 · your colour. Press Ready when you are happy with it.'
           : wearer >= 0
-            ? `P${wearer + 2} wears it now. Ready takes it, and CPU ${wearer + 1} gets ${colorById(host.myColor).name}.`
+            ? `${botName(shown)} is P${wearer + 2}, a CPU player, now. Ready takes it, and that CPU player becomes ${botName(colorById(host.myColor))}.`
             : 'Not yours yet: Ready takes it.';
     const ok = $<HTMLButtonElement>('colOk');
     ok.disabled = mine && ready;
-    ok.textContent = mine && ready ? '✓ Ready' : mine ? 'Ready' : `Ready as ${shown.name}`;
+    ok.textContent = mine && ready ? '✓ Ready' : mine ? 'Ready' : `Ready as ${botName(shown)}`;
     for (const c of COLORS) {
       const b = $<HTMLButtonElement>(`dot-${c.id}`);
       const cpu = s().cpus.findIndex((x) => x.colorId === c.id);
@@ -568,7 +586,7 @@ export function createLobby(host: LobbyHost): {
       tag.textContent = isMe ? 'P1' : cpu >= 0 ? `P${cpu + 2}` : '';
       tag.classList.toggle('me', isMe);
       b.setAttribute('aria-pressed', String(c.id === pick));
-      b.setAttribute('aria-label', `${c.name}${isMe ? ', yours (P1)' : cpu >= 0 ? `, worn by CPU ${cpu + 1} (P${cpu + 2})` : ''}`);
+      b.setAttribute('aria-label', `${botName(c)}, ${c.name}${isMe ? ', yours (P1)' : cpu >= 0 ? `, worn by CPU ${cpu + 1} (P${cpu + 2})` : ''}`);
     }
     if (popMine) {
       popMine = false;
@@ -616,6 +634,7 @@ export function createLobby(host: LobbyHost): {
         p = p ?? 'players';
       }
       $('lobby').hidden = false;
+      ($('myName') as HTMLInputElement).value = host.myName;
       setPage(p ?? page);
       $('lobbyStart').focus({ preventScroll: true });
     },

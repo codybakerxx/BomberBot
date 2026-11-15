@@ -14,8 +14,13 @@ import { World, FLOOR, HARD, SOFT, FLAME_TICKS, DEATH_TICKS, GHOST_TICKS, SHIELD
 export interface BotColor {
   /** saved with the player's choice and sent to the rules as Player.colorId */
   id: string;
-  /** shown under the bot in the menu */
+  /** the colour's name */
   name: string;
+  /**
+   * The robot's own name: each colour is a robot character (Claude's names, asked for by the owner). Shown
+   * in the lobby and the menus in place of the colour's name. A real player can use their own name instead.
+   */
+  bot?: string;
   /** the armour colour, with a lighter and a darker shade of it for shading */
   body: string;
   light: string;
@@ -26,18 +31,23 @@ export interface BotColor {
 
 /** Only these parts change between bots. The black parts are shared by all nine. */
 export const COLORS: BotColor[] = [
-  { id: 'gold', name: 'Gold', body: '#d6b068', light: '#f3dba0', dark: '#9c7a3a', glow: '#ffc56a' },
-  { id: 'black', name: 'Black', body: '#31333c', light: '#555966', dark: '#1b1c22', glow: '#ffffff' },
-  { id: 'pink', name: 'Pink', body: '#ff4fa6', light: '#ff9ccd', dark: '#c0206f', glow: '#ff5fd2' },
-  { id: 'blue', name: 'Blue', body: '#3fb4f0', light: '#93dcff', dark: '#1b7fb8', glow: '#5fd6ff' },
-  { id: 'red', name: 'Red', body: '#dc2130', light: '#ff6a70', dark: '#96101c', glow: '#ff4040' },
-  { id: 'orange', name: 'Orange', body: '#f27c1c', light: '#ffb46a', dark: '#b3520a', glow: '#ff9a3c' },
-  { id: 'white', name: 'White', body: '#eceef4', light: '#ffffff', dark: '#b4b8c6', glow: '#ffffff' },
-  { id: 'green', name: 'Green', body: '#34d06a', light: '#8cf5ac', dark: '#16903f', glow: '#5cff8e' },
-  { id: 'purple', name: 'Purple', body: '#8d5cf6', light: '#c2a6ff', dark: '#5a2fc0', glow: '#b48cff' },
+  { id: 'gold', name: 'Gold', bot: 'Auric', body: '#d6b068', light: '#f3dba0', dark: '#9c7a3a', glow: '#ffc56a' },
+  { id: 'black', name: 'Black', bot: 'Onyx', body: '#31333c', light: '#555966', dark: '#1b1c22', glow: '#ffffff' },
+  { id: 'pink', name: 'Pink', bot: 'Fizz', body: '#ff4fa6', light: '#ff9ccd', dark: '#c0206f', glow: '#ff5fd2' },
+  { id: 'blue', name: 'Blue', bot: 'Volt', body: '#3fb4f0', light: '#93dcff', dark: '#1b7fb8', glow: '#5fd6ff' },
+  { id: 'red', name: 'Red', bot: 'Blaze', body: '#dc2130', light: '#ff6a70', dark: '#96101c', glow: '#ff4040' },
+  { id: 'orange', name: 'Orange', bot: 'Tango', body: '#f27c1c', light: '#ffb46a', dark: '#b3520a', glow: '#ff9a3c' },
+  { id: 'white', name: 'White', bot: 'Frost', body: '#eceef4', light: '#ffffff', dark: '#b4b8c6', glow: '#ffffff' },
+  { id: 'green', name: 'Green', bot: 'Gizmo', body: '#34d06a', light: '#8cf5ac', dark: '#16903f', glow: '#5cff8e' },
+  { id: 'purple', name: 'Purple', bot: 'Vortex', body: '#8d5cf6', light: '#c2a6ff', dark: '#5a2fc0', glow: '#b48cff' },
 ];
 
 /** The colour with this id, or gold if there is no such colour. */
+/** A robot's name: its own (Auric, Volt...) or, for a colour without one, the colour's name. */
+export function botName(c: BotColor): string {
+  return c.bot ?? c.name;
+}
+
 export function colorById(id: string): BotColor {
   return COLORS.find((c) => c.id === id) ?? COLORS[0];
 }

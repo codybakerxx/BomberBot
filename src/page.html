@@ -20,7 +20,7 @@
     touch     on-screen controls: dzone (swipe pad, with the dpad cross and the padTag caption inside it), btnA, btnB
     lobby     setting up a match (lobby.ts): the bar (lobbyBack, lobbyMode, lobbySound, lobbySettings), the summary,
               two pages (pgPlayers, pgMatch): lobbyPlayers (your robot youBot with colPrev, colNext and the colour
-              dots youDots; the player cards in slots; allCpus) and lobbyMatch (the arena picture arenaPic with
+              dots youDots; your name myName; the player cards in slots; allCpus) and lobbyMatch (the arena picture arenaPic with
               arenaPrev, arenaNext, arenaDots, and a Start under it, arenaStart; the rules; rulesReset); then lobbyPrev, lobbyStart, lobbyNext
     cpuSheet  a CPU player's panel, over the lobby: colour and level (cpuRows), cpuRemove, cpuDone
     settings  your own settings, three pages: setControls (Steering thumb: handLeft, handRight; Swipe
@@ -452,6 +452,14 @@
   .ptag.me { color: #14100a; background: var(--accent); }
   .ptag.pop { animation: ptag-pop 420ms cubic-bezier(.2, 1.6, .4, 1); }
   @keyframes ptag-pop { 0% { transform: scale(0.3); } 60% { transform: scale(1.45); } 100% { transform: scale(1); } }
+  .name-field { width: 100%; display: flex; align-items: center; gap: 10px; padding: 2px 2px 4px; }
+  .name-field span { flex: 0 0 auto; font: 700 12px/1 var(--font-display); letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-dim); }
+  .name-field input {
+    flex: 1 1 auto; min-width: 0; height: 44px; padding: 0 12px; font: 700 17px/1 var(--font-display); letter-spacing: 0.04em; color: var(--ink);
+    background: #151a28; border: 1px solid var(--line); border-radius: 10px; -webkit-user-select: text; user-select: text; touch-action: manipulation;
+  }
+  .name-field input::placeholder { color: #5d6788; font-weight: 500; }
+  .name-field input:focus { outline: none; border-color: var(--accent); }
   .go.arena-start { flex: 0 0 auto; align-self: stretch; padding: 15px 12px; font-size: 20px; letter-spacing: 0.16em; }
   .go.ok { flex: 0 0 auto; align-self: stretch; padding: 13px 12px; font-size: 16px; }
   .go.ok:disabled { opacity: 1; color: var(--accent); background: transparent; border: 1.5px solid rgba(255, 197, 106, 0.45); }
@@ -704,6 +712,9 @@
     <div class="cols">
       <section id="lobbyPlayers" class="page" role="tabpanel" aria-labelledby="pgPlayers">
         <div class="panel you">
+          <label class="name-field" for="myName"><span>Your name</span>
+            <input id="myName" type="text" maxlength="12" autocomplete="off" autocapitalize="words" spellcheck="false" enterkeyhint="done" placeholder="Type your name">
+          </label>
           <div class="you-row">
             <button class="round-btn" id="colPrev" type="button" aria-label="Previous colour"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></button>
             <canvas id="youBot" role="img" aria-label="Your robot"></canvas>
@@ -713,7 +724,7 @@
           <p class="hint center" id="youState" aria-live="polite"></p>
           <div class="dots" id="youDots" role="group" aria-label="Colours: under each, the player who wears it"></div>
           <button class="go ok" id="colOk" type="button">Ready</button>
-          <p class="hint center">Pick a colour with the arrows, a dot or a swipe across your robot, then Ready (or double-tap the dot). If a CPU wears it, the CPU takes your old colour. Picking another colour takes Ready away until you press it again. Online, each player will do the same.</p>
+          <p class="hint center">Each colour is a robot with a name of its own. Pick one with the arrows, a dot or a swipe across your robot, then Ready (or double-tap the dot). If a CPU wears it, the CPU takes your old colour. Picking another colour takes Ready away until you press it again. Online, each player will do the same.</p>
         </div>
         <div class="sec-head"><span>Players</span><span id="playerCount"></span></div>
         <div class="slots" id="slots"></div>

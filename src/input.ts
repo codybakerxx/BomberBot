@@ -17,6 +17,12 @@ const KEY_DIR: Record<string, Dir> = {
 const KEY_A = new Set(['Space', 'KeyX', 'KeyJ', 'Enter']);
 const KEY_B = new Set(['ShiftLeft', 'ShiftRight', 'KeyZ', 'KeyK']);
 
+/** True when a key press is going into a text box (the lobby's name field), so the game leaves it alone. */
+export function typing(e: KeyboardEvent): boolean {
+  const t = e.target as HTMLElement | null;
+  return !!t && (t.tagName === 'INPUT' && (t as HTMLInputElement).type === 'text' || t.tagName === 'TEXTAREA' || t.isContentEditable);
+}
+
 export class Input {
   private keyDirs: Dir[] = []; // most recent last
   private keyA = false;
@@ -52,9 +58,10 @@ export class Input {
     this.latchA = this.latchB = false;
   }
 
-  /** Arrow keys or WASD to move; Space, X, J or Enter for A; Shift, Z or K for B. */
+  /** Arrow keys or WASD to move; Space, X, J or Enter for A; Shift, Z or K for B. Not while typing in a text box. */
   attachKeyboard(win: Window): void {
     win.addEventListener('keydown', (e) => {
+      if (typing(e)) return; // typing a name: the keys are letters, not moves
       const d = KEY_DIR[e.code];
       if (d) {
         if (!this.keyDirs.includes(d)) {
