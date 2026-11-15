@@ -19,9 +19,9 @@
     menuBtn   opens the menu during a match (pause)
     touch     on-screen controls: dzone (swipe pad, with the dpad cross and the padTag caption inside it), btnA, btnB
     lobby     setting up a match (lobby.ts): the bar (lobbyBack, lobbyMode, lobbySound, lobbySettings), the summary,
-              two pages (pgPlayers, pgMatch): lobbyPlayers (your robot youBot with colPrev, colNext and the colour
+              lobbyPrev (‹ beside the page names) and two pages (pgPlayers, pgMatch): lobbyPlayers (your robot youBot with colPrev, colNext and the colour
               dots youDots; the name over them, youName, with editName, the pencil that swaps it for a box (myName) to type your own; the player cards in slots; allCpus) and lobbyMatch (the arena picture arenaPic with
-              arenaPrev, arenaNext, arenaDots, and a Start under it, arenaStart; the rules; rulesReset); then lobbyPrev, lobbyStart, lobbyNext
+              arenaPrev, arenaNext, arenaDots, and a Start under it, arenaStart; the rules; rulesReset); then lobbyStart
     cpuSheet  a CPU player's panel, over the lobby: colour and level (cpuRows), cpuRemove, cpuDone
     settings  your own settings, four pages: setControls (Steering thumb: handLeft, handRight; Swipe
               direction: dirStandard, dirMine, matchState, matchStart; padOpts; keys: remapKeys, resetKeys),
@@ -411,6 +411,11 @@
     font: 700 15px/1 var(--font-display); letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-dim);
   }
   .pages button[aria-selected="true"] { color: var(--accent); border-bottom-color: var(--accent); }
+  .pages-row { flex: 0 0 auto; display: flex; align-items: stretch; margin: 0 14px; border-bottom: 1px solid var(--line); }
+  .pages-row .pages { flex: 1 1 auto; margin: 0; border-bottom: 0; }
+  .tab-back { position: relative; flex: 0 0 38px; display: grid; place-items: center; padding: 0; margin-bottom: -1px; cursor: pointer; color: var(--ink); background: transparent; border: 0; border-bottom: 3px solid transparent; }
+  .tab-back svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 2.6; stroke-linecap: round; stroke-linejoin: round; }
+  .tab-back[hidden] { display: grid; visibility: hidden; }
   .scroll { flex: 1 1 auto; min-height: 0; overflow-y: auto; touch-action: pan-y; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
   .cols { display: grid; grid-template-columns: minmax(0, 1fr); gap: 18px; max-width: 560px; margin: 0 auto; padding: 14px 14px 18px; }
   .page { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
@@ -419,29 +424,27 @@
   @media (min-width: 820px) and (min-height: 480px) {
     #lobby .cols { grid-template-columns: repeat(2, minmax(0, 1fr)); max-width: 1040px; }
     #lobby .page[hidden] { display: flex; }
-    #lobby .pages, #lobby .side-btn { visibility: hidden; }
-    #lobby .pages { height: 0; border: 0; overflow: hidden; }
+    #lobby .pages-row { height: 0; border: 0; overflow: hidden; visibility: hidden; }
   }
-  .foot { flex: 0 0 auto; display: grid; grid-template-columns: 118px minmax(0, 1fr) 118px; align-items: center; gap: 8px; padding: 8px 10px 14px; max-width: 640px; width: 100%; margin: 0 auto; }
+  .foot { flex: 0 0 auto; display: grid; grid-template-columns: 108px minmax(0, 1fr) 108px; align-items: center; gap: 8px; padding: 6px 12px 12px; max-width: 560px; width: 100%; margin: 0 auto; }
+  .foot.one { grid-template-columns: minmax(0, 1fr); max-width: 420px; }
   .foot-note { flex: 0 0 auto; margin: 0 14px; text-align: center; font: 500 13px/1.3 var(--font-body); color: #ff9a9a; min-height: 0; }
   .foot-note:empty { display: none; }
   .foot-note.info { color: var(--accent); }
   .rdy { display: inline-block; white-space: nowrap; margin-top: 5px; padding: 2px 6px; font: 700 11px/1.2 var(--font-display); letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-dim); border: 1px solid var(--line); border-radius: 6px; }
   .rdy.on { color: #5cff8e; border-color: rgba(92, 255, 142, 0.45); }
-  .go.big { padding: 18px 12px; font-size: 22px; letter-spacing: 0.16em; border-radius: 16px; }
+  /* the bottom bar's main button: slim (the owner found the bigger one too much) */
+  .go.big { padding: 12px 12px; font-size: 17px; letter-spacing: 0.14em; border-radius: 12px; }
   .go.danger { color: #ff9a9a; background: transparent; border: 1.5px solid #5a2a34; }
   .go:disabled { opacity: 0.4; cursor: default; }
   .side-btn {
-    height: 52px; display: flex; align-items: center; justify-content: center; gap: 2px; padding: 0 6px; cursor: pointer;
+    height: 42px; display: flex; align-items: center; justify-content: center; gap: 2px; padding: 0 6px; cursor: pointer;
     font: 700 13px/1 var(--font-display); letter-spacing: 0.02em; text-transform: uppercase;
     color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
   }
   .side-btn svg { width: 16px; height: 16px; flex: 0 0 auto; }
   .side-btn span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .side-btn[hidden] { display: flex; visibility: hidden; }
-  /* the lobby's Players page: no page arrows, and its one way on (Match ›) takes the whole bar */
-  .foot.solo .side-btn { display: none; }
-  .foot.solo .go.big { grid-column: 1 / -1; }
   .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 12px; display: flex; flex-direction: column; align-items: center; gap: 8px; }
   .you-row { width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 6px; }
   #youBot { width: 150px; height: 150px; }
@@ -613,9 +616,9 @@
     .icon-btn { width: 40px; height: 40px; }
     .pages button { padding: 8px 0 6px; font-size: 13px; }
     .cols { padding-top: 10px; }
-    .foot { padding: 6px 10px 8px; }
-    .go.big { padding: 12px 10px; font-size: 18px; }
-    .side-btn { height: 44px; }
+    .foot { padding: 4px 10px 6px; }
+    .go.big { padding: 9px 10px; font-size: 15px; }
+    .side-btn { height: 36px; }
     #youBot { width: 110px; height: 110px; }
     .standings { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .pause-card { width: min(100%, 620px); gap: 8px; padding: 12px 14px; }
@@ -729,7 +732,7 @@
   <button id="btnA" class="tbtn" type="button" aria-label="A button, drop bomb">A</button>
 </div>
 
-<!-- The lobby: two pages, Players and Match, with Start always in the middle of the bottom bar.
+<!-- The lobby: two pages, Players and Match, with one slim button in the bottom bar (Match › or Start).
      main.ts and lobby.ts fill it in. On a wide screen both pages show side by side. -->
 <div id="lobby" class="screen" hidden>
   <header class="bar">
@@ -744,10 +747,14 @@
     </div>
   </header>
   <p class="summary" id="lobbySummary" aria-live="polite"></p>
-  <nav class="pages" role="tablist" aria-label="Lobby pages">
-    <button type="button" role="tab" id="pgPlayers" aria-controls="lobbyPlayers">Players</button>
-    <button type="button" role="tab" id="pgMatch" aria-controls="lobbyMatch">Match</button>
-  </nav>
+  <!-- the way back to Players sits at the top left, beside the page names (the owner's ask) -->
+  <div class="pages-row">
+    <button id="lobbyPrev" class="tab-back" type="button" aria-label="Back to Players" data-pad="LB" data-key="Q"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></button>
+    <nav class="pages" role="tablist" aria-label="Lobby pages">
+      <button type="button" role="tab" id="pgPlayers" aria-controls="lobbyPlayers">Players</button>
+      <button type="button" role="tab" id="pgMatch" aria-controls="lobbyMatch">Match</button>
+    </nav>
+  </div>
   <div class="scroll">
     <div class="cols">
       <section id="lobbyPlayers" class="page" role="tabpanel" aria-labelledby="pgPlayers">
@@ -791,10 +798,8 @@
   </div>
   <div class="undo" id="undoBar" role="status" hidden><span id="undoText"></span><button class="mini" id="undoBtn" type="button">Undo</button></div>
   <p class="foot-note" id="startNote" role="status"></p>
-  <footer class="foot">
-    <button id="lobbyPrev" class="side-btn" type="button" data-pad="LB" data-key="Q"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg><span>Players</span></button>
+  <footer class="foot one">
     <button id="lobbyStart" class="go big" type="button">Start</button>
-    <button id="lobbyNext" class="side-btn" type="button" data-pad="RB" data-key="E"><span>Match</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg></button>
   </footer>
 </div>
 

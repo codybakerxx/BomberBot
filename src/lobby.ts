@@ -204,7 +204,11 @@ export function createLobby(host: LobbyHost): {
     cell.append(b, tag);
     dots.append(cell);
   }
-  $('colOk').addEventListener('click', readyUp);
+  // Ready, and once ready, Next: on to the Match page (the owner's ask)
+  $('colOk').addEventListener('click', () => {
+    if (ready && pick === host.myColor && !wide()) setPage('match');
+    else readyUp();
+  });
   // Your own name: the pencil beside the name over the colours swaps it for a box to type in (the owner's
   // design). Your name then shows there and on your card in place of the robot's. Emptied, it goes back to
   // the robot's name. Online, every real player will type theirs the same way.
@@ -605,9 +609,8 @@ export function createLobby(host: LobbyHost): {
     $('pgMatch').setAttribute('aria-selected', String(p === 'match'));
     $('lobbyPlayers').hidden = p !== 'players';
     $('lobbyMatch').hidden = p !== 'match';
-    // the Players page's only way on is its main button (Match ›), so it has no › beside it
+    // ‹ back to Players, at the top left beside the page names (the owner's ask); none on the Players page
     $('lobbyPrev').hidden = p === 'players';
-    $('lobbyNext').hidden = true;
     const sc = document.querySelector('#lobby .scroll');
     if (sc) sc.scrollTop = 0;
     refresh();
@@ -618,7 +621,6 @@ export function createLobby(host: LobbyHost): {
   $('pgPlayers').addEventListener('click', () => setPage('players'));
   $('pgMatch').addEventListener('click', () => setPage('match'));
   $('lobbyPrev').addEventListener('click', () => setPage('players'));
-  $('lobbyNext').addEventListener('click', () => setPage('match'));
   $('lobbyBack').addEventListener('click', () => host.back());
   $('lobbySound').addEventListener('click', () => host.settings('sound'));
   $('lobbySettings').addEventListener('click', () => host.settings());
@@ -736,8 +738,12 @@ export function createLobby(host: LobbyHost): {
     // no explanations on this page (the owner's call): only a short note when Ready would swap with a CPU player
     $('youState').textContent = !mine && wearer >= 0 ? `Swaps with P${cpuP(wearer)}` : '';
     const ok = $<HTMLButtonElement>('colOk');
-    ok.disabled = mine && ready;
-    ok.textContent = mine && ready ? '✓ Ready' : 'Ready'; // just Ready (the owner's wording): the robot's name is right above it
+    // just Ready (the owner's wording): the robot's name is right above it. Once ready it becomes Next, on to
+    // the Match page; a wide screen already shows that page, so there it just says it is done.
+    const next = mine && ready && !wide();
+    ok.disabled = mine && ready && !next;
+    ok.textContent = next ? 'Next ›' : mine && ready ? '✓ Ready' : 'Ready';
+    ok.setAttribute('aria-label', next ? 'Ready. Next: the Match page' : ok.textContent);
     for (const c of COLORS) {
       const b = $<HTMLButtonElement>(`dot-${c.id}`);
       const cpu = s().cpus.findIndex((x) => x.colorId === c.id);
@@ -781,7 +787,6 @@ export function createLobby(host: LobbyHost): {
     const go = $<HTMLButtonElement>('lobbyStart');
     const toMatch = page === 'players' && !wide();
     go.textContent = toMatch ? 'Match ›' : 'Start';
-    go.parentElement!.classList.toggle('solo', toMatch);
     // its hint: RB (or E) turns to the Match page; ≡ starts
     go.dataset.pad = toMatch ? 'RB' : '≡';
     if (toMatch) go.dataset.key = 'E';
