@@ -206,7 +206,7 @@ export function createLobby(host: LobbyHost): {
     me.setAttribute('aria-label', `You, P1, ${colorById(host.myColor).name}, ${ready ? 'ready' : 'not ready'}`);
     const mc = document.createElement('canvas');
     const mt = document.createElement('div');
-    mt.innerHTML = `<b>You</b><small>P1 · ${colorById(host.myColor).name}</small><span class="rdy${ready ? ' on' : ''}">${ready ? '✓ Ready' : 'Not ready'}</span>`;
+    mt.innerHTML = `<b>You</b><small>P1</small><span class="rdy${ready ? ' on' : ''}">${ready ? '✓ Ready' : 'Not ready'}</span>`;
     me.append(mc, mt);
     box.append(me);
     const cvs: [HTMLCanvasElement, string][] = [[mc, host.myColor]];
@@ -218,7 +218,7 @@ export function createLobby(host: LobbyHost): {
       b.setAttribute('aria-label', `CPU ${i + 1}, P${i + 2}, ${colorById(c.colorId).name}, ${LEVELS[c.level].label}, ready. Tap to change.`);
       const cv = document.createElement('canvas');
       const t = document.createElement('div');
-      t.innerHTML = `<b>CPU ${i + 1}</b><small>P${i + 2} · ${LEVELS[c.level].label} · ${colorById(c.colorId).name}</small><span class="rdy on">✓ Ready</span>`;
+      t.innerHTML = `<b>CPU ${i + 1}</b><small>P${i + 2} · ${LEVELS[c.level].label}</small><span class="rdy on">✓ Ready</span>`;
       b.append(cv, t);
       b.addEventListener('click', () => openSheet(i));
       // the bin: removes this CPU player at once (Undo brings it back)
