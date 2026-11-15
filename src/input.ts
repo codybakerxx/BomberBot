@@ -6,9 +6,11 @@
  * the keys or the controller's buttons given to Drop bomb and Lift and throw (bindings.ts, changed in
  * Settings › Controls).
  *
- * A controller is read once a frame (`pollGamepad`, from main.ts). The menus read its presses from here too
- * (`padPressed`, `padDir`; menu moves are in padnav.ts). While Settings is waiting for a new key or button
- * (`capture`), presses go there and nowhere else.
+ * Every controller is read once a frame (`pollGamepad`, from main.ts), each by its own `PadReader`. One of
+ * them is yours (P1's, `mine`): it plays for you and works the menus (`padPressed`, `padDir`; menu moves are
+ * in padnav.ts). The first press on a controller that is nobody's yet asks main.ts what it is (`claim`): yours,
+ * or a new player joining in the lobby (couch play), whose robot then reads its own `PadReader`. While
+ * Settings is waiting for a new key or button (`capture`), presses go there and nowhere else.
  */
 import type { Dir, PlayerInput } from './sim';
 import { SwipePad } from './swipe';
@@ -33,6 +35,93 @@ export function typing(e: KeyboardEvent): boolean {
   return !!t && (t.tagName === 'INPUT' && (t as HTMLInputElement).type === 'text' || t.tagName === 'TEXTAREA' || t.isContentEditable);
 }
 
+/**
+ * One controller: its stick and D-pad as one direction, the buttons given to Drop bomb and Lift and throw as
+ * A and B, and what was newly pressed this frame. A press between two game ticks is kept until it is read.
+ */
+export class PadReader {
+  on: boolean[] = [];
+  was: boolean[] = [];
+  /** buttons not counted until let go (held when a round started, or taken by Settings or by joining) */
+  ignore = new Set<number>();
+  private stickDir: Dir = 0;
+  heldDir: Dir = 0;
+  private latchDir: Dir = 0;
+  a = false;
+  b = false;
+  private latchA = false;
+  private latchB = false;
+  /** the controller's name, as the browser gives it */
+  id = '';
+  constructor(readonly index: number) {}
+
+  /** Read it: once a frame. Returns true if a button was newly pressed. */
+  read(gp: Gamepad, keys: PadMap): boolean {
+    this.id = gp.id;
+    this.was = this.on;
+    this.on = gp.buttons.map((b) => b.pressed || b.value > 0.5);
+    for (const b of [...this.ignore]) if (!this.on[b]) this.ignore.delete(b);
+    // the stick: the stronger way wins, and the way already held keeps going until it is clearly let go or overtaken
+    const x = gp.axes[0] ?? 0;
+    const y = gp.axes[1] ?? 0;
+    const along = (d: Dir): number => (d === 1 ? -y : d === 2 ? y : d === 3 ? -x : d === 4 ? x : 0);
+    const strongest: Dir = Math.abs(x) > Math.abs(y) ? (x < 0 ? 3 : 4) : y < 0 ? 1 : 2;
+    if (this.stickDir && along(this.stickDir) > STICK_HOLD && along(strongest) < along(this.stickDir) * STICK_SWITCH) {
+      /* keep it */
+    } else this.stickDir = along(strongest) > STICK_ON ? strongest : 0;
+    const on = (b: number): boolean => !!this.on[b];
+    const dpad: Dir = on(PAD.UP) ? 1 : on(PAD.DOWN) ? 2 : on(PAD.LEFT) ? 3 : on(PAD.RIGHT) ? 4 : 0;
+    const dir = dpad || this.stickDir;
+    if (dir && dir !== this.heldDir) this.latchDir = dir;
+    this.heldDir = dir;
+    const live = (b: number): boolean => on(b) && !this.ignore.has(b);
+    const fresh = (b: number): boolean => live(b) && !this.was[b];
+    this.a = keys.bomb.some(live);
+    this.b = keys.lift.some(live);
+    if (keys.bomb.some(fresh)) this.latchA = true;
+    if (keys.lift.some(fresh)) this.latchB = true;
+    return this.on.some((v, i) => v && !this.was[i]);
+  }
+  /** Was this button pressed since the last frame (and not set aside)? */
+  pressed(b: number): boolean {
+    return !!this.on[b] && !this.was[b] && !this.ignore.has(b);
+  }
+  /** The first button newly pressed this frame, or -1. */
+  firstNew(): number {
+    return this.on.findIndex((v, i) => v && !this.was[i]);
+  }
+  /** Let go of everything, as if nothing were pressed (it was unplugged). */
+  clear(): void {
+    this.on = [];
+    this.was = [];
+    this.heldDir = this.stickDir = 0;
+    this.a = this.b = false;
+  }
+  /** For a robot this controller drives: once per tick. */
+  state(): PlayerInput {
+    const out: PlayerInput = { dir: (this.heldDir || this.latchDir) as Dir, a: this.a || this.latchA, b: this.b || this.latchB };
+    this.latchDir = 0;
+    this.latchA = this.latchB = false;
+    return out;
+  }
+  /** Forget what was pressed before the round started; buttons held now count once let go (the A that pressed Start). */
+  reset(): void {
+    this.latchDir = 0;
+    this.latchA = this.latchB = false;
+    this.ignore = new Set(this.on.flatMap((v, i) => (v ? [i] : [])));
+    this.a = this.b = false;
+  }
+  /** Shake it, if it can. Strengths 0 to 1. */
+  rumble(strong: number, weak: number, ms: number): void {
+    const gp = navigator.getGamepads?.()[this.index];
+    const act = (gp as unknown as { vibrationActuator?: { playEffect?: (t: string, p: object) => Promise<unknown> } } | null)?.vibrationActuator;
+    act?.playEffect?.('dual-rumble', { startDelay: 0, duration: ms, strongMagnitude: strong, weakMagnitude: weak })?.catch?.(() => undefined);
+  }
+}
+
+/** What a controller that is nobody's yet becomes on its first press: yours, a new player's, or nothing (yet). */
+export type Claim = 'mine' | 'join' | 'ignore';
+
 export class Input {
   private keys: KeyMap = defaultKeys();
   private padKeys: PadMap = defaultPad();
@@ -55,18 +144,14 @@ export class Input {
   onDevice: ((d: Device) => void) | null = null;
   /** While set, the next key or controller button goes here, and nowhere else (Settings › Controls). */
   capture: ((c: Caught) => void) | null = null;
-  // the controller
-  private padOn: boolean[] = [];
-  private padWas: boolean[] = [];
-  /** buttons held when a round started, not counted until let go (the A that pressed Start is not a bomb) */
-  private padIgnore = new Set<number>();
-  private stickDir: Dir = 0;
-  private padHeldDir: Dir = 0;
-  private padA = false;
-  private padB = false;
-  private padIndex = -1;
-  /** the name of the controller in use, or '' */
-  padId = '';
+  // the controllers, by the browser's number for each
+  private readers = new Map<number, PadReader>();
+  /** the browser's number for your controller, or -1 for none yet */
+  mineIndex = -1;
+  /** the numbers of controllers other players have joined with (couch play): not yours, and not asked about */
+  others = new Set<number>();
+  /** Asked on the first press of a controller that is nobody's yet: what is it? (main.ts decides.) */
+  claim: ((index: number, button: number) => Claim) | null = null;
   private device: Device = 'touch';
 
   /** Use these keys and controller buttons (Settings › Controls). */
@@ -88,95 +173,91 @@ export class Input {
   }
 
   /**
-   * Read the controller: once a frame. Its left stick or D-pad gives a direction, the buttons given to
-   * Drop bomb and Lift and throw give A and B, and a press of one given to Pause calls onPause.
+   * Read every controller: once a frame. Yours gives a direction and A and B; a press of a button given to
+   * Pause on it calls onPause. The first press on one that is nobody's asks `claim` what it is.
    */
   pollGamepad(): void {
     const pads = typeof navigator !== 'undefined' && navigator.getGamepads ? navigator.getGamepads() : [];
-    let gp: Gamepad | null = null;
-    for (const p of pads) if (p && p.connected) {
-      gp = p;
-      break;
-    }
-    this.padWas = this.padOn;
-    if (!gp) {
-      this.padOn = [];
-      this.padId = '';
-      this.padIndex = -1;
-      this.padHeldDir = 0;
-      this.padA = this.padB = false;
-      return;
-    }
-    this.padIndex = gp.index;
-    this.padId = gp.id;
-    this.padOn = gp.buttons.map((b) => b.pressed || b.value > 0.5);
-    for (const b of [...this.padIgnore]) if (!this.padOn[b]) this.padIgnore.delete(b);
-    // the stick: the stronger way wins, and the way already held keeps going until it is clearly let go or overtaken
-    const x = gp.axes[0] ?? 0;
-    const y = gp.axes[1] ?? 0;
-    const along = (d: Dir): number => (d === 1 ? -y : d === 2 ? y : d === 3 ? -x : d === 4 ? x : 0);
-    const strongest: Dir = Math.abs(x) > Math.abs(y) ? (x < 0 ? 3 : 4) : y < 0 ? 1 : 2;
-    if (this.stickDir && along(this.stickDir) > STICK_HOLD && along(strongest) < along(this.stickDir) * STICK_SWITCH) {
-      /* keep it */
-    } else this.stickDir = along(strongest) > STICK_ON ? strongest : 0;
-    const on = (b: number): boolean => !!this.padOn[b];
-    const dpad: Dir = on(PAD.UP) ? 1 : on(PAD.DOWN) ? 2 : on(PAD.LEFT) ? 3 : on(PAD.RIGHT) ? 4 : 0;
-    const dir = dpad || this.stickDir;
-    if (dir && dir !== this.padHeldDir) this.latchDir = dir;
-    this.padHeldDir = dir;
-    const anyNew = this.padOn.some((v, i) => v && !this.padWas[i]);
-    if (anyNew || dir) this.used('pad');
-    // a new press while Settings waits for a button goes there only
-    if (this.capture) {
-      for (let b = 0; b < this.padOn.length; b++) if (this.padOn[b] && !this.padWas[b]) {
-        // the menus must not see it too (B would close the "swap them?" box it opens)
-        this.padIgnore.add(b);
+    const seen = new Set<number>();
+    for (const gp of pads) {
+      if (!gp || !gp.connected) continue;
+      seen.add(gp.index);
+      let r = this.readers.get(gp.index);
+      if (!r) this.readers.set(gp.index, (r = new PadReader(gp.index)));
+      const anyNew = r.read(gp, this.padKeys);
+      if (anyNew || (r.heldDir && gp.index === this.mineIndex)) this.used('pad');
+      if (anyNew) this.onFirstGesture?.();
+      // a new press while Settings waits for a button goes there only (from any controller), and the menus
+      // must not see it too (B would close the "swap them?" box it opens)
+      if (this.capture && anyNew) {
+        const b = r.firstNew();
+        r.ignore.add(b);
         this.capture({ kind: 'pad', button: b });
-        break;
+        continue;
       }
-      this.padA = this.padB = false;
-      return;
+      if (anyNew && gp.index !== this.mineIndex && !this.others.has(gp.index)) {
+        const b = r.firstNew();
+        const c = this.claim ? this.claim(gp.index, b) : this.mineIndex < 0 ? 'mine' : 'ignore';
+        if (c === 'mine') this.mineIndex = gp.index;
+        else if (c === 'join') r.ignore.add(b); // the press that joined is not also Ready
+      }
     }
-    const live = (b: number): boolean => on(b) && !this.padIgnore.has(b);
-    const fresh = (b: number): boolean => live(b) && !this.padWas[b];
-    this.padA = this.padKeys.bomb.some(live);
-    this.padB = this.padKeys.lift.some(live);
-    if (this.padKeys.bomb.some(fresh)) this.latchA = true;
-    if (this.padKeys.lift.some(fresh)) this.latchB = true;
-    if (anyNew) this.onFirstGesture?.();
+    for (const [i, r] of this.readers) if (!seen.has(i)) {
+      r.clear();
+      this.readers.delete(i);
+      if (i === this.mineIndex) this.mineIndex = -1;
+    }
   }
-  /** Was this controller button pressed since the last frame? (For the menus.) */
+  /** Your controller's reader, if you have one. */
+  mine(): PadReader | null {
+    return this.readers.get(this.mineIndex) ?? null;
+  }
+  /** A controller's reader, by the browser's number for it. */
+  reader(index: number): PadReader | null {
+    return this.readers.get(index) ?? null;
+  }
+  /** Was this button newly pressed on your controller? (For the menus.) */
   padPressed(b: number): boolean {
-    return !!this.padOn[b] && !this.padWas[b] && !this.capture && !this.padIgnore.has(b);
+    return !this.capture && !!this.mine()?.pressed(b);
   }
-  /** Is a button given to Pause newly pressed? */
+  /** Is a button given to Pause newly pressed on your controller? */
   padPause(): boolean {
     return this.padKeys.pause.some((b) => this.padPressed(b));
   }
-  /** The way the controller's stick or D-pad points now. */
+  /** Was a button given to Pause newly pressed on this controller? */
+  pausePressed(r: PadReader): boolean {
+    return !this.capture && this.padKeys.pause.some((b) => r.pressed(b));
+  }
+  /** The way your controller's stick or D-pad points now. */
   padDir(): Dir {
-    return this.capture ? 0 : this.padHeldDir;
+    return this.capture ? 0 : (this.mine()?.heldDir ?? 0);
   }
-  /** A controller is connected. */
+  /** How many controllers are connected. */
+  padCount(): number {
+    return this.readers.size;
+  }
+  /** A controller is connected (any). */
   padConnected(): boolean {
-    return this.padIndex >= 0;
+    return this.readers.size > 0;
   }
-  /** Shake the controller, if it can (a knockout, a blast close by). Strengths 0 to 1. */
+  /** The name of your controller, or of the first one connected. */
+  get padId(): string {
+    return (this.mine() ?? [...this.readers.values()][0])?.id ?? '';
+  }
+  /** Shake your controller, if it can (a knockout, a blast close by). Strengths 0 to 1. */
   rumble(strong: number, weak: number, ms: number): void {
-    if (this.padIndex < 0) return;
-    const gp = navigator.getGamepads?.()[this.padIndex];
-    const act = (gp as unknown as { vibrationActuator?: { playEffect?: (t: string, p: object) => Promise<unknown> } } | null)?.vibrationActuator;
-    act?.playEffect?.('dual-rumble', { startDelay: 0, duration: ms, strongMagnitude: strong, weakMagnitude: weak })?.catch?.(() => undefined);
+    this.mine()?.rumble(strong, weak, ms);
   }
 
   /** Read once per game tick. */
   state(): PlayerInput {
     this.pad.poll(performance.now());
-    const held = this.pad.dir || this.keyDirs[this.keyDirs.length - 1] || this.padHeldDir || 0;
+    const p = this.mine()?.state() ?? { dir: 0 as Dir, a: false, b: false };
+    const held = this.pad.dir || this.keyDirs[this.keyDirs.length - 1] || 0;
     const out: PlayerInput = {
-      dir: (held || this.latchDir) as Dir,
-      a: this.keyA || this.touchA || this.padA || this.latchA,
-      b: this.keyB || this.touchB || this.padB || this.latchB,
+      dir: (held || this.latchDir || p.dir) as Dir,
+      a: this.keyA || this.touchA || this.latchA || p.a,
+      b: this.keyB || this.touchB || this.latchB || p.b,
     };
     this.latchDir = 0;
     this.latchA = this.latchB = false;
@@ -188,8 +269,7 @@ export class Input {
     this.latchDir = 0;
     this.latchA = this.latchB = false;
     // controller buttons held now (the A that pressed Start) count only once they have been let go
-    this.padIgnore = new Set(this.padOn.flatMap((v, i) => (v ? [i] : [])));
-    this.padA = this.padB = false;
+    for (const r of this.readers.values()) r.reset();
   }
 
   /**

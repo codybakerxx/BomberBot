@@ -3,7 +3,7 @@
 How the game is controlled, how the swipe pad turns a moving thumb into a direction, and how to tune it.
 
 - The swipe pad's logic is in [`src/swipe.ts`](../src/swipe.ts).
-- The wiring to touches, keys and a game controller is in [`src/input.ts`](../src/input.ts); the keys and buttons each action starts with are in [`src/bindings.ts`](../src/bindings.ts); getting round the menus with a controller is [`src/padnav.ts`](../src/padnav.ts); changing keys and buttons in Settings is [`src/remap.ts`](../src/remap.ts).
+- The wiring to touches, keys and game controllers (one `PadReader` each) is in [`src/input.ts`](../src/input.ts); the keys and buttons each action starts with are in [`src/bindings.ts`](../src/bindings.ts); getting round the menus with a controller is [`src/padnav.ts`](../src/padnav.ts); changing keys and buttons in Settings is [`src/remap.ts`](../src/remap.ts).
 - What the robot does with a direction is in `movePlayer` in [`src/sim.ts`](../src/sim.ts), described under "Turning" in [GAME-RULES.md](GAME-RULES.md).
 
 ## The layout
@@ -42,6 +42,7 @@ The caption on the swipe pad (*Standard swipes* or *My thumb swipes*) is centred
   <img src="screenshots/lobby.png" alt="The lobby's Players page" width="200">
   <img src="screenshots/lobby-match.png" alt="The lobby's Match page: arena and rules" width="200">
   <img src="screenshots/settings-controls.png" alt="Settings, the Controls page: Steering thumb and Swipe direction" width="200">
+  <img src="screenshots/settings-gamepad.png" alt="Settings, the Gamepad page: the buttons, Rumble, and how other controllers join" width="200">
   <img src="screenshots/menu-paused.png" alt="The menu opened in the middle of a round" width="200">
 </p>
 
@@ -51,11 +52,12 @@ The caption on the swipe pad (*Standard swipes* or *My thumb swipes*) is centred
 - **Match** (the host's): the arena, with ‹ ›, dots or a swipe (Compact 11 by 9 tiles, Classic 13 by 11, Big 15 by 13; the picture is the real arena, with the bricks the rules ask for), then the rules: Round timer (a switch; when on, Round length and Closing in appear under it; picking an arena puts in its own round length and closing speed), Rounds to win, Bricks, Custom start (a switch; Bombs, Blast and Speed under it), Custom power-ups (a switch; a slider for each power-up under it). **Put the rules back to normal** asks first.
 - Every slider has − and + beside it, and every setting is saved on this device as it changes.
 
-**Settings** are your own and change nobody else's game. Open them with the gear or the speaker in the lobby, or with Settings in the menu during a match. Three pages, with Done in the middle of the bottom bar:
+**Settings** are your own and change nobody else's game. Open them with the gear or the speaker in the lobby, or with Settings in the menu during a match. Four pages, with Done in the middle of the bottom bar:
 
 | Page | What is on it |
 |---|---|
-| **Controls** | **Steering thumb** and **Swipe direction** (both described below), how strongly the touch controls show, then **Keyboard** and **Controller**: the keys and buttons for each action, which can be changed (below), and **Rumble**. |
+| **Controls** | **Steering thumb** and **Swipe direction** (both described below), how strongly the touch controls show, then **Keyboard**: the keys for each action, which can be changed (below). |
+| **Gamepad** | Which controllers are connected, the **Buttons** for each action (changed the same way as keys), **Rumble**, and two short notes: the menu buttons, and how other controllers join. |
 | **Sound** | Sound effects on or off, with the volume under it when on. Then a switch for each sound, with ▶ to hear it. |
 | **Graphics** | Sharpness (Sharpest, Balanced, Battery saver), Ghosts on or off, Less movement. |
 
@@ -82,14 +84,26 @@ In the menus with a controller: the stick or D-pad moves the highlight, and held
 
 ### Changing keys and buttons
 
-In **Settings › Controls**, each action has a row of boxes: up to three keys and up to two controller buttons. Tap a box (or highlight it and press A or Enter) and press the new key or button. A box with + adds one more. While a box is waiting:
+Keys are changed in **Settings › Controls**, buttons in **Settings › Gamepad**. Each action has a row of boxes: up to three keys and up to two controller buttons. Tap a box (or highlight it and press A or Enter) and press the new key or button. A box with + adds one more. While a box is waiting:
 
 - **Backspace** or **Delete** empties it; **Escape** leaves it as it was; tapping it again leaves it too. After 8 seconds with nothing pressed it gives up.
 - A key or button that another action already has asks first: **Swap** gives that action this box's old one (or, if the box was empty, it just moves).
 - Escape and Tab keep their own jobs and cannot be given to an action. The stick and D-pad always move. The menu buttons above (A pick, B back, LB and RB pages, Y Ready, ≡ Start) stay the same in the menus whatever is changed: changing buttons changes only what they do in a round.
-- **Reset** beside Keyboard or Controller puts them all back, and asks first.
+- **Reset** beside Keyboard (or Buttons) puts them all back, and asks first.
 
-Changes are saved on this device. One controller plays as you; more controllers joining as more players on the same screen is next (see the roadmap).
+Changes are saved on this device. Every controller uses the same buttons.
+
+### Playing together on one screen (couch play)
+
+Every extra controller can be another player on the same screen.
+
+- **Which controller is yours (P1):** the first one you use outside the lobby, for example to press Local on the title screen. In the lobby a controller nobody has yet becomes yours if you use its D-pad or stick first.
+- **Joining:** in the lobby, press **A** (or ≡) on a controller that is nobody's yet. That player gets a card after yours, P2, P3 and so on, before the CPU players (who move up a number), and a tag under their robot's dot. The lobby shows a card saying "Another controller? Press A on it to join" while there is room. If you are on the keyboard or touch screen, a controller picked up next to you joins this way; if it was meant to be yours, press B on it to leave, then use its D-pad.
+- **On their card, with their controller:** left and right pick a robot, **A** or **Y** is Ready, **B** takes Ready away or, when not ready, leaves. Robots worn by other people here are skipped, and taking a CPU player's robot gives it theirs. Your colour dots for robots other people here wear cannot be picked. The bin on their card removes them.
+- **Room:** eight players in all. When the match is full, a player who joins takes the last CPU player's place, and the bar says so. A match with another person here needs no CPU players at all; if everyone else leaves, a CPU player comes back.
+- **Start** asks first if anyone here has not pressed Ready ("Start anyway", with the robots they are showing).
+- **In a round:** each controller drives its own robot and shakes for its own robot. Anyone's ≡ opens and closes the menu, which you work. The round goes on while anyone here is still in; once everyone here is out and CPU players are still fighting, the result says so, and Next round gives the round to one of them at random. Results name people by robot (or your typed name) and P-number, such as "Volt (P2) wins the round".
+- Players who join are not saved: they join again next time. A controller unplugged in the lobby leaves; unplugged in a round, its robot stands still.
 
 ## Using the swipe pad
 

@@ -13,13 +13,14 @@
 import { createWorld, step, ticksLeft, World, PlayerInput, Dir, TICK_HZ, DEATH_TICKS } from './sim';
 import { Bot, BotLevel, BOT_LEVELS, LEVELS, createBot, botInput } from './bot';
 import { COLORS, NOBODY, botName, colorById, drawHead, drawStatic, drawDynamic, drawGhosts, warmSprites } from './render';
-import { Input, typing } from './input';
+import { Input, PadReader, typing } from './input';
 import { drawTitle, closeTitle } from './title';
 import { initAudio, preview, setSound, sfx } from './audio';
 import { createLobby, LobbyHost } from './lobby';
 import { createPadNav } from './padnav';
+import { PAD } from './bindings';
 import { createRemap } from './remap';
-import { MatchSetup, Prefs, SHARPNESS, SOUND_NAMES, arenaOf, clockText, defaultSetup, load, readPrefs, readSetup, save, summary, worldConfig } from './setup';
+import { Guest, MatchSetup, Prefs, SHARPNESS, SOUND_NAMES, arenaOf, clockText, defaultSetup, load, readPrefs, readSetup, save, summary, worldConfig } from './setup';
 import { Opt, answerConfirm, choice, confirmFirst, confirmOpen, heading, mount, note, slider, toggle, wireConfirm } from './ui';
 import { Hand, STRAIGHT, standardAims, uniformAims } from './swipe';
 import {
@@ -226,6 +227,15 @@ let overShown = false;
 let roundLive = false;
 
 const input = new Input();
+/**
+ * The other players on this screen, each with a controller of their own (couch play): players 1, 2... in a
+ * round, after you and before the CPU players. They join in the lobby (lobby.ts) and are not saved.
+ */
+const guests: Guest[] = [];
+/** Is player i one of the people here (you or a guest), not a CPU player? */
+const human = (i: number): boolean => i <= guests.length;
+/** The controller playing player i (you or a guest), if there is one. */
+const padOf = (i: number): PadReader | null => (i === 0 ? input.mine() : guests[i - 1] ? input.reader(guests[i - 1].pad) : null);
 input.attachKeyboard(window);
 input.attachDpad($('dzone'), $('dpad'));
 input.attachButton($('btnA'), 'a');
@@ -246,8 +256,8 @@ window.addEventListener('touchstart', showTouch, { passive: true, once: true });
  */
 function newWorld(): void {
   const seed = (Math.random() * 2 ** 31) | 0;
-  world = createWorld(worldConfig(setup, myColor, seed));
-  bots = setup.cpus.map((c, i) => createBot(i + 1, c.level, seed));
+  world = createWorld(worldConfig(setup, myColor, seed, guests.map((g) => g.colorId)));
+  bots = setup.cpus.map((c, i) => createBot(i + 1 + guests.length, c.level, seed));
   blastedBy = -1;
   hurried = false;
   counted = false;
@@ -452,7 +462,7 @@ function drawScore(): void {
     if (i === leader) drawHead(sctx, cx, cy, r, col, { crownOnly: true });
     sctx.fillStyle = i === winner ? col.glow : p.alive ? '#eef1fb' : '#8a90a3';
     sctx.fillText(label, cx + r + gap, cy + 1);
-    said.push(`${i === 0 ? 'You' : botName(col)} ${wins[i]}${i === leader ? ' (in the lead)' : ''}`);
+    said.push(`${nameOf(i)} ${wins[i]}${i === leader ? ' (in the lead)' : ''}`);
   });
   score.setAttribute('aria-label', `Rounds won: ${said.join(', ')}`);
 }
@@ -524,9 +534,14 @@ function finish(title: string, text: string): void {
 function scoreLine(): string {
   return world.players.map((_, i) => wins[i]).join('–');
 }
-/** A player's name as the results say it: You, or a CPU player's robot name (Volt, Fizz...). */
+/**
+ * A player's name as the results say it: You, or a CPU player's robot name (Volt, Fizz...). With other
+ * players here, "You" would not say who, so the people here are named with their P-number: "Auric (P1)".
+ */
 function nameOf(i: number): string {
-  return i === 0 ? 'You' : botName(colorById(world.players[i].colorId));
+  if (i === 0 && !guests.length) return 'You';
+  const name = i === 0 ? myName || botName(colorById(world.players[0].colorId)) : botName(colorById(world.players[i].colorId));
+  return human(i) ? `${name} (P${i + 1})` : name;
 }
 
 /** One step of the game rules: read the input, advance the world, play its sounds, check for the end. */
@@ -536,6 +551,7 @@ function tick(): void {
   const inputs: (PlayerInput | undefined)[] = [];
   if (!world.over) {
     inputs[0] = input.state();
+    guests.forEach((g, i) => (inputs[i + 1] = input.reader(g.pad)?.state()));
     for (const b of bots) inputs[b.id] = botInput(world, b);
   }
   step(world, inputs);
@@ -544,8 +560,12 @@ function tick(): void {
     if (e.type === 'place') sfx.place();
     else if (e.type === 'explode') {
       sfx.explode();
-      // a light shake for a blast within two tiles of you
-      if (prefs.rumble && me.alive && Math.abs(e.cx - Math.round(me.x)) + Math.abs(e.cy - Math.round(me.y)) <= 2) input.rumble(0.2, 0.5, 120);
+      // a light shake for a blast within two tiles of a robot played on a controller
+      if (prefs.rumble)
+        for (let i = 0; i <= guests.length; i++) {
+          const p = world.players[i];
+          if (p.alive && Math.abs(e.cx - Math.round(p.x)) + Math.abs(e.cy - Math.round(p.y)) <= 2) padOf(i)?.rumble(0.2, 0.5, 120);
+        }
     }
     else if (e.type === 'pickup') e.kind === 'curse' ? sfx.curse() : sfx.pickup();
     else if (e.type === 'shield') sfx.shield();
@@ -557,10 +577,8 @@ function tick(): void {
       redrawStatic();
     } else if (e.type === 'death') {
       sfx.death();
-      if (e.player === 0) {
-        blastedBy = e.cause === 'block' ? CRUSHED : e.by;
-        if (prefs.rumble) input.rumble(1, 0.7, 380); // a strong shake: you are out
-      }
+      if (e.player === 0) blastedBy = e.cause === 'block' ? CRUSHED : e.by;
+      if (prefs.rumble && human(e.player)) padOf(e.player)?.rumble(1, 0.7, 380); // a strong shake: you are out
     }
   }
   // the moment the first block starts to fall
@@ -584,12 +602,20 @@ function tick(): void {
       sfx.win();
       if (wins[winner] >= setup.firstTo) matchWinner = winner;
     }
-    if (matchWinner === 0) finish('You win the match', `First to ${setup.firstTo}. Final score ${scoreLine()}.`);
+    if (guests.length) {
+      // several people here: say who, by name and P-number
+      if (matchWinner >= 0) finish(`${nameOf(matchWinner)} wins the match`, `First to ${setup.firstTo}. Final score ${scoreLine()}.`);
+      else if (winner >= 0) finish(`${nameOf(winner)} wins the round`, `${wins[winner]} of ${setup.firstTo} to win the match.`);
+      else finish('Draw', 'Nobody was left standing.');
+    } else if (matchWinner === 0) finish('You win the match', `First to ${setup.firstTo}. Final score ${scoreLine()}.`);
     else if (matchWinner > 0) finish(`${nameOf(matchWinner)} wins the match`, `First to ${setup.firstTo}. Final score ${scoreLine()}.${me.alive ? '' : ' ' + how}`);
     else if (winner === 0) finish('You win the round', `Last bot standing. ${wins[0]} of ${setup.firstTo} to win the match.`);
     else if (winner > 0) finish(`${nameOf(winner)} wins the round`, me.alive ? '' : how);
     else finish('Draw', me.alive ? 'Nobody was left standing.' : `${how} Nobody was left standing.`);
-  } else if (!world.over && !overShown && !me.alive && me.deadTicks >= DEATH_TICKS) {
+  } else if (!world.over && !overShown && guests.length && world.players.every((p, i) => !human(i) || (!p.alive && p.deadTicks >= DEATH_TICKS))) {
+    // everyone here is out and CPU players are still at it, as below
+    finish('Everyone here is out', 'The CPU players are still fighting. Next round gives this round to one of them at random.');
+  } else if (!world.over && !overShown && !guests.length && !me.alive && me.deadTicks >= DEATH_TICKS) {
     // You are out and the others are still at it. The round carries on behind this panel, and its
     // winner still gets the win; Next round does not wait for it.
     finish(crushed ? 'You got crushed' : 'You got blasted', `${how} The others are still fighting. Next round gives this round to one of them at random.`);
@@ -603,8 +629,10 @@ function frame(now: number): void {
   last = now;
   keepSharp();
   input.pad.poll(now); // notice a thumb that has stopped, in every mode
-  input.pollGamepad(); // a controller: its stick and buttons, for the round and the menus
+  input.others = new Set(guests.map((g) => g.pad));
+  input.pollGamepad(); // the controllers: their sticks and buttons, for the round and the menus
   padNav.step(now, mode !== 'playing');
+  guestPads();
   if (mode === 'playing' || mode === 'over') {
     acc += dt;
     const stepLen = 1 / TICK_HZ;
@@ -972,6 +1000,8 @@ const lobbyHost: LobbyHost = {
       /* storage is optional */
     }
   },
+  guests,
+  controllers: () => (navigator.getGamepads?.() ?? []).filter((g) => g && g.connected).length,
   density,
   start: () => newMatch(),
   back: () => showTitle(),
@@ -1062,7 +1092,7 @@ function fillPause(): void {
   $('pauseTitle').textContent = done ? `${nameOf(matchWinner)} won the match` : `Round ${roundNo}`;
   const left = ticksLeft(world);
   const time = world.over || left === Infinity ? '' : left > 0 ? ` · ${clockText(Math.ceil(left / TICK_HZ))} left` : ' · Blocks falling';
-  $('pauseInfo').textContent = `${summary(setup)}${time}`;
+  $('pauseInfo').textContent = `${summary(setup, guests.length)}${time}`;
   $('pauseResume').textContent = roundLive ? 'Resume' : 'Back to the round';
   const list = $('standings');
   list.textContent = '';
@@ -1078,7 +1108,8 @@ function fillPause(): void {
     const name = document.createElement('b');
     name.textContent = i === 0 ? myName || 'You' : botName(col);
     const sub = document.createElement('small');
-    sub.textContent = i === 0 ? `P1 · you` : `P${i + 1} · CPU · ${LEVELS[setup.cpus[i - 1]?.level ?? 'normal'].label}`;
+    sub.textContent =
+      i === 0 ? `P1 · you` : human(i) ? `P${i + 1} · controller ${guests[i - 1].pad + 1}` : `P${i + 1} · CPU · ${LEVELS[setup.cpus[i - 1 - guests.length]?.level ?? 'normal'].label}`;
     who.append(name, sub);
     const st = document.createElement('span');
     const won = world.over && world.over.winner === i;
@@ -1122,7 +1153,10 @@ function settleUnfinished(): boolean {
   if (wins[w] < setup.firstTo) return true;
   matchWinner = w;
   scoreKey = '';
-  finish(`${nameOf(w)} wins the match`, `First to ${setup.firstTo}. Final score ${scoreLine()}. You were out, so the last round went to ${nameOf(w)}, picked at random from the CPU players still in.`);
+  finish(
+    `${nameOf(w)} wins the match`,
+    `First to ${setup.firstTo}. Final score ${scoreLine()}. ${guests.length ? 'Everyone here was' : 'You were'} out, so the last round went to ${nameOf(w)}, picked at random from the CPU players still in.`,
+  );
   return false;
 }
 // the result panel: Next round and Menu while the match goes on; Rematch and Lobby once it is won
@@ -1134,10 +1168,15 @@ $('change').addEventListener('click', () => (matchWinner >= 0 ? showLobby(true) 
 
 // ------------------------------------------------ Settings
 
-type SetTab = 'sound' | 'controls' | 'graphics';
-const SET_TABS: SetTab[] = ['controls', 'sound', 'graphics']; // the owner's order
-const SET_NAMES: Record<SetTab, string> = { sound: 'Sound', controls: 'Controls', graphics: 'Graphics' };
-const SET_IDS: Record<SetTab, [string, string]> = { sound: ['pgSound', 'setSound'], controls: ['pgControls', 'setControls'], graphics: ['pgGraphics', 'setGraphics'] };
+type SetTab = 'sound' | 'controls' | 'gamepad' | 'graphics';
+const SET_TABS: SetTab[] = ['controls', 'gamepad', 'sound', 'graphics']; // the owner's order (Gamepad its own page, after Controls)
+const SET_NAMES: Record<SetTab, string> = { sound: 'Sound', controls: 'Controls', gamepad: 'Gamepad', graphics: 'Graphics' };
+const SET_IDS: Record<SetTab, [string, string]> = {
+  sound: ['pgSound', 'setSound'],
+  controls: ['pgControls', 'setControls'],
+  gamepad: ['pgGamepad', 'setGamepad'],
+  graphics: ['pgGraphics', 'setGraphics'],
+};
 let setTab: SetTab = 'controls';
 /** where Settings goes back to: the lobby, or the menu during a match */
 let setFrom: 'lobby' | 'pause' = 'lobby';
@@ -1155,6 +1194,8 @@ function showSettings(tab?: SetTab, from?: 'lobby' | 'pause'): void {
 }
 function showSetTab(t: SetTab): void {
   setTab = t;
+  if (t !== 'controls' && t !== 'gamepad') remap?.cancel();
+  if (t === 'gamepad') remap?.refresh(); // says which controllers are connected now
   const i = SET_TABS.indexOf(t);
   for (const k of SET_TABS) {
     $(SET_IDS[k][0]).setAttribute('aria-selected', String(k === t));
@@ -1339,6 +1380,42 @@ function pauseKey(): void {
 }
 input.onPause = pauseKey;
 
+/**
+ * A controller nobody has yet, on its first press (input.ts asks). In the lobby, A or ≡ on it joins as a new
+ * player (couch play): the person on the keyboard or touch screen is P1, and a controller picked up next to
+ * them is a friend's. Anything else makes it yours, if you have none yet.
+ */
+input.claim = (index, button) => {
+  if (mode === 'lobby' && (button === PAD.A || button === PAD.MENU) && !confirmOpen() && !lobby.sheetOpen()) return lobby.join(index) ? 'join' : 'ignore';
+  return input.mineIndex < 0 ? 'mine' : 'ignore';
+};
+
+/** Which way each guest's stick or D-pad pointed last frame, so a push picks one robot, not one a frame. */
+const guestDir = new Map<number, Dir>();
+/**
+ * The other players' controllers, once a frame. In the lobby: left and right pick a robot, A or Y is Ready,
+ * B takes Ready away or leaves; a controller unplugged there leaves too. In a round, their own robot reads
+ * them (tick), and their Pause button opens and closes the menu like yours.
+ */
+function guestPads(): void {
+  for (const g of [...guests]) {
+    const r = input.reader(g.pad);
+    if (!r) {
+      if (mode === 'lobby') lobby.dropGuest(g.pad);
+      continue;
+    }
+    const was = guestDir.get(g.pad) ?? 0;
+    const d = r.heldDir;
+    guestDir.set(g.pad, d);
+    if (input.capture || confirmOpen()) continue;
+    if (mode === 'lobby') {
+      if (d !== was && (d === 3 || d === 4)) lobby.guestStep(g.pad, d === 3 ? -1 : 1);
+      if (r.pressed(PAD.A) || r.pressed(PAD.Y)) lobby.guestReady(g.pad);
+      if (r.pressed(PAD.B)) lobby.guestBack(g.pad);
+    } else if ((mode === 'playing' || mode === 'over' || mode === 'pause') && input.pausePressed(r)) pauseKey();
+  }
+}
+
 window.addEventListener('keydown', (e) => {
   if (e.code === 'Escape') {
     goBack();
@@ -1457,5 +1534,11 @@ requestAnimationFrame(frame);
   },
   get roundLive() {
     return roundLive;
+  },
+  get guests() {
+    return guests;
+  },
+  get input() {
+    return input;
   },
 };

@@ -33,6 +33,7 @@ Working today:
 - Settings of your own: controls, sound (volume, and a switch for each sound) and graphics
 - A menu during a match that says what is going on, with Resume, Settings, Restart (the whole match again) and Leave to the lobby (those last two ask first)
 - Keyboard and Xbox controller support, for playing and for every menu, with keys and buttons you can change and hints that follow what you last used
+- Couch play: every extra controller can join as another player on the same screen
 - Sound effects
 
 Not built yet: teams and playing online. The plan is in [docs/ROADMAP.md](docs/ROADMAP.md).

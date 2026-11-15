@@ -13,7 +13,11 @@
  *   ask for), then the rules, which the host sets: the round timer and how fast the blocks close in, rounds
  *   to win, bricks, a custom start, and a custom power-up mix.
  *
- * Everything is saved on this device as it changes (setup.ts), so the lobby opens the way it was left.
+ * Couch play: another controller joins by pressing A in the lobby, and gets a card of its own (P2, P3...,
+ * before the CPU players). On it, left and right pick a robot, A or Y is Ready, and B takes Ready away or,
+ * when not ready, leaves. Those players are not saved; they join again next time.
+ *
+ * Everything else is saved on this device as it changes (setup.ts), so the lobby opens the way it was left.
  * main.ts owns the match itself; it hands this file a `LobbyHost` to read and change what it needs.
  */
 import { BOT_LEVELS, LEVELS } from './bot';
@@ -21,6 +25,7 @@ import { COLORS, botName, colorById, drawRobot, drawStatic, drawDynamic, ROBOT }
 import { createWorld, MAX_BOMBS, MAX_FIRE, MAX_SPEED_ITEMS, START_FIRE } from './sim';
 import {
   CpuSlot,
+  Guest,
   ARENAS,
   BRICKS,
   CLOSE_IN,
@@ -46,6 +51,10 @@ import { Opt, choice, confirmFirst, heading, mount, note, slider, swipeable, tog
 
 export interface LobbyHost {
   setup: MatchSetup;
+  /** the other players on this screen, each with a controller (couch play); kept by main.ts, not saved */
+  guests: Guest[];
+  /** how many controllers are connected (the "join" card shows only when there is one) */
+  controllers(): number;
   myColor: string;
   /** the name you typed, or '' (shown on your card in place of "You"); saved when set */
   myName: string;
@@ -56,13 +65,15 @@ export interface LobbyHost {
   start(): void;
   back(): void;
   /** open Settings, on one of its pages, or on the one last seen */
-  settings(tab?: 'sound' | 'controls' | 'graphics'): void;
+  settings(tab?: 'sound' | 'controls' | 'gamepad' | 'graphics'): void;
 }
 
 const $ = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T;
 
 /** The order a new CPU player's colour is picked in: bright colours first, black and white last. */
 const CPU_COLOURS = ['pink', 'blue', 'red', 'green', 'orange', 'purple', 'gold', 'white', 'black'];
+/** The bin on a card. */
+const BIN = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V4.5h6V7M6.5 7l1 13h9l1-13M10 11v5.5M14 11v5.5"/></svg>';
 /** The arena picture is always drawn from the same arena, so it changes only when a setting does. */
 const PREVIEW_SEED = 20261114;
 
@@ -77,6 +88,16 @@ export function createLobby(host: LobbyHost): {
   sheetOpen(): boolean;
   closeSheet(): void;
   redraw(): void;
+  /** A controller nobody has yet pressed A: a new player joins. False if there is no room. */
+  join(pad: number): boolean;
+  /** That player's left or right: the next robot. */
+  guestStep(pad: number, d: number): void;
+  /** That player's A or Y: Ready. */
+  guestReady(pad: number): void;
+  /** That player's B: not ready any more or, if not ready, leave. */
+  guestBack(pad: number): void;
+  /** That player's controller has gone: they leave. */
+  dropGuest(pad: number): void;
 } {
   let page: LobbyPage = 'players';
   /**
@@ -92,6 +113,16 @@ export function createLobby(host: LobbyHost): {
   /** the CPU player whose panel is open, or -1 */
   let editing = -1;
   const s = (): MatchSetup => host.setup;
+  const guests = (): Guest[] => host.guests;
+  /** everyone in the match: you, the other players here, the CPU players */
+  const total = (): number => 1 + guests().length + s().cpus.length;
+  /** P-number of a CPU player (its place in s().cpus) */
+  const cpuP = (i: number): number => i + 2 + guests().length;
+  /** the colours other people on this screen wear (not `pad`'s own), which nobody else can take */
+  const humanColours = (pad = -2): Set<string> =>
+    new Set([...(pad === -1 ? [] : [host.myColor]), ...guests().filter((g) => g.pad !== pad).map((g) => g.colorId)]);
+  /** Most CPU players there is room for: eight players in all. */
+  const maxCpus = (): number => Math.min(MAX_CPUS, MAX_CPUS - guests().length);
 
   // ------------------------------------------------------------ changes
   /** After any change: save, and redraw everything that shows it. */
@@ -101,7 +132,7 @@ export function createLobby(host: LobbyHost): {
   }
   /** Colours nobody else in the match wears (you, and the CPU players except `except`). */
   function freeFor(except: number): string[] {
-    const used = new Set([host.myColor, ...s().cpus.filter((_, i) => i !== except).map((c) => c.colorId)]);
+    const used = new Set([...humanColours(), ...s().cpus.filter((_, i) => i !== except).map((c) => c.colorId)]);
     return COLORS.map((c) => c.id).filter((id) => !used.has(id));
   }
   /** Show a colour on your robot (not yours until Ready). Any colour, a CPU player's included. */
@@ -110,13 +141,24 @@ export function createLobby(host: LobbyHost): {
     if (id !== host.myColor) ready = false;
     refresh();
   }
-  function stepMine(d: number): void {
+  /** The next colour that way, past `skip` (other players' own). */
+  function nextColour(from: string, d: number, skip: Set<string>): string {
     const ids = COLORS.map((c) => c.id);
-    setPick(ids[(ids.indexOf(pick) + d + ids.length) % ids.length]);
+    let i = ids.indexOf(from);
+    for (let n = 0; n < ids.length; n++) {
+      i = (i + d + ids.length) % ids.length;
+      if (!skip.has(ids[i])) return ids[i];
+    }
+    return from;
+  }
+  function stepMine(d: number): void {
+    setPick(nextColour(pick, d, humanColours(-1)));
   }
   /** Ready: the colour on your robot becomes yours, and you are ready. A CPU player wearing it takes the colour you had. */
   function readyUp(): void {
     if (ready && pick === host.myColor) return;
+    // another player here took that robot meanwhile: the next one free instead
+    if (humanColours(-1).has(pick)) pick = nextColour(pick, 1, humanColours(-1));
     const old = host.myColor;
     if (pick !== old) for (const c of s().cpus) if (c.colorId === pick) c.colorId = old;
     host.myColor = pick;
@@ -125,7 +167,7 @@ export function createLobby(host: LobbyHost): {
     changed();
   }
   function addCpu(): void {
-    if (s().cpus.length >= MAX_CPUS) return;
+    if (s().cpus.length >= maxCpus()) return;
     const free = freeFor(-1);
     const colorId = CPU_COLOURS.find((c) => free.includes(c)) ?? free[0];
     const level = s().cpus[s().cpus.length - 1]?.level ?? 'normal';
@@ -152,7 +194,9 @@ export function createLobby(host: LobbyHost): {
     b.className = 'dot';
     b.id = `dot-${c.id}`;
     b.style.setProperty('--c', c.body);
-    b.addEventListener('click', () => setPick(c.id));
+    b.addEventListener('click', () => {
+      if (!humanColours(-1).has(c.id)) setPick(c.id);
+    });
     b.addEventListener('dblclick', () => readyUp()); // a double tap is a quick Ready
     const tag = document.createElement('span');
     tag.className = 'ptag';
@@ -241,15 +285,44 @@ export function createLobby(host: LobbyHost): {
     me.append(mc, mt);
     box.append(me);
     const cvs: [HTMLCanvasElement, string][] = [[mc, host.myColor]];
+    const lastOne = s().cpus.length + guests().length <= 1;
+    guests().forEach((g, gi) => {
+      const n = gi + 2;
+      const card = document.createElement('div');
+      card.className = 'slot guest';
+      card.id = `guest-${g.pad}`;
+      card.setAttribute('role', 'group');
+      const looking = botName(colorById(g.pick));
+      card.setAttribute('aria-label', `${looking}, P${n}, on controller ${g.pad + 1}, ${g.ready && g.pick === g.colorId ? 'ready' : 'not ready'}`);
+      const cv = document.createElement('canvas');
+      const t = document.createElement('div');
+      const on = g.ready && g.pick === g.colorId;
+      t.innerHTML = `<b></b><small>P${n} · ‹ › robot</small><span class="rdy${on ? ' on' : ''}">${on ? '✓ Ready' : 'Not ready: A'}</span>`;
+      t.querySelector('b')!.textContent = looking;
+      card.append(cv, t);
+      const bin = document.createElement('button');
+      bin.type = 'button';
+      bin.className = 'bin';
+      bin.id = `gbin-${g.pad}`;
+      bin.innerHTML = BIN;
+      bin.disabled = lastOne;
+      bin.setAttribute('aria-label', lastOne ? 'A match needs someone to play against' : `Remove P${n}`);
+      bin.addEventListener('click', () => leave(g.pad));
+      const wrap = document.createElement('div');
+      wrap.className = 'slot-wrap';
+      wrap.append(card, bin);
+      box.append(wrap);
+      cvs.push([cv, g.pick]);
+    });
     s().cpus.forEach((c, i) => {
       const b = document.createElement('button');
       b.type = 'button';
       b.className = 'slot';
       b.id = `slot-${i + 1}`;
-      b.setAttribute('aria-label', `${botName(colorById(c.colorId))}, CPU player, P${i + 2}, ${LEVELS[c.level].label}, ready. Tap to change.`);
+      b.setAttribute('aria-label', `${botName(colorById(c.colorId))}, CPU player, P${cpuP(i)}, ${LEVELS[c.level].label}, ready. Tap to change.`);
       const cv = document.createElement('canvas');
       const t = document.createElement('div');
-      t.innerHTML = `<b>${botName(colorById(c.colorId))}</b><small>P${i + 2} · ${LEVELS[c.level].label}</small><span class="rdy on">✓ Ready</span>`;
+      t.innerHTML = `<b>${botName(colorById(c.colorId))}</b><small>P${cpuP(i)} · ${LEVELS[c.level].label}</small><span class="rdy on">✓ Ready</span>`;
       b.append(cv, t);
       b.addEventListener('click', () => openSheet(i));
       // the bin: removes this CPU player at once (Undo brings it back)
@@ -257,10 +330,9 @@ export function createLobby(host: LobbyHost): {
       bin.type = 'button';
       bin.className = 'bin';
       bin.id = `bin-${i + 1}`;
-      bin.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V4.5h6V7M6.5 7l1 13h9l1-13M10 11v5.5M14 11v5.5"/></svg>';
-      const only = s().cpus.length <= 1;
-      bin.disabled = only;
-      bin.setAttribute('aria-label', only ? 'A match needs at least one CPU player' : `Remove ${botName(colorById(c.colorId))}`);
+      bin.innerHTML = BIN;
+      bin.disabled = lastOne;
+      bin.setAttribute('aria-label', lastOne ? 'A match needs someone to play against' : `Remove ${botName(colorById(c.colorId))}`);
       bin.addEventListener('click', () => removeCpu(i));
       const wrap = document.createElement('div');
       wrap.className = 'slot-wrap';
@@ -268,7 +340,7 @@ export function createLobby(host: LobbyHost): {
       box.append(wrap);
       cvs.push([cv, c.colorId]);
     });
-    if (s().cpus.length < MAX_CPUS) {
+    if (s().cpus.length < maxCpus()) {
       const add = document.createElement('button');
       add.type = 'button';
       add.className = 'slot add';
@@ -277,9 +349,17 @@ export function createLobby(host: LobbyHost): {
       add.addEventListener('click', addCpu);
       box.append(add);
     }
+    // with a controller connected and room for one more: how another player joins
+    if (total() < MAX_CPUS + 1 && host.controllers() > 0) {
+      const j = document.createElement('div');
+      j.className = 'slot join';
+      j.id = 'slotJoin';
+      j.innerHTML = '<span class="pada">A</span><b>Another controller? Press A on it to join</b>';
+      box.append(j);
+    }
     // the canvases have their size only once they are on the page
     for (const [cv, id] of cvs) drawBotOn(cv, id);
-    $('playerCount').textContent = `${s().cpus.length + 1} of ${MAX_CPUS + 1}`;
+    $('playerCount').textContent = `${total()} of ${MAX_CPUS + 1}`;
   }
 
   // ------------------------------------------------------------ a CPU player's panel
@@ -341,10 +421,11 @@ export function createLobby(host: LobbyHost): {
    * way. A bar with Undo shows for a few seconds instead of asking first. The last CPU player stays.
    */
   function removeCpu(i: number): void {
-    if (s().cpus.length <= 1 || !s().cpus[i]) return;
+    if (s().cpus.length + guests().length <= 1 || !s().cpus[i]) return;
     const [cpu] = s().cpus.splice(i, 1);
     removed = { cpu, at: i };
     $('undoText').textContent = `${botName(colorById(cpu.colorId))} removed.`;
+    $('undoBtn').hidden = false;
     $('undoBar').hidden = false;
     clearTimeout(undoTimer);
     undoTimer = window.setTimeout(hideUndo, 6000);
@@ -356,7 +437,7 @@ export function createLobby(host: LobbyHost): {
     $('undoBar').hidden = true;
   }
   $('undoBtn').addEventListener('click', () => {
-    if (!removed || s().cpus.length >= MAX_CPUS) return hideUndo();
+    if (!removed || s().cpus.length >= maxCpus()) return hideUndo();
     const { cpu, at } = removed;
     // its colour back if nobody has taken it meanwhile, else a free one
     const free = freeFor(-1);
@@ -368,11 +449,11 @@ export function createLobby(host: LobbyHost): {
     if (editing < 0 || !s().cpus[editing]) return;
     const c = s().cpus[editing];
     $('cpuTitle').textContent = botName(colorById(c.colorId));
-    $('cpuDesc').textContent = `CPU player · P${editing + 2} · ${LEVELS[c.level].label}. Changes are saved as you make them.`;
+    $('cpuDesc').textContent = `CPU player · P${cpuP(editing)} · ${LEVELS[c.level].label}. Changes are saved as you make them.`;
     drawBotOn($<HTMLCanvasElement>('cpuBot'), c.colorId);
-    const only = s().cpus.length <= 1;
+    const only = s().cpus.length + guests().length <= 1;
     ($('cpuRemove') as HTMLButtonElement).disabled = only;
-    $('cpuRemove').title = only ? 'A match needs at least one CPU player' : '';
+    $('cpuRemove').title = only ? 'A match needs someone to play against' : '';
     refreshCpu();
   }
 
@@ -395,7 +476,7 @@ export function createLobby(host: LobbyHost): {
   /** The arena picture: a real arena built with the setup's size and bricks, with everyone in their corners. */
   function drawArena(): void {
     const cv = $<HTMLCanvasElement>('arenaPic');
-    const w = createWorld({ ...worldConfig(s(), host.myColor, PREVIEW_SEED), roundTicks: 0 });
+    const w = createWorld({ ...worldConfig(s(), host.myColor, PREVIEW_SEED, guests().map((g) => g.colorId)), roundTicks: 0 });
     cv.style.aspectRatio = `${w.w} / ${w.h}`;
     const dpr = host.density();
     const box = cv.getBoundingClientRect();
@@ -552,49 +633,128 @@ export function createLobby(host: LobbyHost): {
   });
   // a second Start right under the arena picture, close to hand (the owner's ask); the same as the one in the bar
   $('arenaStart').addEventListener('click', tryStart);
-  /** Start the match, asking first if you have not pressed Ready. */
+  /** The other players here who have not pressed Ready (with the robot they are showing). */
+  const waiting = (): Guest[] => guests().filter((g) => !(g.ready && g.pick === g.colorId));
+  /** Start the match, asking first if anyone has not pressed Ready. */
   function tryStart(): void {
-    if (problem(s())) return;
-    if (ready) {
+    if (problem(s(), guests().length)) return;
+    const others = waiting();
+    if (ready && !others.length) {
       host.start();
       return;
     }
-    // not ready yet: ask rather than guess
+    // not everyone is ready: ask rather than guess
     const want = botName(colorById(pick));
+    const go = (yes: boolean): void => {
+      if (!yes) return;
+      if (!ready) readyUp();
+      for (const g of waiting()) guestReady(g.pad);
+      host.start();
+    };
+    if (!others.length) {
+      confirmFirst(`Ready as ${want}?`, `You have not pressed Ready on the Players page. Everyone must be ready to start.`, `Ready as ${want} and start`, go);
+      return;
+    }
+    const names = [...(ready ? [] : ['You']), ...others.map((g) => `P${guests().indexOf(g) + 2}`)];
+    const list = names.length === 1 ? names[0] : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
     confirmFirst(
-      `Ready as ${want}?`,
-      `You have not pressed Ready on the Players page. Everyone must be ready to start.`,
-      `Ready as ${want} and start`,
-      (yes) => {
-        if (!yes) return;
-        readyUp();
-        host.start();
-      },
+      'Not everyone is ready',
+      `${list} ${names.length === 1 && names[0] !== 'You' ? 'has' : 'have'} not pressed Ready. Start anyway, with the robots showing now?`,
+      'Start anyway',
+      go,
     );
+  }
+
+  // ------------------------------------------------------------ the other players here (couch play)
+  const guestOf = (pad: number): Guest | undefined => guests().find((g) => g.pad === pad);
+  function join(pad: number): boolean {
+    if (guestOf(pad)) return true;
+    if (1 + guests().length >= MAX_CPUS + 1) return false;
+    // a full match: the last CPU player makes room
+    let made = '';
+    if (total() >= MAX_CPUS + 1) {
+      const cpu = s().cpus.pop()!;
+      made = botName(colorById(cpu.colorId));
+    }
+    const free = freeFor(-1);
+    const colorId = CPU_COLOURS.find((c) => free.includes(c)) ?? free[0];
+    guests().push({ pad, colorId, pick: colorId, ready: false });
+    if (made) {
+      removed = null;
+      $('undoText').textContent = `${made} made room for P${guests().length + 1}.`;
+      $('undoBtn').hidden = true;
+      $('undoBar').hidden = false;
+      clearTimeout(undoTimer);
+      undoTimer = window.setTimeout(hideUndo, 4000);
+    }
+    if (!wide() && page !== 'players') setPage('players');
+    changed();
+    $(`guest-${pad}`)?.scrollIntoView({ block: 'nearest' });
+    return true;
+  }
+  function guestStep(pad: number, d: number): void {
+    const g = guestOf(pad);
+    if (!g) return;
+    g.pick = nextColour(g.pick, d, humanColours(pad));
+    if (g.pick !== g.colorId) g.ready = false;
+    refresh();
+  }
+  /** Ready: the robot that player is showing becomes theirs. A CPU player wearing it takes the one they had. */
+  function guestReady(pad: number): void {
+    const g = guestOf(pad);
+    if (!g || humanColours(pad).has(g.pick)) return;
+    if (g.pick !== g.colorId) for (const c of s().cpus) if (c.colorId === g.pick) c.colorId = g.colorId;
+    g.colorId = g.pick;
+    g.ready = true;
+    changed();
+  }
+  function guestBack(pad: number): void {
+    const g = guestOf(pad);
+    if (!g) return;
+    if (g.ready) {
+      g.ready = false;
+      refresh();
+    } else leave(pad);
+  }
+  /** A player here leaves. Nobody left to play against: a CPU player comes back. */
+  function leave(pad: number): void {
+    const i = guests().findIndex((g) => g.pad === pad);
+    if (i < 0) return;
+    guests().splice(i, 1);
+    if (s().cpus.length === 0) addCpu();
+    changed();
   }
 
   function refresh(): void {
     const shown = colorById(pick);
     const mine = pick === host.myColor;
     const wearer = s().cpus.findIndex((x) => x.colorId === pick);
+    const G = guests().length;
     // your robot, in the colour being looked at, and the dots with who wears each colour under them
     drawBotOn($<HTMLCanvasElement>('youBot'), pick, 0.95);
     $('youBot').setAttribute('aria-label', `Your robot, in ${shown.name}${mine ? '' : ' (not yours until you press OK)'}`);
     $('youName').textContent = host.myName || botName(shown);
     // no explanations on this page (the owner's call): only a short note when Ready would swap with a CPU player
-    $('youState').textContent = !mine && wearer >= 0 ? `Swaps with P${wearer + 2}` : '';
+    $('youState').textContent = !mine && wearer >= 0 ? `Swaps with P${cpuP(wearer)}` : '';
     const ok = $<HTMLButtonElement>('colOk');
     ok.disabled = mine && ready;
     ok.textContent = mine && ready ? '✓ Ready' : 'Ready'; // just Ready (the owner's wording): the robot's name is right above it
     for (const c of COLORS) {
       const b = $<HTMLButtonElement>(`dot-${c.id}`);
       const cpu = s().cpus.findIndex((x) => x.colorId === c.id);
+      const guest = guests().findIndex((g) => g.colorId === c.id);
       const tag = $(`ptag-${c.id}`);
       const isMe = c.id === host.myColor;
-      tag.textContent = isMe ? 'P1' : cpu >= 0 ? `P${cpu + 2}` : '';
+      tag.textContent = isMe ? 'P1' : guest >= 0 ? `P${guest + 2}` : cpu >= 0 ? `P${cpuP(cpu)}` : '';
       tag.classList.toggle('me', isMe);
+      tag.classList.toggle('guest', guest >= 0);
+      b.disabled = guest >= 0;
+      b.classList.toggle('taken', guest >= 0);
       b.setAttribute('aria-pressed', String(c.id === pick));
-      b.setAttribute('aria-label', `${botName(c)}, ${c.name}${isMe ? ', yours (P1)' : cpu >= 0 ? `, worn by CPU ${cpu + 1} (P${cpu + 2})` : ''}`);
+      b.setAttribute(
+        'aria-label',
+        `${botName(c)}, ${c.name}${isMe ? ', yours (P1)' : guest >= 0 ? `, P${guest + 2}'s` : cpu >= 0 ? `, worn by CPU ${cpu + 1} (P${cpuP(cpu)})` : ''}`,
+      );
     }
     if (popMine) {
       popMine = false;
@@ -607,7 +767,7 @@ export function createLobby(host: LobbyHost): {
     refreshAll();
     // the arena
     const a = arenaOf(s());
-    const size = arenaSize(s());
+    const size = arenaSize(s(), G);
     $('arenaName').textContent = a.name;
     $('arenaBlurb').textContent = size.grown
       ? `${size.cols} by ${size.rows} tiles: grown by two each way for more than ${GROW_AFTER} players. ${a.blurb}`
@@ -617,7 +777,7 @@ export function createLobby(host: LobbyHost): {
     if (!$('lobbyMatch').hidden || window.matchMedia('(min-width: 820px) and (min-height: 480px)').matches) drawArena();
     refreshRules();
     // the summary at the top, and whether Start can be pressed
-    $('lobbySummary').textContent = summary(s());
+    $('lobbySummary').textContent = summary(s(), G);
     // the main button: Match › on the Players page, Start on the Match page (or a wide screen)
     const go = $<HTMLButtonElement>('lobbyStart');
     const toMatch = page === 'players' && !wide();
@@ -628,11 +788,14 @@ export function createLobby(host: LobbyHost): {
     if (toMatch) go.dataset.key = 'E';
     else delete go.dataset.key;
     go.setAttribute('aria-label', toMatch ? 'Go on to the Match page' : 'Start the match');
-    const why = problem(s());
+    const why = problem(s(), G);
     go.disabled = !toMatch && !!why;
     ($('arenaStart') as HTMLButtonElement).disabled = !!why;
     const note = $('startNote');
-    note.textContent = why || (!ready && !toMatch ? 'You are not ready yet: press Ready on the Players page.' : '');
+    const late = waiting().map((g) => `P${guests().indexOf(g) + 2}`);
+    note.textContent =
+      why ||
+      (toMatch ? '' : !ready ? 'You are not ready yet: press Ready on the Players page.' : late.length ? `Waiting for ${late.join(', ')} to press Ready (A).` : '');
     note.classList.toggle('info', !why);
     refreshSheet();
   }
@@ -643,6 +806,10 @@ export function createLobby(host: LobbyHost): {
         // a new visit: Ready again for every match, as every player will be online
         pick = host.myColor;
         ready = false;
+        for (const g of guests()) {
+          g.pick = g.colorId;
+          g.ready = false;
+        }
         p = p ?? 'players';
       }
       $('lobby').hidden = false;
@@ -662,5 +829,10 @@ export function createLobby(host: LobbyHost): {
     sheetOpen: () => !sheet.hidden,
     closeSheet,
     redraw: refresh,
+    join,
+    guestStep,
+    guestReady,
+    guestBack,
+    dropGuest: leave,
   };
 }

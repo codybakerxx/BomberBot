@@ -23,9 +23,10 @@
               dots youDots; the name over them, youName, with editName, the pencil that swaps it for a box (myName) to type your own; the player cards in slots; allCpus) and lobbyMatch (the arena picture arenaPic with
               arenaPrev, arenaNext, arenaDots, and a Start under it, arenaStart; the rules; rulesReset); then lobbyPrev, lobbyStart, lobbyNext
     cpuSheet  a CPU player's panel, over the lobby: colour and level (cpuRows), cpuRemove, cpuDone
-    settings  your own settings, three pages: setControls (Steering thumb: handLeft, handRight; Swipe
-              direction: dirStandard, dirMine, matchState, matchStart; padOpts; keys), setSound (soundOpts)
-              and setGraphics (gfxOpts); then setPrev, setDone, setNext
+    settings  your own settings, four pages: setControls (Steering thumb: handLeft, handRight; Swipe
+              direction: dirStandard, dirMine, matchState, matchStart; padOpts; keys: remapKeys, resetKeys),
+              setGamepad (padStatus, remapPad, resetPad, rumbleBtn), setSound (soundOpts) and setGraphics
+              (gfxOpts); then setPrev, setDone, setNext
     pause     the menu during a match: pauseState, pauseTitle, pauseInfo, standings, pauseResume, pauseSettings,
               pauseRestart (the whole match again, from 0), pauseLobby
     confirm   "are you sure?" before anything that cannot be undone (ui.ts)
@@ -402,6 +403,9 @@
   .summary { margin: 2px 14px 8px; text-align: center; font: 500 13px/1.3 var(--font-body); color: var(--ink-dim); }
   .pages { flex: 0 0 auto; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); margin: 0 14px; border-bottom: 1px solid var(--line); }
   .pages.three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .pages.four { grid-template-columns: repeat(4, minmax(0, auto)); justify-content: space-between; }
+  .pages.four button { padding-left: 4px; padding-right: 4px; font-size: 14px; letter-spacing: 0.08em; }
+  @media (min-width: 520px) { .pages.four { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
   .pages button {
     padding: 11px 0 9px; margin-bottom: -1px; border: 0; border-bottom: 3px solid transparent; background: transparent; cursor: pointer;
     font: 700 15px/1 var(--font-display); letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-dim);
@@ -450,6 +454,8 @@
   .ptag { min-width: 26px; padding: 2px 4px; text-align: center; font: 700 10px/1.2 var(--font-display); letter-spacing: 0.04em; color: var(--ink); background: #1d2338; border-radius: 5px; }
   .ptag:empty { visibility: hidden; }
   .ptag.me { color: #14100a; background: var(--accent); }
+  .ptag.guest { color: #0b1020; background: #9fd0ff; }
+  .dot.taken:disabled { opacity: 1; cursor: default; }
   .ptag.pop { animation: ptag-pop 420ms cubic-bezier(.2, 1.6, .4, 1); }
   @keyframes ptag-pop { 0% { transform: scale(0.3); } 60% { transform: scale(1.45); } 100% { transform: scale(1); } }
   .name-row { display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 40px; max-width: 100%; }
@@ -493,6 +499,10 @@
   .slot.add { grid-template-columns: 1fr; justify-items: center; align-content: center; gap: 4px; color: var(--ink-dim); background: transparent; border: 1.5px dashed var(--line); }
   .slot.add svg { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; }
   .slot.add b { font-size: 14px; }
+  .slot.guest { cursor: default; border-color: #4a6a9a; }
+  .slot.join { grid-template-columns: 1fr; justify-items: center; align-content: center; gap: 6px; cursor: default; text-align: center; color: var(--ink-dim); background: transparent; border: 1.5px dashed #34405c; }
+  .slot.join b { font: 600 13px/1.3 var(--font-body); letter-spacing: 0; }
+  .slot.join .pada { width: 28px; height: 28px; display: grid; place-items: center; border-radius: 50%; font: 700 14px/1 var(--font-display); color: #0b1020; background: #7fd47f; }
   .slot-wrap { position: relative; display: grid; }
   .slot-wrap .slot { padding-right: 8px; }
   .slot-wrap .slot b { padding-right: 32px; }
@@ -816,8 +826,9 @@
     </div>
     <div class="bar-end"></div>
   </header>
-  <nav class="pages three" role="tablist" aria-label="Settings pages">
+  <nav class="pages four" role="tablist" aria-label="Settings pages">
     <button type="button" role="tab" id="pgControls" aria-controls="setControls">Controls</button>
+    <button type="button" role="tab" id="pgGamepad" aria-controls="setGamepad">Gamepad</button>
     <button type="button" role="tab" id="pgSound" aria-controls="setSound">Sound</button>
     <button type="button" role="tab" id="pgGraphics" aria-controls="setGraphics">Graphics</button>
   </nav>
@@ -846,17 +857,24 @@
         <div class="opts" id="padOpts"></div>
         <div class="sec-head"><span>Keyboard</span><button class="mini" id="resetKeys" type="button">Reset</button></div>
         <div class="opts" id="remapKeys"></div>
-        <div class="sec-head"><span>Controller</span><button class="mini" id="resetPad" type="button">Reset</button></div>
-        <p class="hint" id="padStatus" role="status"></p>
+        <p class="hint" id="keysNote" role="status" aria-live="polite"></p>
+        <p class="hint">Tap a box, then press the new key. Backspace empties it. Escape and Tab keep their own jobs.</p>
+      </section>
+      <section id="setGamepad" class="page" role="tabpanel" aria-labelledby="pgGamepad">
+        <p class="hint pad-status" id="padStatus" role="status"></p>
+        <div class="sec-head"><span>Buttons</span><button class="mini" id="resetPad" type="button">Reset</button></div>
         <div class="opts" id="remapPad"></div>
+        <p class="hint" id="remapNote" role="status" aria-live="polite"></p>
         <div class="opt-group">
           <div class="opt opt-toggle">
             <div class="opt-name"><span class="opt-label">Rumble</span><span class="opt-hint">On a knockout or a blast close by, if the controller can</span></div>
             <button class="switch-btn" id="rumbleBtn" type="button" role="switch" aria-label="Rumble"><span class="knob"></span></button>
           </div>
         </div>
-        <p class="hint" id="remapNote" role="status" aria-live="polite"></p>
-        <p class="hint">Tap a box, then press the new key or button. Moving with the stick or D-pad, Escape, and the menu buttons (A pick, B back, LB and RB pages, Y Ready, ≡ Start) stay as they are.</p>
+        <div class="sec-head"><span>In the menus</span><span></span></div>
+        <p class="hint">Stick or D-pad moves the highlight · A picks · B goes back · LB and RB turn pages · Y is Ready · ≡ starts the match or opens the menu. These stay as they are; changing buttons above changes only what they do in a round.</p>
+        <div class="sec-head"><span>Playing together</span><span></span></div>
+        <p class="hint">Each extra controller is another player on this screen: in the lobby, press A on it to join. Every controller uses the buttons above.</p>
       </section>
       <section id="setSound" class="page" role="tabpanel" aria-labelledby="pgSound">
         <div class="opts" id="soundOpts"></div>

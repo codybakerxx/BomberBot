@@ -1,5 +1,5 @@
 /**
- * Settings › Controls: changing which keys and controller buttons do what (bindings.ts).
+ * Settings › Controls (keys) and Settings › Gamepad (buttons): changing which keys and controller buttons do what (bindings.ts).
  *
  * Each action has a row of boxes, one per key or button it has (up to three keys, two buttons), and an
  * empty box to add one. Tap a box (or pick it with Enter or A) and it waits for the new key or button:
@@ -48,8 +48,11 @@ export function createRemap(input: Input, host: RemapHost): { refresh(): void; c
   let waitingFor: { kind: 'key' | 'pad'; action: string; slot: number; el: HTMLButtonElement } | null = null;
   let timer = 0;
 
+  /** which page's note to write in: the Keyboard rows are on Controls, the buttons on Gamepad */
+  let noteFor: 'key' | 'pad' = 'key';
   function say(text: string): void {
-    $('remapNote').textContent = text;
+    $(noteFor === 'key' ? 'keysNote' : 'remapNote').textContent = text;
+    $(noteFor === 'key' ? 'remapNote' : 'keysNote').textContent = '';
   }
 
   function stop(note = ''): void {
@@ -64,6 +67,7 @@ export function createRemap(input: Input, host: RemapHost): { refresh(): void; c
     // tapped again (the box may have been drawn afresh meanwhile): leave it
     if (waitingFor && waitingFor.kind === kind && waitingFor.action === action && waitingFor.slot === slot) return stop();
     clearTimeout(timer);
+    noteFor = kind;
     waitingFor = { kind, action, slot, el };
     draw();
     say(kind === 'key' ? 'Press a key. Backspace empties the box, Escape leaves it.' : 'Press a button on the controller.');
@@ -212,8 +216,9 @@ export function createRemap(input: Input, host: RemapHost): { refresh(): void; c
     const pBox = $('remapPad');
     pBox.textContent = '';
     for (const a of PAD_ACTIONS) pBox.append(row('pad', a.id, a.name, pad[a.id].map(padName), PAD_SLOTS));
-    $('padStatus').textContent = input.padConnected()
-      ? `Connected: ${input.padId.replace(/\s*\(.*\)\s*$/, '') || 'a controller'}`
+    const n = input.padCount();
+    $('padStatus').textContent = n
+      ? `Connected: ${input.padId.replace(/\s*\(.*\)\s*$/, '') || 'a controller'}${n > 1 ? `, and ${n - 1} more` : ''}`
       : 'No controller found. Connect one, then press any button on it.';
     const rb = $('rumbleBtn');
     rb.setAttribute('aria-checked', String(host.rumble()));
@@ -237,17 +242,20 @@ export function createRemap(input: Input, host: RemapHost): { refresh(): void; c
   $('resetKeys').addEventListener('click', () =>
     confirmFirst('Put the keys back?', 'Every key goes back to how it was at first: WASD or the arrows, Space, J or X, Shift, K or Z, and P.', 'Reset keys', (yes) => {
       if (yes) host.setKeys(defaultKeys());
+      noteFor = 'key';
       stop(yes ? 'Keys put back.' : '');
     }),
   );
   $('resetPad').addEventListener('click', () =>
     confirmFirst('Put the buttons back?', 'A or RT drops a bomb, B or LT lifts and throws, ≡ pauses.', 'Reset buttons', (yes) => {
       if (yes) host.setPad(defaultPad());
+      noteFor = 'pad';
       stop(yes ? 'Buttons put back.' : '');
     }),
   );
-  window.addEventListener('gamepadconnected', () => draw());
-  window.addEventListener('gamepaddisconnected', () => draw());
+  // (a moment later: the controller is read on the next frame)
+  window.addEventListener('gamepadconnected', () => setTimeout(draw, 100));
+  window.addEventListener('gamepaddisconnected', () => setTimeout(draw, 100));
 
   return {
     refresh: draw,

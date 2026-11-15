@@ -99,7 +99,7 @@ It uses `cloneWorld` and `step` from `sim.ts` to play moves forward. Plain-words
 
 ### `src/input.ts`: keyboard, touch and controller wiring
 
-The `Input` class listens to the keyboard, the swipe pad area and the two buttons, reads the first game controller once a frame (`pollGamepad`), and merges them. `state()` returns `{ dir, a, b }` once per tick. Keys and buttons go through the player's bindings (`setBindings`). `onDevice` reports whether a key, a controller or a touch was used last (for the hints). While Settings waits for a new key or button, `capture` gets the next press and nothing else does. `rumble` shakes the controller.
+The `Input` class listens to the keyboard, the swipe pad area and the two buttons, reads every game controller once a frame (`pollGamepad`, one `PadReader` each), and merges yours (P1's, `mineIndex`) with the rest. A controller nobody has yet asks `claim` on its first press: yours, or a new player joining in the lobby (couch play); `reader(i)` gives a joined player's controller, whose `state()` drives their robot. `state()` returns `{ dir, a, b }` once per tick. Keys and buttons go through the player's bindings (`setBindings`). `onDevice` reports whether a key, a controller or a touch was used last (for the hints). While Settings waits for a new key or button, `capture` gets the next press and nothing else does. `rumble` shakes the controller.
 
 ### `src/bindings.ts`: which keys and buttons do what
 
@@ -111,7 +111,7 @@ The actions (up, down, left, right, bomb, lift, pause), what each starts with, t
 
 ### `src/remap.ts`: changing keys and buttons
 
-Draws the Keyboard and Controller rows in Settings › Controls and does the press-to-change: waiting, swapping (asks first), emptying, Reset, Rumble.
+Draws the Keyboard rows in Settings › Controls and the Buttons rows in Settings › Gamepad, and does the press-to-change: waiting, swapping (asks first), emptying, Reset, Rumble.
 
 It also **latches**: a tap or flick that begins and ends between two ticks is remembered until the game has read it once, so nothing is missed.
 
@@ -138,7 +138,7 @@ How one robot is drawn: from the front, the back and each side, standing, walkin
 
 ### `src/lobby.ts`: the lobby
 
-`createLobby(host)` wires up the lobby's two pages (see docs/CONTROLS.md): your colour, the player cards and a CPU player's panel, the arena picture (a real arena from `createWorld`, drawn with `drawStatic` and `drawDynamic`) and the rules. It changes `host.setup` and `host.myColor` and calls `host.save()` after every change, then redraws everything (`refresh`). Colours always stay different: you cannot pick a CPU player's colour, and a CPU player's Colour choice lists only free ones.
+`createLobby(host)` wires up the lobby's two pages (see docs/CONTROLS.md): your colour, the player cards and a CPU player's panel, the arena picture (a real arena from `createWorld`, drawn with `drawStatic` and `drawDynamic`) and the rules. It changes `host.setup` and `host.myColor` and calls `host.save()` after every change, then redraws everything (`refresh`). Colours always stay different: you cannot pick a CPU player's colour, and a CPU player's Colour choice lists only free ones. Other players on this screen (`host.guests`, couch play) join with `join(pad)`, and main.ts passes their controller's presses to `guestStep`, `guestReady` and `guestBack`; their robots go after yours and before the CPU players in the world (`worldConfig`'s `guests`).
 
 ### `src/ui.ts`: the menus' controls
 

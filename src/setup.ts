@@ -22,6 +22,20 @@ export interface CpuSlot {
 }
 
 /**
+ * Another player on this screen, with a controller of their own (couch play). They join in the lobby by
+ * pressing A on it, and are not saved: they join again each time the game is opened.
+ */
+export interface Guest {
+  /** the browser's number for their controller */
+  pad: number;
+  /** the robot they play as */
+  colorId: string;
+  /** the robot they are looking at in the lobby; theirs once they press Ready */
+  pick: string;
+  ready: boolean;
+}
+
+/**
  * The arenas to choose from: the same build in three sizes. Classic is the one the game has always had.
  * Each brings its own round length and closing-in speed (an index into CLOSE_IN), put in whenever it is
  * picked in the lobby and changeable after: the owner's choices, scaled to the arena's size. Compact: 1:00
@@ -153,9 +167,9 @@ export function arenaOf(s: MatchSetup): (typeof ARENAS)[number] {
 }
 
 /** The size the arena is played at: as chosen, or two tiles bigger each way with more than GROW_AFTER players. */
-export function arenaSize(s: MatchSetup): { cols: number; rows: number; grown: boolean } {
+export function arenaSize(s: MatchSetup, guests = 0): { cols: number; rows: number; grown: boolean } {
   const a = arenaOf(s);
-  const grown = s.cpus.length + 1 > GROW_AFTER;
+  const grown = s.cpus.length + 1 + guests > GROW_AFTER;
   return { cols: a.cols + (grown ? 2 : 0), rows: a.rows + (grown ? 2 : 0), grown };
 }
 
@@ -165,14 +179,14 @@ export function itemChances(s: MatchSetup): [ItemKind, number][] {
   return ITEM_CHANCE.map(([k, c]) => [k, c * ITEM_AMOUNTS[s.items[k]].times]);
 }
 
-/** The config sim.ts builds a round from: you first, then the CPU players in their lobby order. */
-export function worldConfig(s: MatchSetup, myColor: string, seed: number): WorldConfig {
-  const size = arenaSize(s);
+/** The config sim.ts builds a round from: you first, then the other players on this screen, then the CPU players in their lobby order. */
+export function worldConfig(s: MatchSetup, myColor: string, seed: number, guests: string[] = []): WorldConfig {
+  const size = arenaSize(s, guests.length);
   return {
     seed,
     cols: size.cols,
     rows: size.rows,
-    players: [{ colorId: myColor }, ...s.cpus.map((c) => ({ colorId: c.colorId }))],
+    players: [{ colorId: myColor }, ...guests.map((colorId) => ({ colorId })), ...s.cpus.map((c) => ({ colorId: c.colorId }))],
     softDensity: BRICKS[s.bricks].density,
     roundTicks: s.timerOn ? s.roundSecs * TICK_HZ : 0,
     shrinkTicks: CLOSE_IN[s.closeIn].secs * TICK_HZ,
@@ -189,9 +203,9 @@ export function clockText(secs: number): string {
 }
 
 /** One line saying what the match is: shown at the top of the lobby and in the in-match menu. */
-export function summary(s: MatchSetup): string {
+export function summary(s: MatchSetup, guests = 0): string {
   const parts = [
-    `${s.cpus.length + 1} players`,
+    `${s.cpus.length + 1 + guests} players`,
     `${arenaOf(s).name} arena`,
     s.timerOn ? `${clockText(s.roundSecs)} rounds` : 'No timer',
     `First to ${s.firstTo}`,
@@ -201,9 +215,9 @@ export function summary(s: MatchSetup): string {
   return parts.join(' · ');
 }
 
-/** Can this setup be played? It needs at least one CPU player, and if the power-up mix is custom it must still fit. */
-export function problem(s: MatchSetup): string {
-  if (s.cpus.length === 0) return 'Add at least one CPU player to play against.';
+/** Can this setup be played? It needs someone to play against: a CPU player, or another player on this screen. */
+export function problem(s: MatchSetup, guests = 0): string {
+  if (s.cpus.length + guests === 0) return 'Add a CPU player, or press A on another controller, to have someone to play against.';
   return '';
 }
 
