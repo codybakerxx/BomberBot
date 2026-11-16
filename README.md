@@ -28,7 +28,7 @@ Working today:
 - A round timer (1 minute 30 unless the lobby says otherwise): when it reaches zero, blocks fall round the edge and inward for 50 seconds, leaving a 5 by 5 square in the middle to fight it out in
 - A scoreboard of four heads beside the timer that counts the rounds each player has won, with a crown for whoever is in the lead
 - A knock-out that burns the bot to ash while its ghost floats away, and a winner that does the victory dance they picked (Party, Spin or the Wave)
-- A title screen: your robot in your colour, waving, with two rivals and a lit bomb, and a choice of Local or Online (online is coming)
+- A title screen: your robot in your colour, waving, with two rivals and a lit bomb, and a choice of Local or Online
 - A lobby to set up a match: your colour, the CPU players, the arena (three sizes), and the rules: round timer and how fast the blocks close in, rounds to win the match, bricks, what everyone starts with, and how often each power-up turns up
 - Settings of your own: controls, sound (volume, and a switch for each sound) and graphics
 - A menu during a match that says what is going on, with Resume, Settings, Restart (the whole match again) and Leave to the lobby (those last two ask first)
@@ -37,7 +37,9 @@ Working today:
 - Lives per round; and out of lives, play on as an angel throwing bombs in from the wall, or as a zombie in the arena
 - Sound effects
 
-Not built yet: teams and playing online. The plan is in [docs/ROADMAP.md](docs/ROADMAP.md).
+- Online play with friends by room code, at https://bomberbot.bomberbot.workers.dev ([docs/ONLINE.md](docs/ONLINE.md))
+
+Not built yet: teams. The plan is in [docs/ROADMAP.md](docs/ROADMAP.md).
 
 ## How to play
 
@@ -129,7 +131,7 @@ CLAUDE.md       notes for working on this project with Claude
 ## How it is made
 
 - TypeScript, drawn on an HTML canvas. No game engine and no image or sound files.
-- The game rules are kept completely apart from drawing and input, so they can be tested without a browser and later run on a server for online play.
+- The game rules are kept completely apart from drawing and input, so they can be tested without a browser and run on the server for online play.
 - The build produces a single HTML file of about 70 KB.
 - Directed and playtested by codybakerxx. The code is written with Claude, Anthropic's AI.
 

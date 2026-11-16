@@ -38,6 +38,12 @@ export interface Guest {
   ready: boolean;
   /** their victory dance (dances.ts), changed with up and down on their controller */
   dance: DanceId;
+  /**
+   * Online, the other people in the room are shown as guests too, with this: their typed name ('' for the
+   * robot's), their P-number, whether they are connected, and whether they host. They are changed only by the
+   * server; `pad` is then a made-up negative number that no controller has.
+   */
+  remote?: { name: string; p: number; on: boolean; host: boolean };
 }
 
 /**

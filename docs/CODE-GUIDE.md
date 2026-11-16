@@ -27,7 +27,9 @@ flowchart LR
 - **Audio** plays a sound for each thing the rules report happened.
 - **main.ts** owns the loop that drives all of this, plus everything about the page.
 
-Keeping the rules apart is the most important decision in the project. It is why the rules can be tested without a browser, and it is what will let the same file run on a server for online play.
+Keeping the rules apart is the most important decision in the project. It is why the rules can be tested without a browser, and it is what lets the same file run on the server for online play (below, and `docs/ONLINE.md`).
+
+**Online**, the loop is the same except where the inputs come from: the server (`room.ts`, run by `worker.ts` on Cloudflare) steps its own world and the CPU players, and sends every page each tick's inputs for every player. `online.ts` hands them to `advance()` in `main.ts` at 60 a second, which steps the page's world exactly as `tick()` does. What you press goes to the server instead of straight into `step`.
 
 ## One frame, step by step
 
@@ -178,7 +180,7 @@ Everything that ties the game to the page:
 - the fixed-rate loop (`frame`, `tick`)
 - sizing the arena and controls to the screen (`layout`)
 - the round timer at the top (`drawTimer`)
-- the title screen, where the game opens: showing it (`showTitle`), drawing it each frame instead of the arena (`renderTitle`, with the picture from `title.ts`), and leaving it for the lobby (`leaveTitle`, from Local; Online is switched off in `page.html` until online play is built). The lobby's back button goes back to it
+- the title screen, where the game opens: showing it (`showTitle`), drawing it each frame instead of the arena (`renderTitle`, with the picture from `title.ts`), and leaving it for the lobby (`leaveTitle`, from Local; Online opens `#onlineSheet`, see Online play above). The lobby's back button goes back to it
 - the lobby's host (`lobbyHost`, handed to `createLobby` in `lobby.ts`) and opening it (`showLobby`): it holds `setup` and `myColor`, and saves them
 - the match: `newMatch` (score to 0, round 1), `start` (the next round), `resume`, `watch`, the score (`wins`, `roundNo`, `matchWinner`; `setup.firstTo` wins take the match) and the result panel (`finish`). A round's players, colours and levels are set in `newWorld`, from the setup, and nowhere else
 - the menu during a match (`openPause`, `showPause`, `fillPause`, `closePause`), and its Restart (the whole match, `newMatch`) and Leave to the lobby, which ask first (`confirmFirst` in `ui.ts`)
@@ -192,13 +194,22 @@ Everything that ties the game to the page:
 
 It holds no game rules.
 
+### Online play: `src/net.ts`, `src/room.ts`, `src/worker.ts`, `src/online.ts`
+
+- `net.ts` (pure, shared by page and server): the messages each way, a player's input in five bits and a tick's inputs as one character each, the world checksum (`worldHash`), the whole world as plain data (`encodeWorld`, `decodeWorld`), room codes and names.
+- `room.ts` (the server's decisions, with no network or clock of its own, so `tests/room.test.ts` plays rooms through): joining by code, robots staying different, the host's setup and buttons, starting a match (people in joining order, then CPU players: `seats`), stepping the round to the time (`advance`), counting wins, dropped connections and a host handing on (`housekeep`).
+- `worker.ts`: the Cloudflare side. Requests for `/api/room/CODE` go to that code's Durable Object (`RoomDO`), which holds a `Room`, turns WebSocket messages into calls on it, and runs two clocks: the round's (every 16 ms while one is played) and a tidying one (every 4 s). Everything else is the game page (`env.ASSETS`).
+- `online.ts`: the page's connection (`Online`): making or joining, trying again after a drop, the round's ticks played out smoothly (`playout`), checksums compared, and asking for the whole world when they differ.
+- In `main.ts`: `joinOnline`, `onRoom` (the room's people become the lobby's `guests`, with `remote` set), `onRound` (a round or a whole world from the server), `leaveOnline`; `net`, `seats` and `meIdx` (your place: player 0 is you only on this screen), `couch()`, `human()`, `nameOf()`; `advance()` is the half of a tick that does not read input; `announce()` writes the result.
+- In `lobby.ts`: `host.online()` says whether you are in a room and whether you host; the Match page and the CPU players are then read-only for the others (`canEdit`).
+
 ### `src/page.html`: the page
 
 The markup and all the styles. A comment at the top lists every element by id. `build.mjs` pastes the compiled code in at the `/*__BUNDLE__*/` marker.
 
 Classes on `<body>` drive the layout: `touch` (show the on-screen controls) and `portrait` (phone held upright), both set by `layout()` in `main.ts`; `righty` (the right thumb steers, so the controls are mirrored), set by `applySettings()`; `menu-open` (hide the Menu button and top strip while a menu screen is open), set by `showLobby()`, `showSettings()` and `showPause()`; `calm` (no animation in the menus), set by `applyPrefs()`; and `title-open` (hide everything of the game screen under the title), set by `showTitle()`.
 
-Every canvas is made for the screen's size and pixel density at the moment `layout()` runs. A phone can change its pixel density without a resize event (the Claude app can open the page at density 1 and correct it a moment later), which left the whole game blurry until the next resize. So `keepSharp()` checks size and density every frame and lays the page out again when either has changed; the lobby's robots are redrawn when the density changes. The density used is the phone's own (less if Settings › Graphics › Sharpness asks for it), capped at 4 (`MAX_DENSITY`, `density()`): it was capped at 3, and a phone whose page is zoomed reports more than 3, which drew the arena, robots and power-ups stretched and blurry while the page's text stayed sharp. That was the blur the owner saw, and lifting the cap fixed it on his phone.
+Every canvas is made for the screen's size and pixel density at the moment `layout()` runs. A phone can change its pixel density without a resize event (the Claude app can open the page at density 1 and correct it a moment later), which left the whole game blurry until the next resize. So `keepSharp()` checks size and density every frame and lays the page out again when either has changed; the lobby's robots are redrawn when the density changes. The density used is the phone's own (less if Settings › Graphics › Sharpness asks for it), capped at 6 (`MAX_DENSITY`, `density()`; it was 3, then 4): a phone whose page is zoomed reports more, which drew the arena, robots and power-ups stretched and blurry while the page's text stayed sharp. That was the blur the owner saw, and lifting the cap fixed it on his phone.
 
 ### `build.mjs`: the build
 
@@ -233,13 +244,14 @@ Bundles `src/main.ts` with esbuild, pastes it into `src/page.html`, and writes `
 
 ## Tests
 
-`npm test` runs four files through `tests/index.ts`. Each is a plain script: it builds a situation, runs it, and asserts what must be true. The first failure stops with an error; reaching "all checks passed" means everything held.
+`npm test` runs the files below through `tests/index.ts`. Each is a plain script: it builds a situation, runs it, and asserts what must be true. The first failure stops with an error; reaching "all checks passed" means everything held.
 
 | File | Covers |
 |---|---|
 | `tests/rules.test.ts` | The arena, walking and stopping, which way the robot looks, bombs and blasts, power-ups, chain reactions, kicking, lifting and throwing, winning, turning at openings, repeatability from a seed, and 45,000 ticks of random play that must never leave a robot inside a block or jittering |
 | `tests/swipe.test.ts` | The pad: when a stroke starts, wiggles, drift and bounce-back ignored, turns and reverses mid-swipe, leaning swipes read correctly from every starting direction, the stroke reports Match my thumb relies on, a separate aim per direction |
 | `tests/teach.test.ts` | Measuring a lean, averaging, rejecting scattered swipes, the three-quarters rule and its limits, the two candidate settings, that a straight swipe always keeps 20° of room, judging test swipes, and choosing the winner |
+| `tests/room.test.ts` | Online rooms: codes, joining and refusing, robots kept different, only the host setting up and starting, a match played through with every page's world checked against the server's, a quick tap of A not lost, a dropped page coming back mid-round, only the host moving on or restarting, a host handing on |
 | `tests/bot.test.ts` | The CPU players: the danger map and chain reactions, slow levels noticing bombs late, that thinking never changes the world, no bomb without a way out, every level surviving two minutes in a full arena, every level finding and beating a player who stands still, and repeatability |
 
 To add a check, copy a block in the nearest file and change what it sets up and what it asserts.
@@ -258,5 +270,5 @@ There are no automatic browser tests. The game has been checked in a phone-sized
 |---|---|
 | More than four players, bigger arenas | `spawnPoints` and `createWorld` in `sim.ts`. The arena size is already a setting (`cols`, `rows`). |
 | Teams | A team field on `Player`, and the win check at the end of `step`. |
-| Online play | A small server runs `sim.ts` and is the authority. Each phone sends its `PlayerInput` and draws the world it is sent. The purity rules above are what make this possible. |
+| Online: smoother own movement | Step your own robot ahead of the server's ticks on a copy of the world (`cloneWorld`) and put it right as they arrive (`playout` in `online.ts`). |
 | Menus for characters, levels and custom items | `page.html` and `main.ts`. |

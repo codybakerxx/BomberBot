@@ -24,6 +24,8 @@ import { createRemap } from './remap';
 import { Guest, MatchSetup, Prefs, SHARPNESS, SOUND_NAMES, arenaOf, clockText, defaultSetup, load, readPrefs, readSetup, save, summary, worldConfig } from './setup';
 import { Opt, answerConfirm, choice, confirmFirst, confirmOpen, heading, mount, note, slider, toggle, wireConfirm, wireFlash } from './ui';
 import { Hand, STRAIGHT, standardAims, uniformAims } from './swipe';
+import { Online } from './online';
+import { decodeWorld, packInput, readCode, unpackInput, type Score, type Seat, type ServerMsg } from './net';
 import {
   TEACH_ORDER,
   TEST_ORDER,
@@ -255,16 +257,35 @@ const input = new Input();
  * round, after you and before the CPU players. They join in the lobby (lobby.ts) and are not saved.
  */
 const guests: Guest[] = [];
-/** Is player i one of the people here (you or a guest), not a CPU player? */
-const human = (i: number): boolean => i <= guests.length;
+// ---------------------------------------------------------------- online (online.ts, docs/ONLINE.md)
+/** The online room this page is in, or null when playing on this screen. */
+let net: Online | null = null;
+/** Online: who is in each place of the round (a person or a CPU player), from the server. */
+let seats: Seat[] = [];
+/** Online: your place in the round. On this screen you are always player 0. */
+let meIdx = 0;
+/** Online: a round is being played out from the server's ticks (from its start until back in the lobby). */
+let netRound = false;
+/** Your own setup and robot on this screen, kept aside while in an online room (the host's are used there). */
+let stash: { setup: MatchSetup; color: string } | null = null;
+/** Your place in the round: player 0 on this screen, wherever the server put you online. */
+const myIdx = (): number => (net ? meIdx : 0);
+/** Other players on this screen with controllers (couch play), not online. */
+const couch = (): boolean => !net && guests.length > 0;
+/** How many of the round's players are people (the CPU players come after them). */
+const peopleCount = (): number => (net ? seats.filter((x) => x.member !== null).length : 1 + guests.length);
+
+/** Is player i one of the people here (you or a guest), not a CPU player? Online: any person in the room. */
+const human = (i: number): boolean => (net ? !!seats[i] && seats[i].member !== null : i <= guests.length);
 /** The victory dance player i picked in the lobby: yours, a guest's, or a CPU player's (Party if none). */
 function danceOf(i: number): DanceId {
+  if (net) return seats[i]?.dance ?? 'party';
   if (i === 0) return myDance;
   if (i <= guests.length) return guests[i - 1].dance;
   return setup.cpus[i - 1 - guests.length]?.dance ?? 'party';
 }
 /** The controller playing player i (you or a guest), if there is one. */
-const padOf = (i: number): PadReader | null => (i === 0 ? input.mine() : guests[i - 1] ? input.reader(guests[i - 1].pad) : null);
+const padOf = (i: number): PadReader | null => (net ? (i === meIdx ? input.mine() : null) : i === 0 ? input.mine() : guests[i - 1] ? input.reader(guests[i - 1].pad) : null);
 input.attachKeyboard(window);
 input.attachDpad($('dzone'), $('dpad'));
 input.attachButton($('btnA'), 'a');
@@ -579,9 +600,20 @@ function finish(title: string, text: string): void {
   const done = matchWinner >= 0;
   $('again').textContent = done ? 'Rematch' : 'Next round';
   $('change').textContent = done ? 'Lobby' : 'Menu';
+  $('again').hidden = false;
+  if (net) {
+    // online the round is played out, and only the host moves everyone on
+    const decided = !!world.over;
+    $('again').hidden = !net.isHost || !decided;
+    $('change').textContent = done && net.isHost ? 'Lobby' : 'Menu';
+    if (decided && !net.isHost) {
+      $('resultText').textContent = `${text ? text + ' ' : ''}${hostName()} starts the ${done ? 'rematch' : 'next round'}.`;
+      $('resultText').hidden = false;
+    }
+  }
   if (result.hidden) {
     result.hidden = false;
-    $('again').focus({ preventScroll: true });
+    ($('again').hidden ? $('change') : $('again')).focus({ preventScroll: true });
   }
 }
 
@@ -594,23 +626,37 @@ function scoreLine(): string {
  * players here, "You" would not say who, so the people here are named with their P-number: "Auric (P1)".
  */
 function nameOf(i: number): string {
+  if (net) {
+    // online: you are You; the others by the name they typed, or their robot's
+    if (i === meIdx) return 'You';
+    return seats[i]?.name || botName(colorById(world.players[i].colorId));
+  }
   if (i === 0 && !guests.length) return 'You';
   const name = i === 0 ? myName || botName(colorById(world.players[0].colorId)) : botName(colorById(world.players[i].colorId));
   return human(i) ? `${name} (P${i + 1})` : name;
 }
 
-/** One step of the game rules: read the input, advance the world, play its sounds, check for the end. */
+/** One step of the game rules on this screen: read the input, then advance (below). */
 function tick(): void {
-  // player 0 is you; players 1 to 3 are CPU players, which are asked for the same thing your controls give.
-  // Once the round is decided nobody is asked for anything: the winner celebrates and the rest is over.
+  // player 0 is you; then the other players here; then the CPU players, which are asked for the same thing
+  // your controls give. Once the round is decided nobody is asked for anything: the winner celebrates.
   const inputs: (PlayerInput | undefined)[] = [];
   if (!world.over) {
     inputs[0] = input.state();
     guests.forEach((g, i) => (inputs[i + 1] = input.reader(g.pad)?.state()));
     for (const b of bots) inputs[b.id] = botInput(world, b);
   }
+  advance(inputs);
+}
+
+/**
+ * Advance the world one tick with these inputs, play its sounds, and check for the end. On this screen the
+ * inputs come from tick(); online, from the server (every player's, yours included: online.ts).
+ */
+function advance(inputs: (PlayerInput | undefined)[]): void {
   step(world, inputs);
-  const me = world.players[0];
+  const mi = myIdx();
+  const me = world.players[mi];
   for (const e of world.events) {
     if (e.type === 'place') sfx.place();
     else if (e.type === 'explode') {
@@ -634,20 +680,21 @@ function tick(): void {
     else if (e.type === 'rise') sfx.curse(); // a zombie gets up
     else if (e.type === 'death') {
       sfx.death();
-      if (e.player === 0 && e.out) blastedBy = e.cause === 'block' ? CRUSHED : e.by;
+      if (e.player === mi && e.out) blastedBy = e.cause === 'block' ? CRUSHED : e.by;
       if (prefs.rumble && human(e.player)) padOf(e.player)?.rumble(1, 0.7, 380); // a strong shake: you are out
     }
   }
   // out of lives and an angel now (or the first time someone here is): say how angels play, once a match
-  const firstZombie = world.players.findIndex((p, i) => human(i) && p.zombie && p.alive);
+  // (online, only for your own robot)
+  const firstZombie = world.players.findIndex((p, i) => (net ? i === mi : human(i)) && p.zombie && p.alive);
   if (firstZombie >= 0 && !angelTipShown) {
     angelTipShown = true;
-    showTip(guests.length ? `${nameOf(firstZombie)}: a zombie! Small bombs only` : 'You are a zombie! Drop small bombs in their way');
+    showTip(couch() ? `${nameOf(firstZombie)}: a zombie! Small bombs only` : 'You are a zombie! Drop small bombs in their way');
   }
-  const firstAngel = world.players.findIndex((p, i) => human(i) && p.angel && world.tick >= p.angelFrom);
+  const firstAngel = world.players.findIndex((p, i) => (net ? i === mi : human(i)) && p.angel && world.tick >= p.angelFrom);
   if (firstAngel >= 0 && !angelTipShown) {
     angelTipShown = true;
-    showTip(guests.length ? `${nameOf(firstAngel)}: an angel! Slide the wall, hold A to throw` : 'You are an angel! Slide the wall, hold A to throw');
+    showTip(couch() ? `${nameOf(firstAngel)}: an angel! Slide the wall, hold A to throw` : 'You are an angel! Slide the wall, hold A to throw');
   }
   // the moment the first block starts to fall
   if (world.shrinkNext === 1 && world.falling.length === 1 && !hurried) {
@@ -655,9 +702,6 @@ function tick(): void {
     sfx.hurry();
   }
 
-  const who = world.players[blastedBy];
-  const crushed = blastedBy === CRUSHED;
-  const how = crushed ? 'A falling block landed on you.' : !who || who === me ? 'Caught in your own blast.' : `Caught in ${botName(colorById(who.colorId))}'s blast.`;
   if (world.over && !counted) {
     // The round is decided: one more win on the scoreboard (none for a draw), and the result.
     counted = true;
@@ -670,24 +714,43 @@ function tick(): void {
       sfx.win();
       if (wins[winner] >= setup.firstTo) matchWinner = winner;
     }
-    if (guests.length) {
-      // several people here: say who, by name and P-number
-      if (matchWinner >= 0) finish(`${nameOf(matchWinner)} wins the match`, `First to ${setup.firstTo}. Final score ${scoreLine()}.`);
-      else if (winner >= 0) finish(`${nameOf(winner)} wins the round`, `${wins[winner]} of ${setup.firstTo} to win the match.`);
-      else finish('Draw', 'Nobody was left standing.');
-    } else if (matchWinner === 0) finish('You win the match', `First to ${setup.firstTo}. Final score ${scoreLine()}.`);
-    else if (matchWinner > 0) finish(`${nameOf(matchWinner)} wins the match`, `First to ${setup.firstTo}. Final score ${scoreLine()}.${me.alive ? '' : ' ' + how}`);
-    else if (winner === 0) finish('You win the round', `Last bot standing. ${wins[0]} of ${setup.firstTo} to win the match.`);
-    else if (winner > 0) finish(`${nameOf(winner)} wins the round`, me.alive ? '' : how);
-    else finish('Draw', me.alive ? 'Nobody was left standing.' : `${how} Nobody was left standing.`);
-  } else if (!world.over && !overShown && guests.length && world.players.every((p, i) => !human(i) || (!p.alive && p.lives === 0 && !p.angel && !p.zombie && p.deadTicks >= DEATH_TICKS))) {
+    announce();
+  } else if (!world.over && !overShown && couch() && world.players.every((p, i) => !human(i) || (!p.alive && p.lives === 0 && !p.angel && !p.zombie && p.deadTicks >= DEATH_TICKS))) {
     // everyone here is out and CPU players are still at it, as below
     finish('Everyone here is out', 'The CPU players are still fighting. Next round gives this round to one of them at random.');
-  } else if (!world.over && !overShown && !guests.length && !me.alive && me.lives === 0 && !me.angel && !me.zombie && me.deadTicks >= DEATH_TICKS) {
+  } else if (!world.over && !overShown && !couch() && !me.alive && me.lives === 0 && !me.angel && !me.zombie && me.deadTicks >= DEATH_TICKS) {
     // You are out and the others are still at it. The round carries on behind this panel, and its
-    // winner still gets the win; Next round does not wait for it.
-    finish(crushed ? 'You got crushed' : 'You got blasted', `${how} The others are still fighting. Next round gives this round to one of them at random.`);
+    // winner still gets the win. On this screen Next round does not wait for it; online it is played out.
+    finish(
+      blastedBy === CRUSHED ? 'You got crushed' : 'You got blasted',
+      `${howOut()} The others are still fighting. ${net ? 'The last robot standing wins the round.' : 'Next round gives this round to one of them at random.'}`,
+    );
   }
+}
+
+/** How you were knocked out, for the result panel. */
+function howOut(): string {
+  const me = world.players[myIdx()];
+  const who = world.players[blastedBy];
+  return blastedBy === CRUSHED ? 'A falling block landed on you.' : !who || who === me ? 'Caught in your own blast.' : `Caught in ${nameOf(blastedBy) === 'You' ? botName(colorById(who.colorId)) : nameOf(blastedBy)}'s blast.`;
+}
+
+/** The result panel for a decided round (the score already counted). */
+function announce(): void {
+  const mi = myIdx();
+  const me = world.players[mi];
+  const winner = world.over ? world.over.winner : -1;
+  const how = howOut();
+  if (couch()) {
+    // several people here: say who, by name and P-number
+    if (matchWinner >= 0) finish(`${nameOf(matchWinner)} wins the match`, `First to ${setup.firstTo}. Final score ${scoreLine()}.`);
+    else if (winner >= 0) finish(`${nameOf(winner)} wins the round`, `${wins[winner]} of ${setup.firstTo} to win the match.`);
+    else finish('Draw', 'Nobody was left standing.');
+  } else if (matchWinner === mi) finish('You win the match', `First to ${setup.firstTo}. Final score ${scoreLine()}.`);
+  else if (matchWinner >= 0) finish(`${nameOf(matchWinner)} wins the match`, `First to ${setup.firstTo}. Final score ${scoreLine()}.${me.alive ? '' : ' ' + how}`);
+  else if (winner === mi) finish('You win the round', `Last bot standing. ${wins[mi]} of ${setup.firstTo} to win the match.`);
+  else if (winner >= 0) finish(`${nameOf(winner)} wins the round`, me.alive ? '' : how);
+  else finish('Draw', me.alive ? 'Nobody was left standing.' : `${how} Nobody was left standing.`);
 }
 
 let last = performance.now();
@@ -701,7 +764,12 @@ function frame(now: number): void {
   input.pollGamepad(); // the controllers: their sticks and buttons, for the round and the menus
   padNav.step(now, mode !== 'playing');
   guestPads();
-  if (mode === 'playing' || mode === 'over') {
+  if (net && netRound) {
+    // online: what you press goes to the server (nothing while a menu is open), and the round moves on as
+    // the server's ticks come in, whatever screen is showing: nobody can pause it
+    net.sendInput(mode === 'playing' ? packInput(input.state()) : 0);
+    net.playout(dt);
+  } else if (mode === 'playing' || mode === 'over') {
     acc += dt;
     const stepLen = 1 / TICK_HZ;
     let n = 0;
@@ -1031,12 +1099,24 @@ function hideScreens(): void {
   $('pause').hidden = true;
   result.hidden = true;
   teach.hidden = true;
+  $('onlineSheet').hidden = true;
   document.body.classList.remove('menu-open');
 }
 
 // ------------------------------------------------ the lobby (lobby.ts)
 
 const lobbyHost: LobbyHost = {
+  online() {
+    if (!net) return null;
+    const mine = net.members.find((m) => m.id === net!.me);
+    return {
+      code: net.code,
+      host: net.isHost,
+      hostName: hostName(),
+      myP: net.members.findIndex((m) => m.id === net!.me) + 1,
+      waiting: net.playing && !mine?.playing,
+    };
+  },
   get setup() {
     return setup;
   },
@@ -1051,6 +1131,7 @@ const lobbyHost: LobbyHost = {
   },
   set myName(v: string) {
     myName = v;
+    if (net) net.meChanged(myColor, lobby.isReady(), myDance, myName);
     try {
       localStorage.setItem('playerName', v);
     } catch {
@@ -1067,6 +1148,18 @@ const lobbyHost: LobbyHost = {
     myDance = v;
   },
   save(): void {
+    if (net) {
+      // online: your robot, Ready and dance go to the room; the setup too if you host. Your own setup on
+      // this screen is kept as it was.
+      net.meChanged(myColor, lobby.isReady(), myDance, myName);
+      if (net.isHost) net.send({ t: 'setup', setup });
+      try {
+        localStorage.setItem('myDance', myDance);
+      } catch {
+        /* storage is optional */
+      }
+      return;
+    }
     save('matchSetup', setup);
     try {
       localStorage.setItem('botColor', myColor);
@@ -1078,8 +1171,13 @@ const lobbyHost: LobbyHost = {
   guests,
   controllers: () => (navigator.getGamepads?.() ?? []).filter((g) => g && g.connected).length,
   density,
-  start: () => newMatch(),
-  back: () => showTitle(),
+  start: () => (net ? net.send({ t: 'start' }) : newMatch()),
+  back: () => {
+    if (!net) return showTitle();
+    confirmFirst('Leave the room?', 'You leave this online room. To come back, join again with its code.', 'Leave', (yes) => {
+      if (yes) leaveOnline();
+    });
+  },
   settings: (tab) => showSettings(tab, 'lobby'),
 };
 const lobby = createLobby(lobbyHost);
@@ -1164,12 +1262,20 @@ function closePause(): void {
 }
 function fillPause(): void {
   const done = matchWinner >= 0;
-  $('pauseState').textContent = roundLive ? 'Paused' : done ? 'Match over' : world.over ? 'Round over' : 'You are out';
+  $('pauseState').textContent = roundLive ? (net ? 'Playing' : 'Paused') : done ? 'Match over' : world.over ? 'Round over' : 'You are out';
+  // online: the room's code, the round goes on behind the menu, and only the host restarts or ends the match
+  $('pauseMode').textContent = net ? `Online · ${net.code}` : 'Local match';
+  const hosting = !net || net.isHost;
+  $('pauseHostLine').textContent = hosting ? 'Match · you are the host' : `Match · ${hostName()} is the host`;
+  $('pauseRestart').hidden = !hosting;
+  $('pauseLobby').hidden = !hosting;
+  $('pauseLobby').textContent = net ? 'End match' : 'Leave to the lobby';
+  $('pauseLeave').hidden = !net;
   $('pauseTitle').textContent = done ? `${nameOf(matchWinner)} won the match` : `Round ${roundNo}`;
   const left = ticksLeft(world);
   const time = world.over || left === Infinity ? '' : left > 0 ? ` · ${clockText(Math.ceil(left / TICK_HZ))} left` : ' · Blocks falling';
   $('pauseInfo').textContent = `${summary(setup, guests.length)}${time}`;
-  $('pauseResume').textContent = roundLive ? 'Resume' : 'Back to the round';
+  $('pauseResume').textContent = roundLive && !net ? 'Resume' : 'Back to the round';
   const list = $('standings');
   list.textContent = '';
   const dpr = density();
@@ -1182,10 +1288,19 @@ function fillPause(): void {
     if (i === leader) drawHead(cv.getContext('2d')!, cv.width / 2, cv.height / 2, cv.width * 0.42, col, { crownOnly: true });
     const who = document.createElement('div');
     const name = document.createElement('b');
-    name.textContent = i === 0 ? myName || 'You' : botName(col);
+    // (names typed by people: set as text, never as markup)
+    name.textContent = i === myIdx() ? myName || 'You' : net && human(i) ? seats[i]?.name || botName(col) : botName(col);
     const sub = document.createElement('small');
-    sub.textContent =
-      i === 0 ? `P1 · you` : human(i) ? `P${i + 1} · controller ${guests[i - 1].pad + 1}` : `P${i + 1} · CPU · ${LEVELS[setup.cpus[i - 1 - guests.length]?.level ?? 'normal'].label}`;
+    const cpuLevel = (): string => `P${i + 1} · CPU · ${LEVELS[setup.cpus[i - peopleCount()]?.level ?? 'normal'].label}`;
+    sub.textContent = net
+      ? human(i)
+        ? `P${i + 1}${i === meIdx ? ' · you' : ''}${seats[i]?.member === net.host ? ' · host' : ''}${net.members.find((m) => m.id === seats[i]?.member)?.on === false ? ' · away' : ''}`
+        : cpuLevel()
+      : i === 0
+        ? `P1 · you`
+        : human(i)
+          ? `P${i + 1} · controller ${guests[i - 1].pad + 1}`
+          : cpuLevel();
     who.append(name, sub);
     const st = document.createElement('span');
     const won = world.over && world.over.winner === i;
@@ -1204,13 +1319,29 @@ $('menuBtn').addEventListener('click', openPause);
 $('pauseResume').addEventListener('click', closePause);
 $('pauseSettings').addEventListener('click', () => showSettings(undefined, 'pause'));
 $('pauseRestart').addEventListener('click', () =>
-  confirmFirst('Restart the match?', 'Everyone’s score goes back to 0 and round 1 starts in a new arena, with the same players and rules.', 'Restart', (yes) => {
-    if (yes) newMatch();
-  }),
+  confirmFirst(
+    'Restart the match?',
+    `Everyone’s score goes back to 0 and round 1 starts in a new arena, with the same players and rules${net ? ', for everyone in the room' : ''}.`,
+    'Restart',
+    (yes) => {
+      if (!yes) return;
+      if (net) net.send({ t: 'restart' });
+      else newMatch();
+    },
+  ),
 );
 $('pauseLobby').addEventListener('click', () =>
-  confirmFirst('Leave to the lobby?', 'This match ends and its score is not kept. In the lobby you can change the players and the rules.', 'Leave match', (yes) => {
-    if (yes) showLobby(true);
+  net
+    ? confirmFirst('Everyone back to the lobby?', 'This match ends for everyone in the room, and its score is not kept. In the lobby you can change the players and the rules.', 'End match', (yes) => {
+        if (yes) net?.send({ t: 'lobby' });
+      })
+    : confirmFirst('Leave to the lobby?', 'This match ends and its score is not kept. In the lobby you can change the players and the rules.', 'Leave match', (yes) => {
+        if (yes) showLobby(true);
+      }),
+);
+$('pauseLeave').addEventListener('click', () =>
+  confirmFirst('Leave the room?', 'You leave this online match. Your robot stands still until the round ends. To come back, join again with the code.', 'Leave', (yes) => {
+    if (yes) leaveOnline();
   }),
 );
 /**
@@ -1238,10 +1369,256 @@ function settleUnfinished(): boolean {
 }
 // the result panel: Next round and Menu while the match goes on; Rematch and Lobby once it is won
 $('again').addEventListener('click', () => {
-  if (matchWinner >= 0) newMatch();
+  if (net) net.send({ t: 'next' }); // (the host's: the next round, or a rematch)
+  else if (matchWinner >= 0) newMatch();
   else if (settleUnfinished()) start();
 });
-$('change').addEventListener('click', () => (matchWinner >= 0 ? showLobby(true) : openPause()));
+$('change').addEventListener('click', () => {
+  if (net) {
+    if (matchWinner >= 0 && net.isHost) net.send({ t: 'lobby' });
+    else openPause();
+  } else if (matchWinner >= 0) showLobby(true);
+  else openPause();
+});
+
+
+// ------------------------------------------------ online play (online.ts, net.ts; docs/ONLINE.md)
+
+/**
+ * Where the online server is. The page normally comes from it (its web address); opened as a file, or from
+ * a local test server without one, it uses the game's own address on Cloudflare.
+ */
+const SERVER = 'bomberbot.bomberbot.workers.dev';
+const serverHost = (): string => (location.protocol === 'http:' || location.protocol === 'https:' ? location.host : SERVER);
+/** The link that opens the game straight into a room. */
+const roomLink = (code: string): string => `${location.protocol === 'http:' ? 'http:' : 'https:'}//${serverHost()}/?room=${code}`;
+
+/** The host's name as shown: You, the name they typed, or their robot's. */
+function hostName(): string {
+  if (!net) return 'You';
+  if (net.isHost) return 'You';
+  const h = net.members.find((m) => m.id === net!.host);
+  return h ? h.name || botName(colorById(h.colorId)) : 'The host';
+}
+
+const netNote = $('netNote');
+let netNoteTimer = 0;
+/** A line at the top about the connection: "Reconnecting…" until it is back, or a short note for a while. */
+function sayNet(text: string, ms = 0): void {
+  clearTimeout(netNoteTimer);
+  netNote.textContent = text;
+  netNote.hidden = !text;
+  if (text && ms) netNoteTimer = window.setTimeout(() => (netNote.hidden = true), ms);
+}
+
+/** The panel over the title: make a room, or join one with a code. */
+function openOnlineSheet(code = '', note = ''): void {
+  $('onlineSheet').hidden = false;
+  ($('onlineCode') as HTMLInputElement).value = code;
+  $('onlineNote').textContent = note;
+  setOnlineBusy(false);
+  ($(code ? 'onlineJoin' : 'onlineMake') as HTMLButtonElement).focus({ preventScroll: true });
+}
+function closeOnlineSheet(): void {
+  if (net) {
+    net.leave();
+    net = null;
+  }
+  $('onlineSheet').hidden = true;
+  $('titleOnline').focus({ preventScroll: true });
+}
+function setOnlineBusy(busy: boolean): void {
+  for (const id of ['onlineMake', 'onlineJoin', 'onlineCode']) ($(id) as HTMLButtonElement).disabled = busy;
+}
+$('titleOnline').addEventListener('click', () => {
+  initAudio();
+  openOnlineSheet();
+});
+$('onlineMake').addEventListener('click', () => joinOnline(null));
+$('onlineJoin').addEventListener('click', () => {
+  const code = readCode(($('onlineCode') as HTMLInputElement).value);
+  if (!code) {
+    $('onlineNote').textContent = 'A room code is four letters, like BKTW.';
+    return;
+  }
+  joinOnline(code);
+});
+$('onlineCode').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') $('onlineJoin').click();
+});
+$('onlineCode').addEventListener('input', () => {
+  const box = $('onlineCode') as HTMLInputElement;
+  box.value = box.value.toUpperCase().replace(/[^A-Z]/g, '').slice(0, 4);
+});
+$('onlineCancel').addEventListener('click', closeOnlineSheet);
+
+/** Make a room (code null) or join one: connect, and go to its lobby once the room answers. */
+function joinOnline(code: string | null): void {
+  if (net) net.leave();
+  setOnlineBusy(true);
+  $('onlineNote').textContent = code ? `Joining ${code}…` : 'Making a room…';
+  net = new Online(
+    {
+      room: onRoom,
+      round: (cfg, s, score) => onRound(createWorld(cfg), s, score, true),
+      snap: (w, s, score) => onRound(decodeWorld(w), s, score, false),
+      world: () => (netRound ? world : null),
+      step: (codes) => advance(codes.map(unpackInput)),
+      status: (st) => {
+        if (st === 'lost') sayNet('Connection lost. Reconnecting…');
+        else if (st === 'open') sayNet('');
+      },
+      error: (why, fatal) => {
+        if (!fatal) {
+          sayNet(why, 4000);
+          return;
+        }
+        // the room is gone for this page: back to the title, saying why
+        sayNet('');
+        const wasIn = !!stash;
+        leaveOnline(false);
+        if (!wasIn || mode === 'title') openOnlineSheet(code ?? '', why);
+        else sayNet(why, 6000);
+      },
+    },
+    serverHost(),
+  );
+  net.start(code, { name: myName, colorId: myColor, dance: myDance });
+}
+
+/** Leave the online room (saying goodbye unless the server has already closed it), back to the title. */
+function leaveOnline(bye = true): void {
+  if (net && bye) net.leave();
+  net = null;
+  try {
+    sessionStorage.removeItem('onlineRoom');
+  } catch {
+    /* optional */
+  }
+  netRound = false;
+  seats = [];
+  meIdx = 0;
+  guests.length = 0;
+  if (stash) {
+    // your own setup and robot on this screen, as they were
+    setup = stash.setup;
+    myColor = stash.color;
+    stash = null;
+  }
+  sayNet('');
+  newWorld();
+  showTitle();
+}
+
+/** The room changed (online.ts): who is in it, the host, the setup, and whether a match is on. */
+function onRoom(m: Extract<ServerMsg, { t: 'room' }>): void {
+  if (!net) return;
+  const mine = m.members.find((x) => x.id === m.you);
+  if (!mine) return;
+  if (!stash) stash = { setup, color: myColor };
+  const moved = mine.colorId !== myColor;
+  setup = JSON.parse(JSON.stringify(m.setup));
+  myColor = mine.colorId;
+  // everyone else in the room shows in the lobby as another player (lobby.ts reads them as guests)
+  guests.length = 0;
+  m.members.forEach((x, k) => {
+    if (x.id === m.you) return;
+    guests.push({
+      pad: -100 - x.id,
+      colorId: x.colorId,
+      pick: x.colorId,
+      ready: x.ready,
+      dance: x.dance,
+      remote: { name: x.name, p: k + 1, on: x.on, host: x.id === m.host },
+    });
+  });
+  $('lobbyMode').textContent = `Online · ${m.code}`;
+  $('lobbyHostNote').textContent = net.isHost ? 'You are the host' : `${hostName()} is the host`;
+  $('roomShare').hidden = false;
+  const inMatch = m.playing && mine.playing;
+  if (mode === 'title') {
+    // just joined: on to the room's lobby. A reload of this page comes straight back here (sessionStorage).
+    try {
+      sessionStorage.setItem('onlineRoom', m.code);
+    } catch {
+      /* optional */
+    }
+    $('onlineSheet').hidden = true;
+    title.hidden = true;
+    document.body.classList.remove('title-open');
+    closeTitle();
+    if (!inMatch) {
+      showLobby(true);
+      lobby.setReady(mine.ready, true);
+    }
+    return;
+  }
+  if (netRound && !m.playing) {
+    // the host ended the match: everyone back to the lobby, to press Ready again
+    netRound = false;
+    showLobby(true);
+    lobby.setReady(mine.ready, true);
+    return;
+  }
+  if (mode === 'lobby') lobby.setReady(mine.ready, moved);
+  else if (mode === 'pause') fillPause();
+}
+
+/**
+ * A round from the server: a new one (`fresh`, built from its config) or the world as it is now (after a
+ * dropped connection, or when this page fell out of step). The score comes with it.
+ */
+function onRound(w: World, s: Seat[], score: Score, fresh: boolean): void {
+  if (!net) return;
+  const inRound = netRound && (mode === 'playing' || mode === 'over' || mode === 'pause' || (mode === 'settings' && setFrom === 'pause'));
+  world = w;
+  bots = [];
+  seats = s;
+  meIdx = Math.max(0, s.findIndex((x) => x.member === net!.me));
+  wins.fill(0);
+  score.wins.forEach((v, i) => (wins[i] = v));
+  leader = score.leader;
+  matchWinner = score.matchWinner;
+  roundNo = score.roundNo;
+  scoreKey = '';
+  timerKey = '';
+  netRound = true;
+  if (!fresh && inRound) {
+    // the same round, put right: carry on where it is
+    counted = !!w.over;
+    redrawStatic();
+    return;
+  }
+  if (fresh && roundNo <= 1) angelTipShown = false; // a new match
+  blastedBy = -1;
+  hurried = false;
+  overShown = false;
+  counted = !!w.over;
+  decidedAt = w.over ? clock : -1;
+  redrawStatic();
+  initAudio();
+  layout();
+  input.reset();
+  roundLive = !w.over;
+  mode = 'playing';
+  hideScreens();
+  if (w.over) announce();
+}
+
+// share the room: the phone's share sheet, or the link copied
+$('roomShare').addEventListener('click', async () => {
+  if (!net) return;
+  const url = roomLink(net.code);
+  try {
+    if (navigator.share) await navigator.share({ title: 'BomberBot', text: `Join my BomberBot room: ${net.code}`, url });
+    else {
+      await navigator.clipboard.writeText(url);
+      sayNet('Link copied', 2500);
+    }
+  } catch {
+    /* the share sheet was closed */
+  }
+});
 
 // ------------------------------------------------ Settings
 
@@ -1447,8 +1824,9 @@ function refreshPrefs(): void {
 /** Back one step, the same from Escape or a controller's B: a question or a panel first, then the screen. */
 function goBack(): void {
   if (confirmOpen()) answerConfirm(false);
+  else if (mode === 'title' && !$('onlineSheet').hidden) closeOnlineSheet();
   else if (mode === 'lobby' && lobby.sheetOpen()) lobby.closeSheet();
-  else if (mode === 'lobby') showTitle();
+  else if (mode === 'lobby') lobbyHost.back();
   else if (mode === 'settings') closeSettings();
   else if (mode === 'pause') closePause();
   else if (mode === 'playing' || mode === 'over') openPause();
@@ -1468,7 +1846,8 @@ input.onPause = pauseKey;
  * them is a friend's. Anything else makes it yours, if you have none yet.
  */
 input.claim = (index, button) => {
-  if (mode === 'lobby' && (button === PAD.A || button === PAD.MENU) && !confirmOpen() && !lobby.sheetOpen()) return lobby.join(index) ? 'join' : 'ignore';
+  // (online everyone plays on their own screen: no joining with a second controller)
+  if (mode === 'lobby' && !net && (button === PAD.A || button === PAD.MENU) && !confirmOpen() && !lobby.sheetOpen()) return lobby.join(index) ? 'join' : 'ignore';
   return input.mineIndex < 0 ? 'mine' : 'ignore';
 };
 
@@ -1481,6 +1860,7 @@ const guestDir = new Map<number, Dir>();
  */
 function guestPads(): void {
   for (const g of [...guests]) {
+    if (g.remote) continue; // someone online, on their own screen
     const r = input.reader(g.pad);
     if (!r) {
       if (mode === 'lobby') lobby.dropGuest(g.pad);
@@ -1517,6 +1897,7 @@ input.onFirstGesture = initAudio;
 /** What the controller's highlight moves round: whatever is on top. */
 function padTop(): HTMLElement | null {
   if (confirmOpen()) return $('confirm');
+  if (mode === 'title' && !$('onlineSheet').hidden) return $('onlineSheet');
   if (mode === 'lobby' && lobby.sheetOpen()) return $('cpuSheet');
   const screens: Partial<Record<typeof mode, string>> = { title: 'title', lobby: 'lobby', settings: 'settings', pause: 'pause', over: 'result', teach: 'teach' };
   const id = screens[mode];
@@ -1586,6 +1967,21 @@ applyPrefs();
 applySettings(false);
 showTitle();
 requestAnimationFrame(frame);
+// a link to a room (?room=CODE): straight to joining it
+// (and a reload while in a room goes straight back into it)
+{
+  const code = readCode(new URLSearchParams(location.search).get('room'));
+  let again = '';
+  try {
+    again = readCode(sessionStorage.getItem('onlineRoom'));
+  } catch {
+    /* optional */
+  }
+  if (again) {
+    openOnlineSheet(again);
+    joinOnline(again);
+  } else if (code) openOnlineSheet(code, `Join room ${code}?`);
+}
 
 // A handle for automated browser checks and for poking about in the browser console.
 (window as unknown as { __game: unknown }).__game = {
@@ -1624,5 +2020,8 @@ requestAnimationFrame(frame);
   },
   get input() {
     return input;
+  },
+  get net() {
+    return net;
   },
 };

@@ -52,8 +52,23 @@ import {
 import { DANCES, danceFrame, danceOf, stepDance, type DanceId } from './dances';
 import { Opt, choice, confirmFirst, heading, mount, note, slider, swipeable, toggle } from './ui';
 
+/** What the lobby needs to know in an online room (main.ts keeps the connection, online.ts). */
+export interface OnlineView {
+  code: string;
+  /** you host the room: you set the match and start it */
+  host: boolean;
+  /** the host's name, as shown */
+  hostName: string;
+  /** your P-number in the room (people in the order they joined, then the CPU players) */
+  myP: number;
+  /** a match is on that you are not in (you joined during it): you play in the next one */
+  waiting: boolean;
+}
+
 export interface LobbyHost {
   setup: MatchSetup;
+  /** in an online room, what the lobby needs to know about it; null when playing on this screen */
+  online(): OnlineView | null;
   /** the other players on this screen, each with a controller (couch play); kept by main.ts, not saved */
   guests: Guest[];
   /** how many controllers are connected (the "join" card shows only when there is one) */
@@ -93,6 +108,10 @@ export function createLobby(host: LobbyHost): {
   sheetOpen(): boolean;
   closeSheet(): void;
   redraw(): void;
+  /** have you pressed Ready (on the robot you are showing)? */
+  isReady(): boolean;
+  /** online: the server says whether you are ready, and `moved` if it changed your robot */
+  setReady(ready: boolean, moved: boolean): void;
   /** A controller nobody has yet pressed A: a new player joins. False if there is no room. */
   join(pad: number): boolean;
   /** That player's left or right: the next robot. */
@@ -128,6 +147,14 @@ export function createLobby(host: LobbyHost): {
   /** the colours other people on this screen wear (not `pad`'s own), which nobody else can take */
   const humanColours = (pad = -2): Set<string> =>
     new Set([...(pad === -1 ? [] : [host.myColor]), ...guests().filter((g) => g.pad !== pad).map((g) => g.colorId)]);
+  /** online, the room as main.ts sees it; null on this screen */
+  const net = (): OnlineView | null => host.online();
+  /** can you change the CPU players and the rules? Yes on this screen; online, only the host */
+  const canEdit = (): boolean => !net() || net()!.host;
+  /** another player's P-number: P2, P3... here; online, their place in the room */
+  const guestP = (g: Guest): number => g.remote?.p ?? guests().indexOf(g) + 2;
+  /** your own P-number */
+  const myP = (): number => net()?.myP ?? 1;
   /** Most CPU players there is room for: eight players in all. */
   const maxCpus = (): number => Math.min(MAX_CPUS, MAX_CPUS - guests().length);
 
@@ -174,7 +201,7 @@ export function createLobby(host: LobbyHost): {
     changed();
   }
   function addCpu(): void {
-    if (s().cpus.length >= maxCpus()) return;
+    if (s().cpus.length >= maxCpus() || !canEdit()) return;
     const free = freeFor(-1);
     const colorId = CPU_COLOURS.find((c) => free.includes(c)) ?? free[0];
     const level = s().cpus[s().cpus.length - 1]?.level ?? 'normal';
@@ -182,6 +209,7 @@ export function createLobby(host: LobbyHost): {
     changed();
   }
   function stepArena(d: number): void {
+    if (!canEdit()) return;
     const i = ARENAS.findIndex((a) => a.id === s().arena);
     pickArena(s(), ARENAS[(i + d + ARENAS.length) % ARENAS.length].id);
     changed();
@@ -261,7 +289,7 @@ export function createLobby(host: LobbyHost): {
     preview(who);
   }
   /** The small ‹ dance › along the foot of a card, and a swipe across the whole card. */
-  function dancePick(wrap: HTMLElement, who: string): void {
+  function dancePick(wrap: HTMLElement, who: string, readOnly = false): void {
     const row = document.createElement('div');
     row.className = 'dance-pick';
     row.setAttribute('role', 'group');
@@ -281,6 +309,14 @@ export function createLobby(host: LobbyHost): {
     // a small "Emote" over the dance's name, so it is clear what it is (the owner's ask)
     name.innerHTML = '<span class="dp-label">Emote</span><span class="dp-text"></span>';
     name.querySelector('.dp-text')!.textContent = danceOf(cardDance(who)).name;
+    if (readOnly) {
+      // someone else's to pick (another person online, or a CPU player when you are not the host): shown, and
+      // a tap on it plays it, but it cannot be changed from here
+      row.classList.add('ro');
+      row.append(name);
+      wrap.append(row);
+      return;
+    }
     row.append(
       mk(`dp-prev-${who}`, '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>', 'Previous dance', () => step(-1)),
       name,
@@ -415,10 +451,10 @@ export function createLobby(host: LobbyHost): {
     const me = document.createElement('div');
     me.className = 'slot me';
     me.setAttribute('role', 'group');
-    me.setAttribute('aria-label', `${host.myName || 'You'}, P1, playing as ${botName(colorById(host.myColor))}, ${ready ? 'ready' : 'not ready'}`);
+    me.setAttribute('aria-label', `${host.myName || 'You'}, P${myP()}, playing as ${botName(colorById(host.myColor))}, ${ready ? 'ready' : 'not ready'}`);
     const mc = document.createElement('canvas');
     const mt = document.createElement('div');
-    mt.innerHTML = `<b></b><small>P1 · you</small><span class="rdy${ready ? ' on' : ''}">${ready ? '✓ Ready' : 'Not ready'}</span>`;
+    mt.innerHTML = `<b></b><small>P${myP()} · you${net()?.host ? ' · host' : ''}</small><span class="rdy${ready ? ' on' : ''}">${ready ? '✓ Ready' : 'Not ready'}</span>`;
     mt.querySelector('b')!.textContent = host.myName || 'You'; // typed by the player: set as text, never as markup
     me.append(mc, mt);
     mc.dataset.who = 'me';
@@ -429,8 +465,8 @@ export function createLobby(host: LobbyHost): {
     box.append(meWrap);
     const cvs: [HTMLCanvasElement, string][] = [[mc, host.myColor]];
     const lastOne = s().cpus.length + guests().length <= 1;
-    guests().forEach((g, gi) => {
-      const n = gi + 2;
+    guests().forEach((g) => {
+      const n = guestP(g);
       const card = document.createElement('div');
       card.className = 'slot guest';
       card.id = `guest-${g.pad}`;
@@ -440,9 +476,13 @@ export function createLobby(host: LobbyHost): {
       const cv = document.createElement('canvas');
       const t = document.createElement('div');
       const on = g.ready && g.pick === g.colorId;
-      t.innerHTML = `<b></b><small></small><span class="rdy${on ? ' on' : ''}">${on ? '✓ Ready' : 'Not ready: A'}</span>`;
-      t.querySelector('b')!.textContent = looking;
-      t.querySelector('small')!.textContent = `P${n} · controller ${g.pad + 1}`;
+      t.innerHTML = `<b></b><small></small><span class="rdy${on ? ' on' : ''}">${on ? '✓ Ready' : g.remote ? 'Not ready' : 'Not ready: A'}</span>`;
+      // (a name typed by another person: set as text, never as markup)
+      t.querySelector('b')!.textContent = g.remote ? g.remote.name || looking : looking;
+      t.querySelector('small')!.textContent = g.remote
+        ? `P${n} · ${g.remote.host ? 'host' : 'online'}${g.remote.on ? '' : ' · away'}`
+        : `P${n} · controller ${g.pad + 1}`;
+      if (g.remote) card.setAttribute('aria-label', `${g.remote.name || looking}, P${n}, online, ${on ? 'ready' : 'not ready'}`);
       card.append(cv, t);
       cv.dataset.who = `g${g.pad}`;
       const bin = document.createElement('button');
@@ -455,8 +495,9 @@ export function createLobby(host: LobbyHost): {
       bin.addEventListener('click', () => leave(g.pad));
       const wrap = document.createElement('div');
       wrap.className = 'slot-wrap';
-      wrap.append(card, bin);
-      dancePick(wrap, `g${g.pad}`);
+      wrap.append(card);
+      if (!g.remote) wrap.append(bin); // nobody removes another person from an online room
+      dancePick(wrap, `g${g.pad}`, !!g.remote);
       box.append(wrap);
       cvs.push([cv, g.pick]);
     });
@@ -472,6 +513,7 @@ export function createLobby(host: LobbyHost): {
       b.append(cv, t);
       cv.dataset.who = `c${i}`;
       b.addEventListener('click', () => openSheet(i));
+      if (!canEdit()) b.classList.add('ro'); // the host's to change
       // the bin: removes this CPU player at once (Undo brings it back)
       const bin = document.createElement('button');
       bin.type = 'button';
@@ -483,12 +525,13 @@ export function createLobby(host: LobbyHost): {
       bin.addEventListener('click', () => removeCpu(i));
       const wrap = document.createElement('div');
       wrap.className = 'slot-wrap';
-      wrap.append(b, bin);
-      dancePick(wrap, `c${i}`);
+      wrap.append(b);
+      if (canEdit()) wrap.append(bin);
+      dancePick(wrap, `c${i}`, !canEdit());
       box.append(wrap);
       cvs.push([cv, c.colorId]);
     });
-    if (s().cpus.length < maxCpus()) {
+    if (s().cpus.length < maxCpus() && canEdit()) {
       const add = document.createElement('button');
       add.type = 'button';
       add.className = 'slot add';
@@ -498,7 +541,7 @@ export function createLobby(host: LobbyHost): {
       box.append(add);
     }
     // with a controller connected and room for one more: how another player joins
-    if (total() < MAX_CPUS + 1 && host.controllers() > 0) {
+    if (total() < MAX_CPUS + 1 && host.controllers() > 0 && !net()) {
       const j = document.createElement('div');
       j.className = 'slot join';
       j.id = 'slotJoin';
@@ -549,6 +592,7 @@ export function createLobby(host: LobbyHost): {
   ];
   const refreshCpu = mount($('cpuRows'), cpuOpts);
   function openSheet(i: number): void {
+    if (!canEdit()) return;
     danceFrom = performance.now(); // its robot dances its dance while the panel is open
     queueMicrotask(startDancing);
     editing = i;
@@ -647,7 +691,9 @@ export function createLobby(host: LobbyHost): {
   }).observe($('arenaPic').parentElement!);
   function drawArena(): void {
     const cv = $<HTMLCanvasElement>('arenaPic');
-    const w = createWorld({ ...worldConfig(s(), host.myColor, PREVIEW_SEED, guests().map((g) => g.colorId)), roundTicks: 0 });
+    // everyone where they will start: online, in the room's order (P1 first), which is the round's
+    const people = [{ p: myP(), c: host.myColor }, ...guests().map((g) => ({ p: guestP(g), c: g.colorId }))].sort((x, y) => x.p - y.p).map((x) => x.c);
+    const w = createWorld({ ...worldConfig(s(), people[0], PREVIEW_SEED, people.slice(1)), roundTicks: 0 });
     cv.style.aspectRatio = `${w.w} / ${w.h}`;
     const dpr = host.density();
     // measured at the size the row gives it, then set to exactly the size of what is drawn, so that each of
@@ -859,7 +905,7 @@ export function createLobby(host: LobbyHost): {
   const waiting = (): Guest[] => guests().filter((g) => !(g.ready && g.pick === g.colorId));
   /** Start the match, asking first if anyone has not pressed Ready. */
   function tryStart(): void {
-    if (problem(s(), guests().length)) return;
+    if (problem(s(), guests().length) || !canEdit() || net()?.waiting) return;
     const others = waiting();
     if (ready && !others.length) {
       host.start();
@@ -876,7 +922,7 @@ export function createLobby(host: LobbyHost): {
       confirmFirst('Are you ready?', `You have not pressed Ready on the Players page. Everyone must be ready to start.`, 'Ready & Start', go); // the owner's wording: short, with no robot names
       return;
     }
-    const names = [...(ready ? [] : ['You']), ...others.map((g) => `P${guests().indexOf(g) + 2}`)];
+    const names = [...(ready ? [] : ['You']), ...others.map((g) => `P${guestP(g)}`)];
     const list = names.length === 1 ? names[0] : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
     confirmFirst(
       'Are you ready?',
@@ -889,6 +935,7 @@ export function createLobby(host: LobbyHost): {
   // ------------------------------------------------------------ the other players here (couch play)
   const guestOf = (pad: number): Guest | undefined => guests().find((g) => g.pad === pad);
   function join(pad: number): boolean {
+    if (net()) return false; // online, everyone plays on their own screen
     if (guestOf(pad)) return true;
     if (1 + guests().length >= MAX_CPUS + 1) return false;
     // a full match: the last CPU player makes room
@@ -976,7 +1023,7 @@ export function createLobby(host: LobbyHost): {
       const guest = guests().findIndex((g) => g.colorId === c.id);
       const tag = $(`ptag-${c.id}`);
       const isMe = c.id === host.myColor;
-      tag.textContent = isMe ? 'P1' : guest >= 0 ? `P${guest + 2}` : cpu >= 0 ? `P${cpuP(cpu)}` : '';
+      tag.textContent = isMe ? `P${myP()}` : guest >= 0 ? `P${guestP(guests()[guest])}` : cpu >= 0 ? `P${cpuP(cpu)}` : '';
       tag.classList.toggle('me', isMe);
       tag.classList.toggle('guest', guest >= 0);
       b.disabled = guest >= 0;
@@ -984,7 +1031,7 @@ export function createLobby(host: LobbyHost): {
       b.setAttribute('aria-pressed', String(c.id === pick));
       b.setAttribute(
         'aria-label',
-        `${botName(c)}, ${c.name}${isMe ? ', yours (P1)' : guest >= 0 ? `, P${guest + 2}'s` : cpu >= 0 ? `, worn by CPU ${cpu + 1} (P${cpuP(cpu)})` : ''}`,
+        `${botName(c)}, ${c.name}${isMe ? `, yours (P${myP()})` : guest >= 0 ? `, P${guestP(guests()[guest])}'s` : cpu >= 0 ? `, worn by CPU ${cpu + 1} (P${cpuP(cpu)})` : ''}`,
       );
     }
     if (popMine) {
@@ -1024,11 +1071,30 @@ export function createLobby(host: LobbyHost): {
     go.disabled = !!why;
     ($('arenaStart') as HTMLButtonElement).disabled = !!why;
     const note = $('startNote');
-    const late = waiting().map((g) => `P${guests().indexOf(g) + 2}`);
-    note.textContent =
-      why ||
-      (toMatch ? '' : !ready ? 'You are not ready yet: press Ready on the Players page.' : late.length ? `Waiting for ${late.join(', ')} to press Ready (A).` : '');
-    note.classList.toggle('info', !why);
+    const late = waiting().map((g) => `P${guestP(g)}`);
+    const room = net();
+    note.textContent = room?.waiting
+      ? 'A match is on. You play in the next one, once the host is back in the lobby.'
+      : room && !room.host
+        ? `${!ready ? 'Press Ready on the Players page. ' : ''}${room.hostName} sets the match and starts it.`
+        : why ||
+          (toMatch
+            ? ''
+            : !ready
+              ? 'You are not ready yet: press Ready on the Players page.'
+              : late.length
+                ? `Waiting for ${late.join(', ')} to press Ready${room ? '' : ' (A)'}.`
+                : '');
+    note.classList.toggle('info', !why || !!room);
+    // online, the match is the host's: shown to everyone, changed and started only by the host
+    const ro = !canEdit() || !!room?.waiting;
+    document.querySelector<HTMLElement>('#lobbyMatch .panel.arena')!.inert = !canEdit();
+    $('rules').inert = !canEdit();
+    $('allCpus').inert = !canEdit();
+    $('lobbyMatch').classList.toggle('readonly', !canEdit());
+    $('rulesReset').hidden = !canEdit();
+    go.hidden = ro;
+    ($('arenaStart') as HTMLButtonElement).hidden = ro;
     refreshSheet();
   }
 
@@ -1062,6 +1128,14 @@ export function createLobby(host: LobbyHost): {
     sheetOpen: () => !sheet.hidden,
     closeSheet,
     redraw: refresh,
+    isReady: () => ready && pick === host.myColor,
+    setReady(r: boolean, moved: boolean): void {
+      // the server's word on it (online): Ready is as it says, and your robot is the one it says if you are
+      // ready or it gave you another (a colour you were only looking at is left showing)
+      if (r || moved) pick = host.myColor;
+      ready = r;
+      refresh();
+    },
     join,
     guestStep,
     guestDance,

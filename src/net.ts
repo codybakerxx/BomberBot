@@ -1,0 +1,216 @@
+/**
+ * Online play: what the game page and the server say to each other, and the small pieces both sides need.
+ * Pure, like sim.ts: no DOM, no clocks, no Math.random. Imported by the game page (online.ts) and by the
+ * server (room.ts, worker.ts). docs/ONLINE.md explains the whole design.
+ *
+ * How a round is kept the same on every screen: the server runs the round (sim.ts, and bot.ts for the CPU
+ * players) and sends everyone, tick by tick, what every player asked for on that tick. Each page steps its own
+ * copy of the world with exactly those inputs, so every copy stays the same as the server's (the rules give
+ * the same match for the same seed and inputs). Every CHECK_EVERY ticks the server adds a checksum of its
+ * world; a page whose copy differs asks for the whole world (`snap`) and carries on from it.
+ */
+import { createWorld, type Dir, type ItemKind, type PlayerInput, type World, type WorldConfig } from './sim';
+import type { MatchSetup } from './setup';
+import type { DanceId } from './dances';
+
+/** Room codes: four letters, without the ones easily mixed up (I, O) or that spell words easily (vowels). */
+export const CODE_LETTERS = 'BCDFGHJKLMNPQRSTVWXZ';
+export const CODE_LENGTH = 4;
+/** A room code as typed: upper case, letters only, or '' if it cannot be one. */
+export function readCode(raw: unknown): string {
+  if (typeof raw !== 'string') return '';
+  const code = raw.toUpperCase().replace(/[^A-Z]/g, '');
+  return code.length === CODE_LENGTH && [...code].every((c) => CODE_LETTERS.includes(c)) ? code : '';
+}
+/** A new room code from random numbers in [0, 1) (the server's own). */
+export function makeCode(random: () => number): string {
+  let s = '';
+  for (let i = 0; i < CODE_LENGTH; i++) s += CODE_LETTERS[Math.floor(random() * CODE_LETTERS.length)];
+  return s;
+}
+
+/** Players' typed names: up to 12 characters, single spaces, no control characters. */
+export function readName(raw: unknown): string {
+  if (typeof raw !== 'string') return '';
+  return raw
+    .replace(/[\u0000-\u001f\u007f<>]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 12);
+}
+
+// ---------------------------------------------------------------- inputs
+
+/** A player's input on one tick in five bits: the direction (0 to 4), then A (8) and B (16). */
+export const IN_A = 8;
+export const IN_B = 16;
+export function packInput(p: PlayerInput | undefined): number {
+  return p ? (p.dir & 7) | (p.a ? IN_A : 0) | (p.b ? IN_B : 0) : 0;
+}
+export function unpackInput(v: number): PlayerInput {
+  const dir = v & 7;
+  return { dir: (dir <= 4 ? dir : 0) as Dir, a: (v & IN_A) !== 0, b: (v & IN_B) !== 0 };
+}
+/** One tick's inputs for every player, as one character each (0-9, a-v): "0a00" for four players. */
+const DIGITS = '0123456789abcdefghijklmnopqrstuv';
+export function tickText(codes: number[]): string {
+  return codes.map((c) => DIGITS[c & 31]).join('');
+}
+export function tickCodes(text: string): number[] {
+  return [...text].map((ch) => Math.max(0, DIGITS.indexOf(ch)));
+}
+
+// ---------------------------------------------------------------- keeping copies the same
+
+/** The server adds a checksum of its world every this many ticks (half a second). */
+export const CHECK_EVERY = 30;
+
+/**
+ * A checksum of everything in a world that matters to how the round goes on: the tiles, every robot, bomb,
+ * blast, power-up and falling block. Two worlds with the same checksum are, for practical purposes, the same.
+ * Numbers are hashed by their exact bits, so the smallest drift shows.
+ */
+export function worldHash(w: World): number {
+  let h = 0x811c9dc5;
+  const buf = new DataView(new ArrayBuffer(8));
+  const byte = (b: number): void => {
+    h ^= b & 255;
+    h = Math.imul(h, 0x01000193);
+  };
+  const num = (v: number): void => {
+    buf.setFloat64(0, v);
+    for (let i = 0; i < 8; i++) byte(buf.getUint8(i));
+  };
+  num(w.tick);
+  for (let i = 0; i < w.tiles.length; i++) byte(w.tiles[i]);
+  for (const p of w.players) {
+    num(p.x);
+    num(p.y);
+    num(p.facing);
+    num(p.alive ? 1 : 0);
+    num(p.lives);
+    num(p.bombsMax * 64 + p.fire * 8 + p.speed);
+    num(p.activeBombs);
+    num(p.carrying);
+    num(p.respawnAt);
+    num(p.angel ? p.angelS : -1);
+    num(p.zombie ? (p.zombieDown ? 2 : 1) : 0);
+    num(p.shieldTicks + p.curseTicks * 4096);
+  }
+  num(w.bombs.length);
+  for (const b of w.bombs) {
+    num(b.x);
+    num(b.y);
+    num(b.fuse);
+    num(b.owner);
+  }
+  num(w.flames.length);
+  num(w.items.length);
+  for (const it of w.items) num(it.cy * w.w + it.cx);
+  num(w.falling.length);
+  num(w.shrinkNext);
+  num(w.over ? w.over.winner : -2);
+  return h >>> 0;
+}
+
+/** A world as plain data, to send whole (a page that has fallen out of step, or come back mid-round). */
+export interface WorldData extends Omit<World, 'tiles' | 'hidden' | 'events'> {
+  tiles: number[];
+  hidden: [number, ItemKind][];
+}
+export function encodeWorld(w: World): WorldData {
+  const { tiles, hidden, events: _events, ...rest } = w;
+  return JSON.parse(JSON.stringify({ ...rest, tiles: Array.from(tiles), hidden: [...hidden.entries()] }));
+}
+export function decodeWorld(d: WorldData): World {
+  return { ...d, tiles: Uint8Array.from(d.tiles), hidden: new Map(d.hidden), events: [] } as World;
+}
+/** The world a round starts from: built from its config, the same on every page and on the server. */
+export function roundWorld(cfg: WorldConfig): World {
+  return createWorld(cfg);
+}
+
+// ---------------------------------------------------------------- the room
+
+/** A person in a room, as everyone sees them. */
+export interface MemberInfo {
+  /** the server's number for them (not their place in a round) */
+  id: number;
+  name: string;
+  colorId: string;
+  ready: boolean;
+  dance: DanceId;
+  /** connected just now (a dropped connection keeps its place for a while) */
+  on: boolean;
+  /** in the match being played (someone who joined during a match waits for the next) */
+  playing: boolean;
+}
+
+/** One place in a round: a person (by member id) or a CPU player, with the name and dance it shows. */
+export interface Seat {
+  member: number | null;
+  /** a person's typed name ('' for none, and for a CPU player: the page shows the robot's name) */
+  name: string;
+  colorId: string;
+  dance: DanceId;
+}
+
+/** The score of the match so far, by place in the round. */
+export interface Score {
+  wins: number[];
+  /** the place in the lead (wears the crown), -1 before the first win */
+  leader: number;
+  /** the place that has won the match, -1 until then */
+  matchWinner: number;
+  /** rounds started in this match */
+  roundNo: number;
+}
+
+/** What the page sends. */
+export type ClientMsg =
+  /** the first message: who this is (an id kept by the page, so a dropped connection comes back as the same person) */
+  | { t: 'hello'; id: string; name: string; colorId: string; dance: DanceId; create: boolean }
+  /** their robot, Ready, dance and name in the lobby */
+  | { t: 'me'; colorId: string; ready: boolean; dance: DanceId; name: string }
+  /** the host's match setup (the CPU players and the rules) */
+  | { t: 'setup'; setup: MatchSetup }
+  /** the host: start the match */
+  | { t: 'start' }
+  /** what this player is pressing now (packInput) */
+  | { t: 'in'; v: number }
+  /** the host: the next round, or a rematch once the match is won */
+  | { t: 'next' }
+  /** the host: the whole match again from 0 */
+  | { t: 'restart' }
+  /** the host: everyone back to the lobby */
+  | { t: 'lobby' }
+  /** this page's world is out of step: send it the whole world */
+  | { t: 'sync' }
+  | { t: 'ping'; c: number }
+  /** leaving the room for good */
+  | { t: 'bye' };
+
+/** What the server sends. */
+export type ServerMsg =
+  /** the room: who is in it, who hosts, the setup, and whether a match is on. Sent whenever any of it changes. */
+  | { t: 'room'; code: string; you: number; host: number; members: MemberInfo[]; setup: MatchSetup; playing: boolean }
+  /** a round starts: build its world from `cfg`. `seats` says who is in each place. */
+  | { t: 'round'; cfg: WorldConfig; seats: Seat[]; score: Score }
+  /** inputs for ticks `from`, `from + 1`... (tickText each); `sum`: the checksum after tick sum[0] */
+  | { t: 'ticks'; from: number; i: string[]; sum?: [number, number] }
+  /** the whole world (after `world.tick`), to carry on from */
+  | { t: 'snap'; world: WorldData; seats: Seat[]; score: Score }
+  | { t: 'pong'; c: number }
+  /** something went wrong; `why` is said to the player. `fatal`: the connection is closing. */
+  | { t: 'error'; why: string; fatal?: boolean };
+
+/** Read a message, or null if it is not one. */
+export function parseMsg<T extends { t: string }>(raw: unknown): T | null {
+  if (typeof raw !== 'string' || raw.length > 64_000) return null;
+  try {
+    const m = JSON.parse(raw);
+    return m && typeof m === 'object' && typeof m.t === 'string' ? (m as T) : null;
+  } catch {
+    return null;
+  }
+}

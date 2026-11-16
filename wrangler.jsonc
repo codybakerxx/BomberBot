@@ -1,10 +1,17 @@
 // Cloudflare: where BomberBot is put online (docs/ONLINE.md).
-// For now only the game page itself (dist/index.html, built by `npm run build`), served as a static file.
-// The online-play server (rooms, run with Durable Objects) will be added here when it is built.
+// The game page (dist/index.html, built by `npm run build`) is served as a static file. Everything else goes
+// to the server (src/worker.ts): /api/room/CODE is a WebSocket into an online room, one Durable Object per room.
 {
   "name": "bomberbot",
+  "main": "src/worker.ts",
   "compatibility_date": "2026-11-01",
   "assets": {
-    "directory": "./dist"
-  }
+    "directory": "./dist",
+    "binding": "ASSETS"
+  },
+  "durable_objects": {
+    "bindings": [{ "name": "ROOMS", "class_name": "RoomDO" }]
+  },
+  // the rooms keep nothing on disk; SQLite-backed objects are the kind Cloudflare's free plan allows
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["RoomDO"] }]
 }

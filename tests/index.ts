@@ -9,5 +9,6 @@ import './teach.test';
 import './bot.test';
 import './dances.test';
 import './lives.test';
+import './room.test';
 
 console.log('all checks passed');

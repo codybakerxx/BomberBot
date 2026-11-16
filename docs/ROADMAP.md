@@ -13,7 +13,7 @@ Each step is played on a phone before the next one starts.
 | 3 | **Round flow.** Last one standing wins, blocks fall to shrink the arena as time runs out, and a results screen. | Built: a timer of 1 minute 30, then 50 seconds of falling blocks, then a fight in the square that is left; a scoreboard of rounds won, with a crown for the leader; knock-out and winning animations. Being play-tested. Choosing the round length is still to come. |
 | 4 | **Menus.** A proper character select, a choice of round length, a colour picker, level select, and choosing which power-ups are in a custom game. | Planned |
 | 5 | **Teams.** Team battles by colour. | Planned |
-| 6 | **Online.** Rooms for up to nine players. | Planned |
+| 6 | **Online.** Rooms for up to eight players. | Built (November 2026): see docs/ONLINE.md. Being play-tested. |
 | 7 | **Polish.** Final look, colours and sound, then putting it online for friends. | Planned |
 
 ### The plan from here
@@ -23,14 +23,14 @@ Agreed with the owner in November 2026, after he listed everything he wants the 
 **The backbone, in order**
 
 1. **Match setup and screens.** A title screen, then a lobby that holds the settings: round length, rounds per match, CPU level and your colour. The warm-up, a more realistic bomb with a fuse that burns down, is done. The title screen and the lobby are built (November 2026), with Settings and a new menu for during a match; both are being play-tested. Teams wait for step 3. Up to eight players works locally already.
-2. **Online.** A small server, room codes, a join-room screen, up to nine players.
+2. **Online.** A small server, room codes, a join-room screen, up to eight players. Built (November 2026) on Cloudflare: see `docs/ONLINE.md`. Next: play-testing between two people.
 3. **Modes.** Teams, a zombie mode, knocked-out players throwing bombs from the border as angels, and lives per game. Angels, zombies and lives are built (November 2026; see the decisions below); teams are not wanted for now (the owner, November 2026).
 
 **Any time, between steps:** more emotes (picked before the game), redesigned sound effects and a menu to choose which you hear, music with an off switch, detail passes on the default graphics.
 
 **One at a time, each play-tested before the next:** new power-ups, more maps with map selection, more character styles and colours, choosable graphic styles, animals to ride.
 
-**Two decisions that are the owner's:** whether the game may use image and sound files (today everything is drawn and made in code, in one self-contained page), and where the server for online play is hosted.
+**A decision that is the owner's:** whether the game may use image and sound files (today everything is drawn and made in code, in one self-contained page). Where the server for online play is hosted was decided in November 2026: Cloudflare (Workers and Durable Objects), after comparing a VPS and Cloudflare Tunnel.
 
 ## What the finished game should have
 
@@ -122,7 +122,7 @@ This is the brief the project started from.
 | Each robot is drawn once into small pictures (sprites) and those are reused | The new robot takes hundreds of drawing steps, too many to repeat for four robots sixty times a second. The pictures are made a few at a time, ahead of need, so play does not stutter. |
 | The soft rounding of each piece is for large artwork only | It would be less than a pixel at playing size. It also relies on a drawing trick that could not be tried on an iPhone from Claude's side, so nothing in the game depends on it. |
 | The game opens on a title screen | Step 1 of the plan from here. The name, BomberBot, with "Bot" in gold, and "Last bot standing" under it; the two modes at the bottom. Between them, drawn in code: your robot in the colour you last chose, front and centre, waving every 6.5 seconds; two rivals a step behind (blue and pink, or the next bright colours if yours is one of them); a bomb with a lit fuse at its feet; and the arena behind them, the robots in an open corridor across it, fading into the dark behind the name and the buttons. Sideways, the name and buttons are on the left and the robots on the right. Claude's design; the owner had said he would like a title screen made from robot art. |
-| The title screen offers the two modes, Local and Online, and no settings | The owner's choice, after a first version with Play and Controls: the first thing a player decides is how they are playing, and settings belong in the lobby. Local ("On this phone, against CPU players") goes to the lobby. Online ("With friends, by room code") is shown but switched off, marked coming soon, until online play (step 2) is built; it will lead to joining or making a room. The lobby's back button goes back to the title screen. |
+| The title screen offers the two modes, Local and Online, and no settings | The owner's choice, after a first version with Play and Controls: the first thing a player decides is how they are playing, and settings belong in the lobby. Local ("On this phone, against CPU players") goes to the lobby. Online ("With friends, by room code") opens a panel to make a room or join one by its code (built November 2026). The lobby's back button goes back to the title screen. |
 | Settings in the order Controls, Sound, Graphics | The owner's order. Settings opens on Controls the first time, then on the page last seen. |
 | A bin on each CPU player's card | The owner asked for a quick way to remove CPU players. The bin removes one at once; an Undo bar shows for six seconds instead of asking first. Remove on a CPU player's panel works the same way. The last CPU player's bin is switched off. |
 | The lobby (November 2026) | Built after the owner's brainstorm and a mockup he approved, then his notes on it: every button must work, back and forward must work, allow for what the player meant in more than one way, a switch that reveals a slider under it, more options for every setting, each CPU player's level its own, and say whether the match is local or online. Two pages, Players and Match, with page names along the top and the other page's name either side of Start at the bottom; on a wide screen both side by side. **Players:** your colour three ways (‹ ›, a dot each, a swipe across the robot); a card per player; a CPU player's card opens its panel (Colour, Level, Remove, Done); Add CPU player, up to three; All CPUs sets every level at once. **Match** (the host's): the arena (Compact, Classic, Big; ‹ ›, dots or a swipe; the picture is the real arena) and the rules: Round timer (switch; length and Closing in under it), Rounds to win, Bricks, Custom start (switch; bombs, blast, speed under it), Custom power-ups (switch; one slider per power-up under it), and Put the rules back to normal. Every slider has − and + beside it. Everything is saved as it changes. A "Local match" chip and "You are the host" are at the top, with a one-line summary of the match. Claude's design within those notes. |
@@ -171,15 +171,15 @@ This is the brief the project started from.
 - **Setting bombs off by remote.** B was also meant to detonate. How that should work has not been decided.
 - **The final colours.** The arena is in blues for now. The look is to be revisited.
 - **More arenas.** Only the one layout style exists.
-- **Where to host online play.** It needs a small server as well as the page.
 - **A licence** for this repository, if it is ever to be shared more widely.
 
-## How online play is expected to work
+## How online play works
 
-Nothing is built yet. The intended shape:
+Built in November 2026; `docs/ONLINE.md` has the details.
 
-- A small Node.js server keeps one copy of each match and runs the same rules file the game already uses (`src/sim.ts`).
-- Friends join a room with a short code.
-- Each phone sends only its player's inputs and draws the world the server sends back, which keeps everyone in step.
+- One Cloudflare Durable Object per room keeps the match and runs the same rules file the game uses (`src/sim.ts`), and the CPU players (`src/bot.ts`).
+- Friends join a room with a four-letter code, or a link with the code in it.
+- Each phone sends only its player's inputs. The server sends every phone every player's inputs, tick by tick, and each phone steps its own copy of the world with them; a checksum every half second makes sure the copies agree.
+- Decisions (the owner's, November 2026): only the host restarts the match; anyone can open the menu, but the round keeps going behind it.
 
 The rules were written with this in mind from the start: they use no browser features and no randomness of their own, and the same seed with the same inputs always gives the same match.
