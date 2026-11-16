@@ -196,9 +196,15 @@ export function pickArena(s: MatchSetup, id: ArenaId): void {
   s.closeIn = a.closeIn;
 }
 
-/** The rules of a setup, put back to the usual ones. The players are left as they are. */
+/**
+ * The rules of a setup, put back to the usual ones for the arena it has picked (its own round length and
+ * closing-in speed: the owner's call, so Reset to Default on Compact gives Compact's rules). The arena and
+ * the players are left as they are.
+ */
 export function defaultRules(s: MatchSetup, myColor: string): MatchSetup {
-  return { ...defaultSetup(myColor), cpus: s.cpus };
+  const out = { ...defaultSetup(myColor), cpus: s.cpus };
+  pickArena(out, s.arena);
+  return out;
 }
 
 export function arenaOf(s: MatchSetup): (typeof ARENAS)[number] {

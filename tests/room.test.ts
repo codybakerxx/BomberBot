@@ -23,9 +23,19 @@ import {
   type ServerMsg,
 } from '../src/net';
 import { makeRng } from '../src/sim';
+import { ARENAS, defaultRules, defaultSetup } from '../src/setup';
 import type { World } from '../src/sim';
 
 assert.deepStrictEqual(COLOR_IDS, COLORS.map((c) => c.id), 'the server knows the same robots as the page');
+
+// Reset to Default keeps the arena picked and puts in that arena's own round length and closing-in speed
+for (const a of ARENAS) {
+  const messy = { ...defaultSetup('gold'), arena: a.id, roundSecs: 250, closeIn: 0, firstTo: 4, lives: 3 };
+  const r = defaultRules(messy, 'gold');
+  assert.strictEqual(r.arena, a.id, `Reset to Default stays on ${a.name}`);
+  assert.ok(r.roundSecs === a.roundSecs && r.closeIn === a.closeIn, `and uses ${a.name}'s timer and closing in`);
+  assert.ok(r.firstTo === 1 && r.lives === 1, 'the other rules go back to their defaults');
+}
 
 // room codes
 const rng = makeRng(7);

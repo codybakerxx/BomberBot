@@ -866,7 +866,7 @@ export function createLobby(host: LobbyHost): {
   ];
   const refreshRules = mount($('rules'), rules);
   $('rulesReset').addEventListener('click', () =>
-    confirmFirst('Reset to default?', 'The arena, timer, rounds, lives, post-mortem behavior, bricks, start and power-ups go back to their defaults. Your players stay as they are.', 'Reset to Default', (yes) => {
+    confirmFirst('Reset to default?', `The timer, rounds, lives, post-mortem behavior, bricks, start and power-ups go back to the defaults for the ${arenaOf(s()).name} arena. The arena and your players stay as they are.`, 'Reset to Default', (yes) => {
       if (!yes) return;
       host.setup = defaultRules(s(), host.myColor);
       changed();
