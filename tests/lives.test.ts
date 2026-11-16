@@ -26,6 +26,14 @@ import {
   wallLength,
   angelAim,
   type AngelRule,
+  ZOMBIE_RISE_TICKS,
+  ZOMBIE_DOWN_TICKS,
+  ZOMBIE_BOMBS,
+  ZOMBIE_FIRE,
+  ZOMBIE_SPEED,
+  ZOMBIE_SAFE_TICKS,
+  BASE_SPEED,
+  playerSpeed,
 } from '../src/sim';
 import { createBot, botInput } from '../src/bot';
 
@@ -202,4 +210,48 @@ const run = (w: World, n: number, inputs: (PlayerInput | undefined)[] = []): voi
     if (w.events.some((e) => e.type === 'throw')) threw = true;
   }
   assert.ok(threw && !t.alive, 'a CPU angel throws, and hits a robot that stands still');
+}
+
+{
+  // zombies: out of lives, a robot gets up again where it fell, slow, with one small bomb, and no part of the round
+  const w = createWorld({ seed: 7, softDensity: 0, roundTicks: 0, players: [{ colorId: 'a' }, { colorId: 'b' }, { colorId: 'c' }], zombies: true, angels: 'on' });
+  assert.strictEqual(w.angels, 'off', 'zombies take the place of angels');
+  const z = w.players[0];
+  z.x = 3;
+  z.bombsMax = 5;
+  blast(w, 0, 1);
+  run(w, 1);
+  assert.ok(z.zombie && !z.alive && !z.angel, 'out of lives: going to be a zombie');
+  run(w, ZOMBIE_RISE_TICKS);
+  assert.ok(z.alive && z.zombie && z.x === 3 && z.y === 1, 'up again, where it fell');
+  assert.ok(w.events.some((e) => e.type === 'rise' && e.player === 0) || z.safeTicks > 0, 'risen');
+  assert.deepStrictEqual([z.bombsMax, z.fire, z.speed], [ZOMBIE_BOMBS, ZOMBIE_FIRE, 0], 'one small bomb, no power-ups');
+  assert.strictEqual(playerSpeed(z), BASE_SPEED * ZOMBIE_SPEED, 'slow');
+  // it drops a bomb like anyone
+  run(w, ZOMBIE_SAFE_TICKS);
+  run(w, 1, [press]);
+  run(w, 1, [none]);
+  const zb = w.bombs.find((b) => b.owner === 0);
+  assert.ok(zb && zb.range === ZOMBIE_FIRE, 'a zombie drops a one-tile bomb');
+  run(w, 2, [press]);
+  assert.strictEqual(w.bombs.filter((b) => b.owner === 0).length, 1, 'one at a time');
+  // power-ups are left where they lie
+  w.items.push({ cx: 4, cy: 1, kind: 'fire', age: 0 });
+  z.x = 4;
+  run(w, 1);
+  assert.ok(w.items.some((it) => it.cx === 4 && it.cy === 1) && z.fire === ZOMBIE_FIRE, 'a zombie walks over power-ups');
+  // a blast knocks it down, and it gets up where it fell
+  run(w, FUSE_TICKS + FLAME_TICKS);
+  z.x = 5;
+  z.y = 3;
+  z.safeTicks = 0;
+  blast(w, 0, 2);
+  run(w, 1);
+  assert.ok(!z.alive && z.zombie && z.zombieDown, 'knocked down');
+  run(w, ZOMBIE_DOWN_TICKS);
+  assert.ok(z.alive && z.x === 5 && z.y === 3, 'up again where it fell');
+  // it is no part of the round: the last robot left wins with the zombie still about
+  blast(w, 2, 1);
+  run(w, 60);
+  assert.deepStrictEqual(w.over, { winner: 1 }, 'the last robot wins; the zombie does not keep the round going');
 }

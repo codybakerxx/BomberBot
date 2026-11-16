@@ -93,6 +93,21 @@ function ghostOf(c: BotColor): BotColor {
   return g;
 }
 
+const zombies = new Map<string, BotColor>();
+/** A robot's colours gone a sickly green: what it is drawn in as a zombie, with green-glowing lights. */
+function zombieOf(c: BotColor): BotColor {
+  let z = zombies.get(c.id);
+  if (!z) {
+    z = { ...c, body: mix(c.body, '#6b8f4e', 0.6), light: mix(c.light, '#b4d496', 0.55), dark: mix(c.dark, '#2c4022', 0.55), glow: '#a4ff63' };
+    zombies.set(c.id, z);
+  }
+  return z;
+}
+/** A zombie's arms: held out a little from its sides, as zombies do. */
+const ZOMBIE_ARMS: [number, number] = [0.38, 0.38];
+/** A zombie on the move sways from side to side. */
+const zombieLean = (p: Player): number => (p.moving ? Math.sin(p.walk * 0.5) * 0.09 : Math.sin(p.walk * 0.5) * 0.03);
+
 /** A number from 0 to 1 that is always the same for the same `n`: for scattering ash without a random generator. */
 function scatter(n: number): number {
   const v = Math.sin(n * 12.9898) * 43758.5453;
@@ -707,9 +722,16 @@ export function warmSprites(ctx: Ctx, world: World, T: number, ms = 4, dance: Da
   const wanted: Wanted[] = world.players.map((p) => ({ c: colorById(p.colorId), kind: 'walk' as const }));
   wanted.push({ c: CHARRED, kind: 'burnt' });
   for (const p of world.players) wanted.push({ c: ghostOf(colorById(p.colorId)), kind: 'ghost' });
+  // zombies: their walk, arms out, in every direction
+  for (const p of world.players) if (p.zombie) wanted.push({ c: zombieOf(colorById(p.colorId)), kind: 'dance', moves: ZOMBIE_MOVES });
   if (world.over && world.over.winner >= 0) wanted.push({ c: colorById(world.players[world.over.winner].colorId), kind: 'dance', moves: danceSamples(dance) });
   warmRobots(ctx, T, wanted, ms);
 }
+
+/** Every picture a zombie walking about needs: standing and each step of the walk, each way, arms out. */
+const ZOMBIE_MOVES = ([1, 2, 3, 4] as const).flatMap((facing) =>
+  [-1, 0, 1, 2, 3, 4, 5, 6, 7].map((f) => ({ facing, walk: f < 0 ? 0 : (f / 8) * Math.PI * 2, moving: f >= 0, pose: { arms: ZOMBIE_ARMS } })),
+);
 
 /** The winner of a round, how many seconds ago it was decided, and the victory dance they picked (dances.ts). */
 export interface Celebration {
@@ -744,13 +766,33 @@ function drawPlayer(ctx: Ctx, world: World, p: Player, T: number, celebrate?: Ce
         ctx.save();
         ctx.globalAlpha = 0.3;
       }
-      drawRobot(ctx, x, y, T, col, p.facing, p.walk, p.moving, crowned === p.id ? { crown: true } : undefined);
+      if (p.zombie) drawRobot(ctx, x, y, T, zombieOf(col), p.facing, p.walk, p.moving, { arms: ZOMBIE_ARMS, lean: zombieLean(p) });
+      else drawRobot(ctx, x, y, T, col, p.facing, p.walk, p.moving, crowned === p.id ? { crown: true } : undefined);
       if (blink) ctx.restore();
     }
     drawStatus(ctx, p, x, (p.y + 0.5) * T, T);
     return;
   }
   const t = p.deadTicks;
+  // a zombie knocked down lies where it fell and gets up again; one just out of lives climbs out of the
+  // floor once its knocked-out animation has played
+  if (p.zombie && (p.zombieDown || t >= DEATH_TICKS)) {
+    const left = p.respawnAt - world.tick; // ticks until it is up
+    const z = zombieOf(col);
+    ctx.save();
+    if (p.zombieDown) {
+      const up = Math.max(0, Math.min(1, 1 - left / 30)); // the last half second: getting up
+      const side = p.id % 2 ? 1 : -1;
+      ctx.globalAlpha = 0.85;
+      drawRobot(ctx, x, y, T, z, 2, 0, false, { lean: side * 1.45 * (1 - up), shrink: 0.85 + 0.15 * up, xEyes: up < 0.5 });
+    } else if (left <= 30) {
+      const k = Math.max(0.08, 1 - left / 30);
+      ctx.globalAlpha = Math.min(1, k * 1.5);
+      drawRobot(ctx, x, y, T, z, 2, 0, false, { shrink: k, arms: [1, 1] });
+    }
+    ctx.restore();
+    return;
+  }
   if (t >= DEATH_TICKS) return;
   // Knocked out. Two things happen at once: what is left of the robot, burnt black with crosses for
   // eyes, crumbles to ash that drifts up and away; and a pale ghost of it floats up off the screen.

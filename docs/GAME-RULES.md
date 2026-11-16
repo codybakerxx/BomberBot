@@ -209,13 +209,23 @@ The blocks were made 20% faster on 11 November 2026, after play-testing: they to
 - While it is on its way back it is still in the round: the round is not decided until only one robot is left that is standing or coming back, and if that last one is on its way back, the round waits for it to be standing.
 - The scoreboard shows a dot under each head for each life left, when the lobby gives more than one.
 
-**Angels** (the lobby's Angels, off by default): a robot out of lives becomes an angel once its knocked-out animation has played (`ANGEL_DELAY`), on the outer wall at the point nearest where it fell.
+**Out of lives** (the lobby's choice: Watch, the default; Angel; Zombie) says what a robot out of lives does for the rest of the round.
+
+**Angels**: a robot out of lives becomes an angel once its knocked-out animation has played (`ANGEL_DELAY`), on the outer wall at the point nearest where it fell.
 
 - The direction glides it round the wall (`ANGEL_SPEED`, 4.5 tiles a second): along the top and bottom, left and right; up and down the sides; either at a corner. Let go and it settles on the middle of a wall tile.
 - **Hold A and let go** to throw a bomb over the wall into the arena, straight in from the tile it is over: a tap throws it 2 tiles in (`ANGEL_MIN_TILES`), and each quarter of a second held (`ANGEL_CHARGE_TICKS`) adds a tile, up to 6 (`ANGEL_MAX_TILES`). A ring in its colour marks where it will land while A is held. It lands like any thrown bomb (on a taken tile it bounces on), has the usual fuse, and a blast of 2 tiles each way (`ANGEL_FIRE`). One out at a time (`ANGEL_BOMBS`); not from a corner.
 - Angels cannot be hurt, and do not count as still in the round.
 - **Angels come back** (off by default): an angel whose bomb knocks a robot out comes back in its place, on that tile, with what a robot starts with, one life, and the same 2 seconds of safety. Without it, an angel stays an angel to the end of the round.
 - CPU players are angels too: they go along the wall to line up with the nearest robot, wind the throw up to its distance and let go, resting between throws (Beginner 2.5 s, Normal 1.2 s, Hard 0.4 s).
+
+**Zombies** (the owner's design: not an infection game, just something to do once out): a robot out of lives gets up again as a zombie where it fell, 2 seconds after the knockout (`ZOMBIE_RISE_TICKS`), once its knocked-out animation has played.
+
+- It walks at 75% of the starting speed (`ZOMBIE_SPEED`), whatever it had collected, and drops one bomb at a time (`ZOMBIE_BOMBS`) with a 1-tile blast (`ZOMBIE_FIRE`), to get in the others' way. It walks over power-ups without picking them up.
+- A blast or a falling block knocks it down for 4 seconds (`ZOMBIE_DOWN_TICKS`); it gets up again where it fell (beside it, if that tile is taken), and blasts leave it be for a second after (`ZOMBIE_SAFE_TICKS`).
+- A zombie is never in the round: it cannot win, and the round is decided as if it were not there.
+- It is drawn in its colours gone a sickly green, arms held out, swaying as it walks; knocked down, it lies on its side with crosses for eyes.
+- CPU players are zombies too: they play as usual with what a zombie has, go after the robots still in the round (not other zombies) and leave power-ups alone.
 
 ### The scoreboard and the end of a round
 
@@ -259,6 +269,11 @@ All of these are named constants near the top of `src/sim.ts`. Changing one chan
 | `ANGEL_CHARGE_TICKS` | 14 | Each tile further takes this long with A held |
 | `ANGEL_FIRE` | 2 | An angel's bomb's blast, tiles each way |
 | `ANGEL_BOMBS` | 1 | An angel's bombs out at once |
+| `ZOMBIE_RISE_TICKS` | 120 (2 s) | A robot out of lives gets up as a zombie this long after the knockout |
+| `ZOMBIE_DOWN_TICKS` | 240 (4 s) | A zombie knocked down gets up again this long after |
+| `ZOMBIE_SPEED` | 0.75 | A zombie's speed, as a share of the starting speed |
+| `ZOMBIE_FIRE`, `ZOMBIE_BOMBS` | 1, 1 | A zombie's blast, and its bombs out at once |
+| `ZOMBIE_SAFE_TICKS` | 60 (1 s) | Blasts leave a zombie be this long after it gets up |
 | `TICK_HZ` | 60 | Rule steps per second |
 | `BASE_SPEED` | 0.04250390625 | Starting walking speed in tiles per tick (2.55 a second) |
 | `SPEED_STEP` | 0.5 / 60 (0.00833) | Extra speed per speed power-up (0.5 a second) |
@@ -305,7 +320,7 @@ The host can change these before a match. Left alone, every one is the usual rul
 | Custom start | Bombs 1 to 8, blast 1 to 8 tiles, speed +0 to +6 | What everyone starts each round with (`startBombs`, `startFire`, `startSpeed`) |
 | Custom power-ups | For each kind: Off, Rare (half), Normal, Lots (double) | Its chance under a brick (`itemChance`). A boot and a glove are only made sure of when they are not Off |
 | Lives | 1 to 5 | Lives each robot has in a round (`lives`); see Lives and angels |
-| Angels | Off (the default) or on; under it, Angels come back | Out of lives, a robot haunts the wall and throws bombs in (`angels`: 'on'; 'revive' with Angels come back) |
+| Out of lives | Watch (the default), Angel, Zombie; with Angel, Angels come back | What a robot out of lives does: watches, haunts the wall throwing bombs in (`angels`: 'on'; 'revive' with Angels come back), or gets up as a zombie (`zombies`) |
 
 ## Not in the game yet
 

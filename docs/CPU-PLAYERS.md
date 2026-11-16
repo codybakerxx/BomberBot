@@ -95,6 +95,10 @@ What does not change: it still needs a way out before it presses A, and it still
 
 It applies only while the bot itself is inside the square after 0:00. A bot still on its way in plays as it did. Beginner never presses.
 
+## As zombies
+
+Out of lives with Zombie picked, a CPU player is a zombie in the arena, with one 1-tile bomb and three quarters of the starting speed. It plays as usual with that (the same safety rules for its bombs), goes after the robots still in the round and not other zombies, and leaves power-ups alone (`itemWorth` is 0). In 15 rounds of four Normal CPU players, the zombies dropped 75 bombs between them; they rarely catch anyone, which is what a 1-tile blast at that speed gives.
+
 ## As angels
 
 Out of lives with Angels on, a CPU player is an angel on the wall (`angelInput` in bot.ts). It picks the robot nearest to it, goes round the wall to the closest place in line with that robot that a throw can reach (2 to 6 tiles in: over its column from the top or bottom, or by its row from a side), holds A for exactly that distance and lets go. It aims where the robot is, not where it is going. Between throws it rests, by level (`ANGEL_REST`): Beginner 150 ticks, Normal 70, Hard 25. Its own robot's knockout makes it forget its plan, so a robot coming back after a lost life starts thinking afresh.

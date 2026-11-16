@@ -455,7 +455,7 @@ let scoreKey = '';
 function drawScore(): void {
   const places = Array.from({ length: Math.max(4, world.players.length) }, (_, i) => world.players[i]);
   const winner = world.over ? world.over.winner : -1;
-  const key = places.map((p, i) => (p ? `${p.colorId}${p.alive ? '' : 'x'}${wins[i]}l${p.lives}` : '-')).join('|') + `|${winner}|${leader}|${score.width}x${score.height}`;
+  const key = places.map((p, i) => (p ? `${p.colorId}${p.alive ? '' : 'x'}${p.zombie ? 'z' : ''}${wins[i]}l${p.lives}` : '-')).join('|') + `|${winner}|${leader}|${score.width}x${score.height}`;
   if (key === scoreKey) return;
   scoreKey = key;
   const k = score.width / (parseFloat(score.style.width) || score.width); // screen pixels to canvas pixels
@@ -483,7 +483,7 @@ function drawScore(): void {
     }
     const cx = cell.x + (cell.w - (2 * r + gap + numW)) / 2 + r;
     const cy = cell.y;
-    const dim = !p ? 0.45 : p.alive ? 1 : 0.45;
+    const dim = !p ? 0.45 : p.alive && !p.zombie ? 1 : 0.45; // (a zombie is out of the round)
     // the helmet has a rim in the player's colour, which is what shows it against the dark screen
     // (the first robot's helmet was all black, and needed a disc behind it and a ring round it here)
     sctx.globalAlpha = dim;
@@ -622,6 +622,7 @@ function tick(): void {
       sfx.block();
       redrawStatic();
     } else if (e.type === 'respawn' || e.type === 'revive') sfx.shield(); // back in the round
+    else if (e.type === 'rise') sfx.curse(); // a zombie gets up
     else if (e.type === 'death') {
       sfx.death();
       if (e.player === 0 && e.out) blastedBy = e.cause === 'block' ? CRUSHED : e.by;
@@ -629,6 +630,11 @@ function tick(): void {
     }
   }
   // out of lives and an angel now (or the first time someone here is): say how angels play, once a match
+  const firstZombie = world.players.findIndex((p, i) => human(i) && p.zombie && p.alive);
+  if (firstZombie >= 0 && !angelTipShown) {
+    angelTipShown = true;
+    showTip(guests.length ? `${nameOf(firstZombie)}: a zombie! Small bombs only` : 'You are a zombie! Drop small bombs in their way');
+  }
   const firstAngel = world.players.findIndex((p, i) => human(i) && p.angel && world.tick >= p.angelFrom);
   if (firstAngel >= 0 && !angelTipShown) {
     angelTipShown = true;
@@ -665,10 +671,10 @@ function tick(): void {
     else if (winner === 0) finish('You win the round', `Last bot standing. ${wins[0]} of ${setup.firstTo} to win the match.`);
     else if (winner > 0) finish(`${nameOf(winner)} wins the round`, me.alive ? '' : how);
     else finish('Draw', me.alive ? 'Nobody was left standing.' : `${how} Nobody was left standing.`);
-  } else if (!world.over && !overShown && guests.length && world.players.every((p, i) => !human(i) || (!p.alive && p.lives === 0 && !p.angel && p.deadTicks >= DEATH_TICKS))) {
+  } else if (!world.over && !overShown && guests.length && world.players.every((p, i) => !human(i) || (!p.alive && p.lives === 0 && !p.angel && !p.zombie && p.deadTicks >= DEATH_TICKS))) {
     // everyone here is out and CPU players are still at it, as below
     finish('Everyone here is out', 'The CPU players are still fighting. Next round gives this round to one of them at random.');
-  } else if (!world.over && !overShown && !guests.length && !me.alive && me.lives === 0 && !me.angel && me.deadTicks >= DEATH_TICKS) {
+  } else if (!world.over && !overShown && !guests.length && !me.alive && me.lives === 0 && !me.angel && !me.zombie && me.deadTicks >= DEATH_TICKS) {
     // You are out and the others are still at it. The round carries on behind this panel, and its
     // winner still gets the win; Next round does not wait for it.
     finish(crushed ? 'You got crushed' : 'You got blasted', `${how} The others are still fighting. Next round gives this round to one of them at random.`);
@@ -1174,9 +1180,9 @@ function fillPause(): void {
     who.append(name, sub);
     const st = document.createElement('span');
     const won = world.over && world.over.winner === i;
-    st.className = `st${p.alive ? ' in' : ''}`;
+    st.className = `st${p.alive && !p.zombie ? ' in' : ''}`;
     // (with more than one life: how many are left; out of lives with angels on: an angel)
-    st.textContent = won ? 'Won' : p.alive || p.respawnAt >= 0 ? (setup.lives > 1 ? `${p.lives} ${p.lives === 1 ? 'life' : 'lives'}` : 'In') : p.angel ? 'Angel' : 'Out';
+    st.textContent = won ? 'Won' : !p.zombie && (p.alive || p.respawnAt >= 0) ? (setup.lives > 1 ? `${p.lives} ${p.lives === 1 ? 'life' : 'lives'}` : 'In') : p.angel ? 'Angel' : p.zombie ? 'Zombie' : 'Out';
     const w = document.createElement('span');
     w.className = 'wins';
     w.textContent = String(wins[i]);
@@ -1206,7 +1212,7 @@ $('pauseLobby').addEventListener('click', () =>
  */
 function settleUnfinished(): boolean {
   if (counted || world.over) return true;
-  const still = world.players.filter((p) => p.id > 0 && p.alive);
+  const still = world.players.filter((p) => p.id > 0 && p.alive && !p.zombie);
   if (!still.length) return true; // everyone is out: a draw, no point
   const w = still[Math.floor(Math.random() * still.length)].id;
   counted = true;

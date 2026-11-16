@@ -57,6 +57,7 @@ The whole game as pure logic. No drawing, no sound, no browser calls, no `Math.r
 | `explode` | A blast: reach, what stops it, chain reactions |
 | `knockOut`, `bringBack`, `comeBackTile` | Losing a life: coming back at the start, or out of the round (an angel, with angels on) |
 | `angelStep`, `perimeterAt`, `angelAim`, `angelReach` | Angels: gliding round the outer wall, winding up and throwing a bomb in |
+| `inRound`, `Player.zombie` | Who is still in the round; zombies (risen in `step`, knocked down in `knockOut`) are not |
 | Constants | Every number of the game, named, near the top of the file |
 
 Positions are in tiles, and tile centres are whole numbers. A robot at `x = 3` is exactly in the middle of column 3, and `Math.round(x)` is the tile it counts as standing on.

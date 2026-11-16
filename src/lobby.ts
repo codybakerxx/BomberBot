@@ -26,6 +26,7 @@ import { createWorld, MAX_BOMBS, MAX_FIRE, MAX_LIVES, MAX_SPEED_ITEMS, START_FIR
 import {
   CpuSlot,
   Guest,
+  AFTERLIVES,
   ARENAS,
   BRICKS,
   CLOSE_IN,
@@ -648,6 +649,23 @@ export function createLobby(host: LobbyHost): {
     drawDynamic(g, w, T, 0, 0);
   }
 
+  // with angels only: whether an angel whose bomb knocks a robot out comes back in its place
+  const angelsBack = toggle({
+    label: 'Angels come back',
+    hint: 'An angel whose bomb knocks a robot out takes its place',
+    get: () => s().angelsBack,
+    set: (v) => {
+      s().angelsBack = v;
+      changed();
+    },
+  });
+  {
+    const shown = angelsBack.refresh;
+    angelsBack.refresh = () => {
+      shown();
+      angelsBack.el.hidden = s().afterlife !== 'angel';
+    };
+  }
   const rules: Opt[] = [
     toggle({
       label: 'Round timer',
@@ -709,27 +727,17 @@ export function createLobby(host: LobbyHost): {
       },
       text: (v) => (v === 1 ? 'One life' : `${v} lives`),
     }),
-    toggle({
-      label: 'Angels',
-      hint: 'Out of lives? Haunt the wall and throw bombs in: hold A to throw further',
-      get: () => s().angels,
-      set: (v) => {
-        s().angels = v;
+    choice({
+      label: 'Out of lives',
+      hint: () => AFTERLIVES.find((x) => x.id === s().afterlife)!.blurb,
+      values: () => AFTERLIVES.map((x) => x.name),
+      get: () => AFTERLIVES.findIndex((x) => x.id === s().afterlife),
+      set: (i) => {
+        s().afterlife = AFTERLIVES[i].id;
         changed();
       },
-      offText: 'Out of lives, you watch the rest of the round.',
-      under: [
-        toggle({
-          label: 'Angels come back',
-          hint: 'An angel whose bomb knocks a robot out takes its place',
-          get: () => s().angelsBack,
-          set: (v) => {
-            s().angelsBack = v;
-            changed();
-          },
-        }),
-      ],
     }),
+    angelsBack,
     slider({
       label: 'Bricks',
       hint: 'How much of the arena starts filled. The picture above shows it.',
@@ -784,7 +792,7 @@ export function createLobby(host: LobbyHost): {
   ];
   const refreshRules = mount($('rules'), rules);
   $('rulesReset').addEventListener('click', () =>
-    confirmFirst('Put the rules back to normal?', 'The arena, timer, rounds, lives, angels, bricks, start and power-ups go back to the usual ones. Your players stay as they are.', 'Reset rules', (yes) => {
+    confirmFirst('Put the rules back to normal?', 'The arena, timer, rounds, lives, out of lives, bricks, start and power-ups go back to the usual ones. Your players stay as they are.', 'Reset rules', (yes) => {
       if (!yes) return;
       host.setup = defaultRules(s(), host.myColor);
       changed();

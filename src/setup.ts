@@ -107,7 +107,15 @@ export const MAX_FIRST_TO = 9;
  * call; it was 3), so a setup saved before then has its Rounds to win put back to 1. 3: Closing in has five
  * steps in place of three (Slow, Normal, Fast became Very slow, Normal, Fast).
  */
-export const SETUP_VERSION = 5;
+export const SETUP_VERSION = 6;
+
+/** What a robot out of lives does for the rest of the round (MatchSetup.afterlife), in the lobby's order. */
+export type Afterlife = 'watch' | 'angel' | 'zombie';
+export const AFTERLIVES: { id: Afterlife; name: string; blurb: string }[] = [
+  { id: 'watch', name: 'Watch', blurb: 'Out of lives, you watch the rest of the round.' },
+  { id: 'angel', name: 'Angel', blurb: 'Haunt the wall and throw bombs in: hold A to throw further.' },
+  { id: 'zombie', name: 'Zombie', blurb: 'Get up again where you fell, slow, with one small bomb to get in the others\' way.' },
+];
 
 export interface MatchSetup {
   /** SETUP_VERSION when it was saved */
@@ -134,9 +142,12 @@ export interface MatchSetup {
   items: Record<ItemKind, number>;
   /** lives each robot has in a round, 1 to MAX_LIVES (sim.ts) */
   lives: number;
-  /** knocked-out players out of lives become angels on the wall, throwing bombs in */
-  angels: boolean;
-  /** and an angel whose bomb knocks a robot out comes back in its place */
+  /**
+   * What a robot out of lives does for the rest of the round: watch, haunt the wall as an angel throwing bombs
+   * in, or get up again in the arena as a zombie with one small bomb (AFTERLIFE)
+   */
+  afterlife: Afterlife;
+  /** with angels: an angel whose bomb knocks a robot out comes back in its place */
   angelsBack: boolean;
 }
 
@@ -158,7 +169,7 @@ export function defaultSetup(myColor: string): MatchSetup {
     itemsOn: false,
     items: { bomb: 2, fire: 2, speed: 2, kick: 2, grab: 2, shield: 2, curse: 2 },
     lives: 1,
-    angels: false, // off by default (the owner's call)
+    afterlife: 'watch', // angels and zombies are off by default (the owner's call)
     angelsBack: false,
   };
 }
@@ -209,7 +220,8 @@ export function worldConfig(s: MatchSetup, myColor: string, seed: number, guests
     startFire: s.startOn ? s.startFire : START_FIRE,
     startSpeed: s.startOn ? s.startSpeed : 0,
     lives: s.lives,
-    angels: !s.angels ? 'off' : s.angelsBack ? 'revive' : 'on',
+    angels: s.afterlife !== 'angel' ? 'off' : s.angelsBack ? 'revive' : 'on',
+    zombies: s.afterlife === 'zombie',
   };
 }
 
@@ -227,7 +239,8 @@ export function summary(s: MatchSetup, guests = 0): string {
     `First to ${s.firstTo}`,
   ];
   if (s.lives > 1) parts.push(`${s.lives} lives`);
-  if (s.angels) parts.push(s.angelsBack ? 'Angels come back' : 'Angels');
+  if (s.afterlife === 'angel') parts.push(s.angelsBack ? 'Angels come back' : 'Angels');
+  if (s.afterlife === 'zombie') parts.push('Zombies');
   if (s.startOn) parts.push('Custom start');
   if (s.itemsOn) parts.push('Custom power-ups');
   return parts.join(' · ');
@@ -279,7 +292,9 @@ export function readSetup(raw: unknown, myColor: string, colorIds: string[]): Ma
   out.lives = clampInt(r.lives, 1, MAX_LIVES, 1);
   // Angels were on by default in version 4, for one evening; the owner had them off by default, so a setup
   // saved then starts with them off again, like a new one
-  if (typeof r.angels === 'boolean' && typeof r.v === 'number' && r.v >= 5) out.angels = r.angels;
+  const was = r as Partial<MatchSetup> & { angels?: unknown };
+  if (AFTERLIVES.some((a) => a.id === was.afterlife)) out.afterlife = was.afterlife as Afterlife;
+  else if (was.angels === true && typeof r.v === 'number' && r.v === 5) out.afterlife = 'angel'; // version 5 had an Angels switch
   if (typeof r.angelsBack === 'boolean') out.angelsBack = r.angelsBack;
   return out;
 }

@@ -114,6 +114,13 @@ export interface Player {
   angelS: number;
   /** how many ticks A has been held for the throw being wound up; 0 when not */
   angelHeld: number;
+  /**
+   * Out of lives, with zombies on (WorldConfig.zombies): a zombie, back on its feet in the arena where it fell,
+   * slow, with one small bomb at a time and no power-ups. A blast or a block knocks it down (`zombieDown`) and
+   * it gets up again (`respawnAt`). It is never in the round: it cannot win, and does not keep the round going.
+   */
+  zombie: boolean;
+  zombieDown: boolean;
 }
 
 export interface Bomb {
@@ -201,7 +208,9 @@ export type GameEvent =
   /** a player who lost a life is back, at their starting place (or the nearest free tile to it) */
   | { type: 'respawn'; player: number }
   /** an angel's bomb knocked a robot out and, with Angels come back on, the angel took its place */
-  | { type: 'revive'; player: number; victim: number };
+  | { type: 'revive'; player: number; victim: number }
+  /** a zombie is on its feet: just risen from a knockout, or back up after being knocked down */
+  | { type: 'rise'; player: number };
 
 /** A block on its way down. It lands, and turns its tile solid, when `world.tick` reaches `landAt`. */
 export interface FallingBlock {
@@ -247,6 +256,8 @@ export interface World {
   stepAssist: boolean;
   /** knocked-out players out of lives become angels on the wall: 'off', 'on', or 'revive' (an angel whose bomb knocks a robot out takes its place) */
   angels: AngelRule;
+  /** knocked-out players out of lives get up again as zombies (in place of angels) */
+  zombies: boolean;
   /** where each player started the round, by id: where a lost life comes back */
   spawns: { x: number; y: number }[];
   /** what a robot starts with, and comes back with after losing a life */
@@ -289,6 +300,8 @@ export interface WorldConfig {
   lives?: number;
   /** Knocked-out players as angels (World.angels). Default 'off'. */
   angels?: AngelRule;
+  /** Knocked-out players as zombies (World.zombies), in place of angels. Default false. */
+  zombies?: boolean;
 }
 
 // ---------------------------------------------------------------- constants
@@ -352,6 +365,14 @@ export const ANGEL_MAX_TILES = 6; // holding A throws it further, up to this
 export const ANGEL_CHARGE_TICKS = 14; // each tile further takes this long held (about a quarter of a second)
 export const ANGEL_FIRE = 2; // an angel's bomb reaches two tiles each way
 export const ANGEL_BOMBS = 1; // one of its bombs out at a time
+
+// zombies: out of lives, a robot gets up again where it fell, to get in the others' way
+export const ZOMBIE_RISE_TICKS = DEATH_TICKS + 30; // it rises 2 s after the knockout (once the knocked-out animation has played)
+export const ZOMBIE_DOWN_TICKS = 240; // a blast or a block knocks a zombie down for 4 s; then it gets up where it fell
+export const ZOMBIE_SPEED = 0.75; // it walks at 75% of the starting speed, whatever it had collected
+export const ZOMBIE_FIRE = 1; // its bombs reach one tile each way
+export const ZOMBIE_BOMBS = 1; // one at a time
+export const ZOMBIE_SAFE_TICKS = 60; // blasts leave it be for 1 s after it gets up
 
 // ---------------------------------------------------------------- world creation
 
@@ -486,6 +507,8 @@ export function createWorld(cfg: WorldConfig): World {
     angelFrom: -1,
     angelS: 0,
     angelHeld: 0,
+    zombie: false,
+    zombieDown: false,
   }));
 
   return {
@@ -509,7 +532,8 @@ export function createWorld(cfg: WorldConfig): World {
     over: null,
     overCountdown: -1,
     stepAssist: cfg.stepAssist ?? false,
-    angels: cfg.angels === 'on' || cfg.angels === 'revive' ? cfg.angels : 'off',
+    angels: !cfg.zombies && (cfg.angels === 'on' || cfg.angels === 'revive') ? cfg.angels : 'off',
+    zombies: !!cfg.zombies,
     spawns: spawns.map((p) => ({ ...p })),
     start: { bombs: startBombs, fire: startFire, speed: startSpeed },
   };
@@ -619,7 +643,7 @@ function fallBlocks(world: World): void {
     world.events.push({ type: 'block', cx, cy });
     // The last robot standing wins even if a block gets it a moment after the others went.
     // (Several under the same block went together: that is left to end as a draw.)
-    if (!world.over && under.length === 1 && world.players.length > 1 && !world.players.some((p) => p.alive || p.respawnAt >= 0) && under[0].lives === 0) {
+    if (!world.over && under.length === 1 && world.players.length > 1 && !world.players.some(inRound) && under[0].lives === 0 && !under[0].zombie) {
       world.over = { winner: under[0].id };
     }
   }
@@ -693,6 +717,7 @@ function approach(v: number, target: number, step: number): number {
 
 /** This player's walking speed in tiles per tick. */
 export function playerSpeed(p: Player): number {
+  if (p.zombie) return BASE_SPEED * ZOMBIE_SPEED;
   if (p.curseTicks > 0) return BASE_SPEED * CURSE_SPEED;
   return BASE_SPEED + SPEED_STEP * p.speed;
 }
@@ -1115,10 +1140,22 @@ function knockOut(world: World, p: Player, cause: 'blast' | 'block', by: number)
   p.alive = false;
   p.moving = false;
   p.deadTicks = 0;
-  p.lives = Math.max(0, p.lives - 1);
   p.safeTicks = 0;
+  if (p.zombie) {
+    // a zombie is only knocked down: it gets up again where it fell
+    p.zombieDown = true;
+    p.respawnAt = world.tick + ZOMBIE_DOWN_TICKS;
+    world.events.push({ type: 'death', player: p.id, cause, by, out: false });
+    return;
+  }
+  p.lives = Math.max(0, p.lives - 1);
   if (p.lives > 0) p.respawnAt = world.tick + RESPAWN_TICKS;
-  else if (world.angels !== 'off') {
+  else if (world.zombies) {
+    // out of lives: it will rise as a zombie where it fell
+    p.zombie = true;
+    p.zombieDown = false;
+    p.respawnAt = world.tick + ZOMBIE_RISE_TICKS;
+  } else if (world.angels !== 'off') {
     p.angel = true;
     p.angelFrom = world.tick + ANGEL_DELAY;
     p.angelS = nearestOnWall(world, p.x, p.y);
@@ -1194,6 +1231,14 @@ function comeBackTile(world: World, from: { x: number; y: number }): { x: number
     ring = next;
   }
   return from;
+}
+
+/**
+ * Still in the round: standing, or waiting to come back with a life left. Not an angel, and not a zombie:
+ * they cannot win the round and do not keep it going.
+ */
+export function inRound(p: Player): boolean {
+  return !p.zombie && (p.alive || p.respawnAt >= 0);
 }
 
 /** How far it is round the outer wall, in tiles: along the top, down the right, back along the bottom, up the left. */
@@ -1332,7 +1377,13 @@ export function step(world: World, inputs: (PlayerInput | undefined)[]): void {
   for (const p of world.players) {
     if (!p.alive) {
       if (p.deadTicks < GHOST_TICKS) p.deadTicks++;
-      if (p.respawnAt >= 0 && world.tick >= p.respawnAt && !world.over) {
+      if (p.respawnAt >= 0 && world.tick >= p.respawnAt && !world.over && p.zombie) {
+        // a zombie gets up where it fell (or beside it, if that tile is taken now)
+        const at = comeBackTile(world, { x: Math.round(p.x), y: Math.round(p.y) });
+        bringBack(world, p, at.x, at.y);
+        Object.assign(p, { zombie: true, zombieDown: false, bombsMax: ZOMBIE_BOMBS, fire: ZOMBIE_FIRE, speed: 0, safeTicks: ZOMBIE_SAFE_TICKS });
+        world.events.push({ type: 'rise', player: p.id });
+      } else if (p.respawnAt >= 0 && world.tick >= p.respawnAt && !world.over) {
         // a lost life comes back
         const at = comeBackTile(world, world.spawns[p.id]);
         bringBack(world, p, at.x, at.y);
@@ -1422,7 +1473,7 @@ export function step(world: World, inputs: (PlayerInput | undefined)[]): void {
         continue;
       }
     }
-    const i = world.items.findIndex((it) => it.cx === cx && it.cy === cy);
+    const i = p.zombie ? -1 : world.items.findIndex((it) => it.cx === cx && it.cy === cy); // (a zombie walks over power-ups)
     if (i >= 0) {
       const kind = world.items[i].kind;
       world.items.splice(i, 1);
@@ -1441,7 +1492,7 @@ export function step(world: World, inputs: (PlayerInput | undefined)[]): void {
   // last one standing wins; a short wait lets a double knockout count as a draw. A robot waiting to come
   // back with a life left is still in; an angel is not (unless it comes back, which calls the wait off).
   if (!world.over) {
-    const still = world.players.filter((p) => p.alive || p.respawnAt >= 0);
+    const still = world.players.filter(inRound);
     // (the one left is waiting to come back: let it come back first, so the winner is standing)
     const waitFor = still.length === 1 && !still[0].alive;
     if (still.length <= 1 && world.players.length > 1 && !waitFor) {

@@ -34,7 +34,7 @@ Working today:
 - A menu during a match that says what is going on, with Resume, Settings, Restart (the whole match again) and Leave to the lobby (those last two ask first)
 - Keyboard and Xbox controller support, for playing and for every menu, with keys and buttons you can change and hints that follow what you last used
 - Couch play: every extra controller can join as another player on the same screen
-- Lives per round, and angels: out of lives, you haunt the arena's wall and throw bombs in
+- Lives per round; and out of lives, play on as an angel throwing bombs in from the wall, or as a zombie in the arena
 - Sound effects
 
 Not built yet: teams and playing online. The plan is in [docs/ROADMAP.md](docs/ROADMAP.md).

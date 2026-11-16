@@ -766,7 +766,7 @@ function bombEffect(world: World, D: Danger, cx: number, cy: number, range: numb
 
 /** How much each power-up is worth going out of the way for. */
 function itemWorth(p: Player, kind: ItemKind): number {
-  if (kind === 'curse') return 0; // never worth walking to
+  if (kind === 'curse' || p.zombie) return 0; // never worth walking to (and a zombie cannot pick power-ups up)
   if (kind === 'shield') return p.shieldTicks > 10 * TICK_HZ ? 0.5 : 3.4;
   if (kind === 'kick') return p.canKick ? 0.2 : 2;
   if (kind === 'grab') return p.canGrab ? 0.2 : 1.6;
@@ -980,7 +980,8 @@ function decide(c: Ctx): PlayerInput | null {
   const { world, me, bot, spec, D, walls, S } = c;
   const sx = S % world.w;
   const sy = (S - sx) / world.w;
-  const enemies = world.players.filter((p) => p.alive && p.id !== me.id);
+  // (a zombie goes after the robots still in the round, not other zombies)
+  const enemies = world.players.filter((p) => p.alive && p.id !== me.id && !(me.zombie && p.zombie));
   const wasIdle = bot.path.length === 0;
   const canBomb =
     !me.carrying &&
