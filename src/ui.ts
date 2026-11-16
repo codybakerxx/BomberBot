@@ -338,3 +338,39 @@ export function wireConfirm(): void {
     if (e.target === box) answerConfirm(false);
   });
 }
+
+// ---------------------------------------------------------------- a flash on every press
+
+/** How long a pressed button stays lit, in thousandths of a second. */
+const FLASH_MS = 220;
+/** The menus' buttons that light up when pressed (the round's own A and B, `.tbtn`, are left alone). */
+const FLASHABLE = 'button:not(.tbtn), [role="spinbutton"]';
+
+/**
+ * Every menu button lights up for a moment when it is pressed (the owner's ask: so the player can see the tap
+ * was taken): a soft glow in the accent colour and a slight press in (`.flash` in page.html). Wired once, on
+ * the whole page. It follows the finger or mouse going down, and a press made with Enter, Space or a
+ * controller's A (which reach the button as a click with no finger) lights it up too.
+ */
+export function wireFlash(): void {
+  const flash = (el: Element | null): void => {
+    const b = el?.closest<HTMLElement>(FLASHABLE);
+    if (!b || (b as HTMLButtonElement).disabled) return;
+    b.classList.remove('flash');
+    void b.offsetWidth; // start the glow again if it is pressed twice quickly
+    b.classList.add('flash');
+    window.setTimeout(() => b.classList.remove('flash'), FLASH_MS);
+  };
+  document.addEventListener(
+    'pointerdown',
+    (e) => flash(e.target as Element),
+    true,
+  );
+  document.addEventListener(
+    'click',
+    (e) => {
+      if (e.detail === 0) flash(e.target as Element); // no finger or mouse: Enter, Space or a controller
+    },
+    true,
+  );
+}

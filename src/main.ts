@@ -22,7 +22,7 @@ import { createPadNav } from './padnav';
 import { PAD } from './bindings';
 import { createRemap } from './remap';
 import { Guest, MatchSetup, Prefs, SHARPNESS, SOUND_NAMES, arenaOf, clockText, defaultSetup, load, readPrefs, readSetup, save, summary, worldConfig } from './setup';
-import { Opt, answerConfirm, choice, confirmFirst, confirmOpen, heading, mount, note, slider, toggle, wireConfirm } from './ui';
+import { Opt, answerConfirm, choice, confirmFirst, confirmOpen, heading, mount, note, slider, toggle, wireConfirm, wireFlash } from './ui';
 import { Hand, STRAIGHT, standardAims, uniformAims } from './swipe';
 import {
   TEACH_ORDER,
@@ -1522,6 +1522,7 @@ window.addEventListener('orientationchange', () => setTimeout(layout, 200));
 newWorld();
 layout();
 wireConfirm();
+wireFlash(); // every menu button lights up for a moment when pressed
 applyPrefs();
 applySettings(false);
 showTitle();

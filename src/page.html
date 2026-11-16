@@ -395,6 +395,11 @@
   .round-btn { flex: 0 0 auto; width: 52px; height: 52px; border-radius: 50%; background: #151a28; }
   .round-btn svg { width: 22px; height: 22px; }
   .icon-btn:active, .round-btn:active, .step:active, .side-btn:active { transform: translateY(1px); }
+  /* a pressed button lights up for a moment (wireFlash in ui.ts; the owner's ask, so a tap is seen to be taken):
+     a soft glow in the accent colour, a little brighter, pressed in slightly, then easing back */
+  button, [role="spinbutton"] { transition: box-shadow 0.18s ease-out, filter 0.18s ease-out, transform 0.12s ease-out; }
+  .flash { box-shadow: 0 0 0 3px rgba(255, 196, 92, 0.45), 0 0 16px rgba(255, 196, 92, 0.55) !important; filter: brightness(1.3); transform: scale(0.96); transition: none !important; }
+  body.calm .flash { transform: none; }
   .mode-chip {
     display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px;
     font: 700 12px/1 var(--font-display); letter-spacing: 0.18em; text-transform: uppercase;
