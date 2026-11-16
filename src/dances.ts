@@ -14,7 +14,7 @@
 import type { Pose } from './robot';
 import type { Dir } from './sim';
 
-export type DanceId = 'party' | 'spin' | 'griddy';
+export type DanceId = 'party' | 'spin' | 'griddy' | 'percolator' | 'gangnam';
 
 export interface Dance {
   id: DanceId;
@@ -28,6 +28,8 @@ export const DANCES: Dance[] = [
   { id: 'party', name: 'Party', blurb: 'A jump, then a bounce side to side, pumping each arm' },
   { id: 'spin', name: 'Spin', blurb: 'Two spins in the air, then both arms up: ta-da' },
   { id: 'griddy', name: 'Griddy', blurb: 'The touchdown dance: quick steps, arms swinging, sliding side to side' },
+  { id: 'percolator', name: 'Percolator', blurb: 'Knees bent, bouncing low, fists pumping in turn, heels shuffling side to side' },
+  { id: 'gangnam', name: 'Gangnam', blurb: 'Gangnam Style, the horse-riding dance: a galloping hop holding the reins, then one arm up swinging the lasso' },
 ];
 export const DANCE_IDS: DanceId[] = DANCES.map((d) => d.id);
 
@@ -64,6 +66,8 @@ const STEP_PICS = 8;
 export function danceFrame(id: DanceId, t: number): DanceFrame {
   if (id === 'spin') return spin(t);
   if (id === 'griddy') return griddy(t);
+  if (id === 'percolator') return percolator(t);
+  if (id === 'gangnam') return gangnam(t);
   return party(t);
 }
 
@@ -112,6 +116,45 @@ function griddy(t: number): DanceFrame {
     walk,
     dx: slide * 0.2,
     pose: { jump: Math.abs(Math.sin(walk)) * 0.035, lean: Math.cos(t * 2.4) * 0.09, arms: [0.35 + 0.35 * s, 0.35 - 0.35 * s] },
+  };
+}
+
+/**
+ * Percolator (the house dance): knees bent and bouncing low on the beat, fists pumping one after the other in
+ * front of it, feet shuffling heel and toe so it creeps from side to side, a little sway in the shoulders.
+ * The arms pump twice for each step picture's cycle and follow it, so there are only eight pictures.
+ */
+function percolator(t: number): DanceFrame {
+  const beat = t * 9; // about three bounces a second
+  const walk = beat * 0.5;
+  const pic = Math.round((walk / TAU) * STEP_PICS);
+  const s = Math.sin((pic / STEP_PICS) * TAU * 2);
+  return {
+    facing: 2,
+    moving: true,
+    walk,
+    dx: Math.sin(t * 2.6) * 0.09,
+    pose: { shrink: 0.92 + 0.04 * Math.abs(Math.sin(beat)), lean: Math.sin(beat / 2) * 0.06, arms: [0.3 + 0.25 * s, 0.3 - 0.25 * s] },
+  };
+}
+
+/**
+ * Gangnam Style (the horse-riding dance): a galloping hop on the spot with both hands low, holding the
+ * reins; then one arm goes up, swinging the lasso, and it steps from side to side, and back to the reins.
+ */
+function gangnam(t: number): DanceFrame {
+  const REINS = 2.2;
+  const u = t % (REINS * 2);
+  const walk = t * 14;
+  // a gallop: two quick hops, a short rest
+  const hop = Math.max(0, Math.sin(t * 14)) * 0.08;
+  const lasso = u >= REINS;
+  return {
+    facing: 2,
+    moving: true,
+    walk,
+    dx: lasso ? Math.sin((u - REINS) * 2.86) * 0.16 : 0,
+    pose: { jump: hop, lean: lasso ? Math.sin(t * 7) * 0.07 : 0, arms: lasso ? [0.12, 1] : [0.12, 0.12] },
   };
 }
 

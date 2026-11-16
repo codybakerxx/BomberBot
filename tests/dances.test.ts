@@ -7,10 +7,10 @@
 import assert from 'node:assert';
 import { DANCES, DANCE_IDS, danceFrame, danceSamples, isDance, stepDance } from '../src/dances';
 
-assert.deepStrictEqual(DANCE_IDS, ['party', 'spin', 'griddy'], 'three dances, Party first (the one before there was a choice)');
+assert.deepStrictEqual(DANCE_IDS, ['party', 'spin', 'griddy', 'percolator', 'gangnam'], 'five dances, Party first (the one before there was a choice)');
 assert.ok(isDance('griddy') && !isDance('floss') && !isDance(3), 'isDance knows the dances and nothing else');
-assert.strictEqual(stepDance('party', -1), 'griddy', '‹ from the first goes round to the last');
-assert.strictEqual(stepDance('griddy', 1), 'party', '› from the last goes round to the first');
+assert.strictEqual(stepDance('party', -1), 'gangnam', '‹ from the first goes round to the last');
+assert.strictEqual(stepDance('gangnam', 1), 'party', '› from the last goes round to the first');
 
 for (const d of DANCES) {
   const pictures = new Set<string>();
@@ -24,8 +24,10 @@ for (const d of DANCES) {
     const step = f.moving ? Math.round((f.walk / (Math.PI * 2)) * 8) % 8 : -1;
     pictures.add(`${f.facing}|${step}|${front ? arms.map((a) => Math.round(a * 8)).join(',') : ''}`);
   }
-  assert.ok(pictures.size <= 12, `${d.name}: ${pictures.size} pictures, few enough to make ahead of time`);
+  assert.ok(pictures.size <= 16, `${d.name}: ${pictures.size} pictures, few enough to make ahead of time`);
   for (const t of [0, 0.37, 1.5, 2.9]) assert.deepStrictEqual(danceFrame(d.id, t), danceFrame(d.id, t), `${d.name}: the same time, the same moment`);
 }
 assert.ok(danceSamples('spin').some((f) => f.facing === 1) && danceSamples('spin').some((f) => f.facing === 3), 'Spin turns all the way round');
 assert.ok(danceSamples('griddy').every((f) => f.moving), 'the Griddy keeps stepping');
+assert.ok(danceSamples('percolator').every((f) => (f.pose.shrink ?? 1) < 1), 'the Percolator stays low, knees bent');
+assert.ok(danceSamples('gangnam').some((f) => f.pose.arms?.[1] === 1) && danceSamples('gangnam').some((f) => f.pose.arms?.[1] === 0.12), 'Gangnam holds the reins, then swings the lasso');

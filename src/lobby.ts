@@ -293,7 +293,7 @@ export function createLobby(host: LobbyHost): {
     requestAnimationFrame(danceLoop);
   }
   /** How long each dance plays before it starts again, in the lobby: a whole go, start included. */
-  const PREVIEW: Record<DanceId, number> = { party: 3.4, spin: 4.2, griddy: 5.24 };
+  const PREVIEW: Record<DanceId, number> = { party: 3.4, spin: 4.2, griddy: 5.24, percolator: 4.84, gangnam: 4.4 };
   /**
    * A robot doing a dance on a card's canvas: a little smaller than it stands there, and with its jumps
    * halved, so the jumps and slides stay inside the card.
