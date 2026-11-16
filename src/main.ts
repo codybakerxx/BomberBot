@@ -319,9 +319,11 @@ let scoreHeadMax = 13;
  * How many of the screen's pixels make one of the page's: what every canvas is drawn at. A phone at 3 can
  * report more when its page is zoomed (an app's text-size setting can do that), and the canvases must
  * follow it or they are stretched and blurry while the page's text stays sharp. It was capped at 3, which
- * did exactly that. The cap of 4 is only there to keep the sprites' memory in bounds.
+ * did exactly that; then at 4, and the owner's phone went blurry again, so a zoomed page can report more.
+ * The cap of 6 is only there to keep the sprites' memory in bounds. Settings › Graphics says what the
+ * screen reports and what the game draws at.
  */
-const MAX_DENSITY = 4;
+const MAX_DENSITY = 6;
 function density(): number {
   // Settings › Graphics › Sharpness can ask for less, to save battery (Sharpest is the usual)
   return Math.min(window.devicePixelRatio || 1, MAX_DENSITY, SHARPNESS[prefs.sharpness].cap);
@@ -356,11 +358,18 @@ function layout(): void {
   const ch = canvas.height / dpr;
   canvas.style.width = `${cw}px`;
   canvas.style.height = `${ch}px`;
-  canvas.style.left = `${Math.round((W - cw) / 2)}px`;
+  // The arena's corner goes on a whole screen pixel, not just a whole page pixel. When a screen has a
+  // fractional density (a zoomed page: 3.5, 2.625...), a whole page pixel can fall between two screen
+  // pixels, and then every pixel of the arena is shared out between two of the screen's: the whole map goes
+  // soft. Which arenas hit this depended on their size, so it came and went.
+  const onPixel = (v: number): number => Math.round(v * dpr) / dpr;
+  const left = onPixel((W - cw) / 2);
+  canvas.style.left = `${left}px`;
   const infoRow = stacked ? Math.round((T / dpr) * INFO_ROWS) : 0;
-  canvas.style.top = stacked ? `${topBar + infoRow}px` : `${Math.round((H - ch) / 2)}px`;
+  const top = onPixel(stacked ? topBar + infoRow : (H - ch) / 2);
+  canvas.style.top = `${top}px`;
   // the ghost layer: over the arena and everything above it, on the same pixels as the arena
-  ghostTop = Math.round((stacked ? topBar + infoRow : Math.round((H - ch) / 2)) * dpr);
+  ghostTop = Math.round(top * dpr);
   ghosts.width = canvas.width;
   ghosts.height = canvas.height + ghostTop;
   ghosts.style.left = canvas.style.left;
@@ -1383,10 +1392,15 @@ const padOpts: Opt[] = [
 const gfxOpts: Opt[] = [
   slider({
     label: 'Sharpness',
-    hint: () =>
-      prefs.sharpness === SHARPNESS.length - 1
-        ? 'Uses every pixel of the screen. The usual setting.'
-        : 'Draws the game with fewer pixels, which uses less battery on big, sharp screens. It looks a little softer.',
+    hint: () => {
+      // what the screen reports and what the game draws at, so a blurry screen can be told apart
+      const screen = Math.round((window.devicePixelRatio || 1) * 100) / 100;
+      const drawn = Math.round(density() * 100) / 100;
+      const now = ` This screen: ${screen}×, drawn at ${drawn}×.`;
+      return prefs.sharpness === SHARPNESS.length - 1
+        ? `Uses every pixel of the screen. The usual setting.${now}`
+        : `Draws the game with fewer pixels, which uses less battery on big, sharp screens. It looks a little softer.${now}`;
+    },
     min: 0,
     max: SHARPNESS.length - 1,
     get: () => prefs.sharpness,

@@ -636,15 +636,34 @@ export function createLobby(host: LobbyHost): {
     $('arenaDots').append(b);
   }
   /** The arena picture: a real arena built with the setup's size and bricks, with everyone in their corners. */
+  // the arena picture is drawn again whenever the room for it changes: shown, turned sideways, resized
+  let arenaRoom = 0;
+  new ResizeObserver(() => {
+    const room = $('arenaPic').parentElement!.getBoundingClientRect().width;
+    if (room > 0 && room !== arenaRoom) {
+      arenaRoom = room;
+      drawArena();
+    }
+  }).observe($('arenaPic').parentElement!);
   function drawArena(): void {
     const cv = $<HTMLCanvasElement>('arenaPic');
     const w = createWorld({ ...worldConfig(s(), host.myColor, PREVIEW_SEED, guests().map((g) => g.colorId)), roundTicks: 0 });
     cv.style.aspectRatio = `${w.w} / ${w.h}`;
     const dpr = host.density();
+    // measured at the size the row gives it, then set to exactly the size of what is drawn, so that each of
+    // its pixels is one of the screen's (stretched even a little, it is soft). Not on screen (the Match page
+    // hidden), it is drawn once it is: see the watch on its row below.
+    cv.style.width = '';
+    cv.style.height = '';
+    cv.style.flex = '';
     const box = cv.getBoundingClientRect();
-    const T = Math.max(4, Math.floor(((box.width || 230) * dpr) / w.w));
+    if (box.width < 2) return;
+    const T = Math.max(4, Math.floor((box.width * dpr) / w.w));
     cv.width = T * w.w;
     cv.height = T * w.h;
+    cv.style.width = `${cv.width / dpr}px`;
+    cv.style.height = `${cv.height / dpr}px`;
+    cv.style.flex = '0 0 auto'; // (no longer stretched to fill the row)
     const g = cv.getContext('2d')!;
     drawStatic(g, w, T);
     drawDynamic(g, w, T, 0, 0);

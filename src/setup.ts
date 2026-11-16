@@ -331,7 +331,7 @@ export const SOUND_NAMES: [string, string][] = [
 export const SHARPNESS = [
   { name: 'Battery saver', cap: 1.5 },
   { name: 'Balanced', cap: 2 },
-  { name: 'Sharpest', cap: 4 },
+  { name: 'Sharpest', cap: 6 },
 ];
 
 export interface Prefs {
