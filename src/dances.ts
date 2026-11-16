@@ -28,7 +28,7 @@ export const DANCES: Dance[] = [
   { id: 'party', name: 'Party', blurb: 'A jump, then a bounce side to side, pumping each arm' },
   { id: 'spin', name: 'Spin', blurb: 'Two spins in the air, then both arms up: ta-da' },
   { id: 'griddy', name: 'Griddy', blurb: 'The touchdown dance: quick steps, arms swinging, sliding side to side' },
-  { id: 'percolator', name: 'Percolator', blurb: 'Knees bent, bouncing low, fists pumping in turn, heels shuffling side to side' },
+  { id: 'percolator', name: 'Percolator', blurb: 'The house dance: knees snapping in and out on the beat, a bubbly bounce, hands rolling low' },
   { id: 'gangnam', name: 'Gangnam', blurb: 'Gangnam Style, the horse-riding dance: a galloping hop holding the reins, then one arm up swinging the lasso' },
 ];
 export const DANCE_IDS: DanceId[] = DANCES.map((d) => d.id);
@@ -120,21 +120,35 @@ function griddy(t: number): DanceFrame {
 }
 
 /**
- * Percolator (the house dance): knees bent and bouncing low on the beat, fists pumping one after the other in
- * front of it, feet shuffling heel and toe so it creeps from side to side, a little sway in the shoulders.
- * The arms pump twice for each step picture's cycle and follow it, so there are only eight pictures.
+ * Percolator (the Chicago house dance, to the 1992 track of that name), from how dancers teach it: weight on
+ * the balls of the feet, knees soft and bent; then the knees snap in together (heels turn out) and back apart
+ * (toes turn out), over and over on the beat, Charleston-like, with a small bounce on the off-beat that gives
+ * it its "bubbling" look. The upper body stays fairly still; the hands roll in front, "wax on, wax off".
+ *
+ * Here: a little crouch the whole time; knees in on the beat and out on the "and" (`Pose.knees`); a hop as the
+ * knees open; a slight sway of the shoulders; the arms low in front, one up as the other comes down, rolling
+ * with the knees. The tempo is the track's, about 126 beats a minute. Knees and arms are worked out from one
+ * step of eight per beat, so it needs only eight pictures.
  */
 function percolator(t: number): DanceFrame {
-  const beat = t * 9; // about three bounces a second
-  const walk = beat * 0.5;
-  const pic = Math.round((walk / TAU) * STEP_PICS);
-  const s = Math.sin((pic / STEP_PICS) * TAU * 2);
+  const BEATS_PER_S = 126 / 60;
+  const beat = t * BEATS_PER_S;
+  const step = Math.floor(beat * STEP_PICS) % STEP_PICS; // eight steps a beat
+  const a = (step / STEP_PICS) * TAU;
+  const knees = Math.cos(a); // in together on the beat, apart on the "and"
+  const roll = Math.sin(a); // the hands roll a quarter beat behind the knees
   return {
     facing: 2,
-    moving: true,
-    walk,
-    dx: Math.sin(t * 2.6) * 0.09,
-    pose: { shrink: 0.92 + 0.04 * Math.abs(Math.sin(beat)), lean: Math.sin(beat / 2) * 0.06, arms: [0.3 + 0.25 * s, 0.3 - 0.25 * s] },
+    moving: false,
+    walk: 0,
+    dx: 0,
+    pose: {
+      knees,
+      shrink: 0.95 - 0.02 * Math.max(0, knees), // a little lower as the knees come in
+      jump: 0.045 * Math.max(0, -knees), // the bubble: up off the floor as they open
+      lean: Math.sin((beat / 2) * TAU) * 0.035, // a slight sway, side to side every two beats
+      arms: [0.22 + 0.14 * roll, 0.22 - 0.14 * roll],
+    },
   };
 }
 
