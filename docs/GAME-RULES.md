@@ -209,7 +209,7 @@ The blocks were made 20% faster on 11 November 2026, after play-testing: they to
 - While it is on its way back it is still in the round: the round is not decided until only one robot is left that is standing or coming back, and if that last one is on its way back, the round waits for it to be standing.
 - The scoreboard shows a dot under each head for each life left, when the lobby gives more than one.
 
-**Angels** (the lobby's Angels, on by default): a robot out of lives becomes an angel once its knocked-out animation has played (`ANGEL_DELAY`), on the outer wall at the point nearest where it fell.
+**Angels** (the lobby's Angels, off by default): a robot out of lives becomes an angel once its knocked-out animation has played (`ANGEL_DELAY`), on the outer wall at the point nearest where it fell.
 
 - The direction glides it round the wall (`ANGEL_SPEED`, 4.5 tiles a second): along the top and bottom, left and right; up and down the sides; either at a corner. Let go and it settles on the middle of a wall tile.
 - **Hold A and let go** to throw a bomb over the wall into the arena, straight in from the tile it is over: a tap throws it 2 tiles in (`ANGEL_MIN_TILES`), and each quarter of a second held (`ANGEL_CHARGE_TICKS`) adds a tile, up to 6 (`ANGEL_MAX_TILES`). A ring in its colour marks where it will land while A is held. It lands like any thrown bomb (on a taken tile it bounces on), has the usual fuse, and a blast of 2 tiles each way (`ANGEL_FIRE`). One out at a time (`ANGEL_BOMBS`); not from a corner.
@@ -305,7 +305,7 @@ The host can change these before a match. Left alone, every one is the usual rul
 | Custom start | Bombs 1 to 8, blast 1 to 8 tiles, speed +0 to +6 | What everyone starts each round with (`startBombs`, `startFire`, `startSpeed`) |
 | Custom power-ups | For each kind: Off, Rare (half), Normal, Lots (double) | Its chance under a brick (`itemChance`). A boot and a glove are only made sure of when they are not Off |
 | Lives | 1 to 5 | Lives each robot has in a round (`lives`); see Lives and angels |
-| Angels | On (the default) or off; under it, Angels come back | Out of lives, a robot haunts the wall and throws bombs in (`angels`: 'on'; 'revive' with Angels come back) |
+| Angels | Off (the default) or on; under it, Angels come back | Out of lives, a robot haunts the wall and throws bombs in (`angels`: 'on'; 'revive' with Angels come back) |
 
 ## Not in the game yet
 

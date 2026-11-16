@@ -107,7 +107,7 @@ export const MAX_FIRST_TO = 9;
  * call; it was 3), so a setup saved before then has its Rounds to win put back to 1. 3: Closing in has five
  * steps in place of three (Slow, Normal, Fast became Very slow, Normal, Fast).
  */
-export const SETUP_VERSION = 4;
+export const SETUP_VERSION = 5;
 
 export interface MatchSetup {
   /** SETUP_VERSION when it was saved */
@@ -158,7 +158,7 @@ export function defaultSetup(myColor: string): MatchSetup {
     itemsOn: false,
     items: { bomb: 2, fire: 2, speed: 2, kick: 2, grab: 2, shield: 2, curse: 2 },
     lives: 1,
-    angels: true,
+    angels: false, // off by default (the owner's call)
     angelsBack: false,
   };
 }
@@ -277,8 +277,9 @@ export function readSetup(raw: unknown, myColor: string, colorIds: string[]): Ma
     for (const [k] of ITEM_CHANCE) out.items[k] = clampInt((r.items as Record<string, unknown>)[k], 0, ITEM_AMOUNTS.length - 1, 2);
   }
   out.lives = clampInt(r.lives, 1, MAX_LIVES, 1);
-  // (saved before version 4 there were no angels: they come on, as for a new setup)
-  if (typeof r.angels === 'boolean') out.angels = r.angels;
+  // Angels were on by default in version 4, for one evening; the owner had them off by default, so a setup
+  // saved then starts with them off again, like a new one
+  if (typeof r.angels === 'boolean' && typeof r.v === 'number' && r.v >= 5) out.angels = r.angels;
   if (typeof r.angelsBack === 'boolean') out.angelsBack = r.angelsBack;
   return out;
 }
