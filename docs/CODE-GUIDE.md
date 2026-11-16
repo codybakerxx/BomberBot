@@ -77,13 +77,9 @@ Plain-words version: [GAME-RULES.md](GAME-RULES.md).
 | `dir` | The direction it currently reads: 0 none, 1 up, 2 down, 3 left, 4 right |
 | `scale` | Scales the quiet zone and turn distances. Always 1 in the game: there is no menu setting for it. |
 | `aims` | The screen angle each direction is read around (index 1 to 4). Setting `tilt` instead leans all four the same number of degrees clockwise. |
-| `onStroke` | Callback used by Match my thumb to measure swipes |
+| `onStroke` | Callback with each stroke's movement, for measuring swipes (Match my thumb used it) |
 
 Plain-words version: [CONTROLS.md](CONTROLS.md).
-
-### `src/teach.ts`: Match my thumb maths
-
-Small pure functions in three groups. Measuring: `leanOf` (how far one swipe leans) and `summarise` (average a dozen, overall and per direction). Building settings: `tiltFor` (the lean the pad should use), `singleAims` and `perDirectionAims`. Testing: `marginOf` (how far inside its quarter a swipe sits), `judge` (read the test swipes with a setting) and `pickBest`. Plus the two lists of directions asked for, `TEACH_ORDER` and `TEST_ORDER`. The shared aim maths (`STRAIGHT`, `uniformAims`, `aimScore`, `nearestDir`) lives in `swipe.ts`. Explained in [MATCH-MY-THUMB.md](MATCH-MY-THUMB.md).
 
 ### `src/bot.ts`: the CPU players
 
@@ -190,7 +186,7 @@ Everything that ties the game to the page:
 - the scoreboard (`drawScore`; `layout` works out where its four places go), the count of rounds won (`wins`) and who wears the crown (`leader`), which last until the game is closed
 - the three CPU players of the round (`bots`, made in `newWorld`, asked for their input in `tick`)
 - the control settings: steering thumb and swipe direction (`settings`, `thumb`, `applySettings`)
-- the Match my thumb screen (`startTeach`, `teachStroke`, `finishLearning`, `finishTesting`, `closeTeach`)
+- Movement sensitivity on Settings › Controls (`settings.sens`, `sensOpts`; SENSITIVITY in swipe.ts)
 
 It holds no game rules.
 
@@ -237,7 +233,7 @@ Bundles `src/main.ts` with esbuild, pastes it into `src/page.html`, and writes `
 1. **`sim.ts` stays pure.** No DOM, no `Math.random`, no clocks. Randomness comes from the seeded generator `makeRng`. The same seed with the same inputs must give exactly the same result every time; a test checks this. Online play will depend on it.
 2. **Rendering never changes the world.** It only reads it.
 3. **The rules never draw or play sound.** They report events; `main.ts` acts on them.
-4. **`swipe.ts`, `teach.ts` and `bot.ts` stay pure too**, so they can be tested without a browser, and so a server can run CPU players.
+4. **`swipe.ts` and `bot.ts` stay pure too**, so they can be tested without a browser, and so a server can run CPU players.
 5. **Numbers get names.** Game numbers are constants at the top of `sim.ts`, pad numbers at the top of `swipe.ts`.
 6. **No image or sound files.** Everything is drawn and synthesised in code, which keeps the game one small file.
 7. **Phones first.** Every screen has to work on an upright phone about 390 px wide, and sideways.
@@ -250,8 +246,7 @@ Bundles `src/main.ts` with esbuild, pastes it into `src/page.html`, and writes `
 | File | Covers |
 |---|---|
 | `tests/rules.test.ts` | The arena, walking and stopping, which way the robot looks, bombs and blasts, power-ups, chain reactions, kicking, lifting and throwing, winning, turning at openings, repeatability from a seed, and 45,000 ticks of random play that must never leave a robot inside a block or jittering |
-| `tests/swipe.test.ts` | The pad: when a stroke starts, wiggles, drift and bounce-back ignored, turns and reverses mid-swipe, leaning swipes read correctly from every starting direction, the stroke reports Match my thumb relies on, a separate aim per direction |
-| `tests/teach.test.ts` | Measuring a lean, averaging, rejecting scattered swipes, the three-quarters rule and its limits, the two candidate settings, that a straight swipe always keeps 20° of room, judging test swipes, and choosing the winner |
+| `tests/swipe.test.ts` | The pad: when a stroke starts, wiggles, drift and bounce-back ignored, turns and reverses mid-swipe, leaning swipes read correctly from every starting direction, the stroke reports, a separate aim per direction, the three steps of Movement sensitivity |
 | `tests/room.test.ts` | Online rooms: codes, joining and refusing, robots kept different, only the host setting up and starting, a match played through with every page's world checked against the server's, a quick tap of A not lost, a dropped page coming back mid-round, only the host moving on or restarting, a host handing on |
 | `tests/predict.test.ts` | How an online round feels on a page, over made-up connections from wired to bad, at 60 and 120 frames a second: your robot moving on the frame of the press and walking evenly, the other robot walking evenly, the page's world staying the server's, a press that arrives late being put right, sounds made once, carrying on after the whole world is sent again |
 | `tests/bot.test.ts` | The CPU players: the danger map and chain reactions, slow levels noticing bombs late, that thinking never changes the world, no bomb without a way out, every level surviving two minutes in a full arena, every level finding and beating a player who stands still, and repeatability |

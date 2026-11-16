@@ -34,7 +34,7 @@ The **timer** is in the middle of the top bar, counting down the round. It turns
 
 There used to be a strip at the top left showing your bombs, blast length, speed, boot and glove. It was removed to make room for the timer. The shield and the curse are still shown on the robot itself.
 
-The caption on the swipe pad (*Standard swipes* or *My thumb swipes*) is centred along its bottom edge.
+The caption on the swipe pad ("Medium sensitivity") is centred along its bottom edge.
 
 ## The lobby, Settings and the menu
 
@@ -150,7 +150,7 @@ Whichever of up, down, left and right the leg points nearest to. Three details m
 
 - **The whole leg is judged**, not a few pixels of it. A first stroke that registered at 14 px is still being read until it is 36 px long. If the longer look clearly disagrees with the first read, the direction is corrected.
 - **The robot's current direction plays no part.** The same swipe always gives the same answer. (An earlier version favoured the axis the robot was already moving along, which made sideways swipes read as up or down.)
-- **"Nearest" is measured against aims that lean.** A thumb pivots at its base, so quick swipes lean: with a left thumb, left drifts up and right drifts down. Each direction has an *aim*, the screen angle its swipes are expected to point at, and a stroke counts as the direction it is aimed nearest to. By default all four aims lean 5° (15° at first, then 2°, then 8°; see [SWIPE-HISTORY.md](SWIPE-HISTORY.md)): clockwise when the left thumb steers, anticlockwise when the right thumb does. [Match my thumb](MATCH-MY-THUMB.md) can replace that with one lean measured for the player, or a lean for each direction. The aims change only which direction a stroke counts as. They never change how far the thumb has to travel.
+- **"Nearest" is measured against aims that lean.** A thumb pivots at its base, so quick swipes lean: with a left thumb, left drifts up and right drifts down. Each direction has an *aim*, the screen angle its swipes are expected to point at, and a stroke counts as the direction it is aimed nearest to. All four aims lean the same few degrees, set by Movement sensitivity (Low 2°, Medium 5°, High 8°; see [SWIPE-HISTORY.md](SWIPE-HISTORY.md)): clockwise when the left thumb steers, anticlockwise when the right thumb does. The aims change only which direction a stroke counts as. They never change how far the thumb has to travel.
 
 ### Nothing is lost between frames
 
@@ -159,35 +159,31 @@ The game reads the controls 60 times a second. A quick flick or a tap on A or B 
 ## The settings on Settings › Controls
 
 <p align="center">
-  <img src="screenshots/menu-settings.png" alt="Settings › Controls with Left thumb and Standard switched on" width="300">
-  <img src="screenshots/menu-settings-matched.png" alt="Settings › Controls with My thumb switched on, and a Match again button" width="300">
+  <img src="screenshots/menu-settings.png" alt="Settings › Controls: Left thumb on, and Movement sensitivity at Medium" width="300">
 </p>
-
-Both settings are two-sided switches. The side in use is filled in and tagged **On**.
 
 ### Steering thumb
 
-Which thumb you steer with. The swipe pad goes on that side of the screen and A and B on the other.
+Which thumb you steer with, a two-sided switch (the side in use is filled in and tagged **On**). The swipe pad goes on that side of the screen and A and B on the other.
 
-| Side | Layout | Standard swipe direction |
+| Side | Layout |
+|---|---|
+| **Left thumb** (default) | Pad on the left, B over A on the right |
+| **Right thumb** | Pad on the right, B over A on the left |
+
+The two thumbs are mirror images. Each pivots at its own bottom corner of the phone, so a left thumb's quick swipes lean clockwise and a right thumb's lean anticlockwise. Movement sensitivity leans the right way for whichever thumb steers.
+
+### Movement sensitivity
+
+How far a swipe can curve and still count as the direction you meant: a slider with three steps (the owner's design, November 2026, in place of the Standard / My thumb switch and Match my thumb).
+
+| Step | Lean (left thumb clockwise, right thumb anticlockwise) | Suits |
 |---|---|---|
-| **Left thumb** (default) | Pad on the left, B over A on the right | Leans 5° clockwise |
-| **Right thumb** | Pad on the right, B over A on the left | Leans 5° anticlockwise |
+| **Low** | 2° (the owner's own measured thumb) | Thumbs that swipe dead straight |
+| **Medium** (default) | 5° | Most thumbs |
+| **High** | 8° | Thumbs whose quick swipes curve a lot |
 
-The two thumbs are mirror images. Each pivots at its own bottom corner of the phone, so a left thumb's quick swipes lean clockwise and a right thumb's lean anticlockwise. Switching thumbs therefore switches the standard lean too, and **each thumb keeps its own Match my thumb result**. Switching back and forth loses nothing.
-
-### Swipe direction
-
-Which of up, down, left and right each swipe counts as, for the thumb selected above.
-
-| Side | What it is | Tapping it |
-|---|---|---|
-| **Standard** | The built-in setting: all four directions lean 5° (mirrored for the right thumb). | Switches to Standard. A saved match is kept, just switched off. |
-| **My thumb** | The setting measured from your own swipes by [Match my thumb](MATCH-MY-THUMB.md). Its small print says *tap to set up*, *matched to you* or *matched, switched off*. | With no match saved yet for this thumb, starts Match my thumb. Otherwise switches your match back on. |
-
-The line underneath says in words which is on. **Match again** appears once a match is saved, to redo it.
-
-While you play, a small caption in the bottom corner of the swipe pad shows which side is on: **Standard swipes**, or **✓ My thumb swipes** in gold.
+While you play, the caption along the bottom of the swipe pad says which is on ("Medium sensitivity"). A setting saved by Match my thumb before it was taken out became the nearest step (a 2° match reads as Low).
 
 The settings are saved in the browser on that device and load by themselves next time. They do not travel with the game to another phone. If a browser refuses to save anything, the tab says so.
 
@@ -224,7 +220,7 @@ Every distance is a named constant at the top of `src/swipe.ts`.
 | `REVISE_UNTIL` | 36 px | How long a stroke is still being read | Higher: more early mistakes get corrected, but corrections come later. |
 | `REVISE_MARGIN` | 0.2 | How clearly the longer look must disagree to overrule the first read | Lower: more corrections. Higher: fewer. |
 | `SETTLE_PX`, `SETTLE_MS` | 6 px, 120 ms | When a thumb counts as resting | Together they set the slowest movement that still counts as a stroke: about 50 px a second. |
-| `DEFAULT_TILT` | 5° (15° at first: `FIRST_TILT`; then 2°, then 8°) | Lean of all four aims until Match my thumb has been run | See [MATCH-MY-THUMB.md](MATCH-MY-THUMB.md). |
+| `SENSITIVITY` | Low 2°, Medium 5°, High 8° | The lean of all four aims at each step of Movement sensitivity (`DEFAULT_SENS`: Medium) | 15° at first (`FIRST_TILT`); see [SWIPE-HISTORY.md](SWIPE-HISTORY.md). |
 
 There is no menu setting for these distances any more. To change them for everyone, edit the constants above.
 
@@ -246,3 +242,4 @@ The controls went through several rounds of play-testing on a phone. Each round 
 10. **Looking where you swipe.** The robot used to look the way it was walking. Between two blocks, a swipe at a block made it walk toward the nearest opening and look that way instead, so it could not be turned to face the block. It now looks the way it was asked to go, at once, and between two blocks a quick swipe only turns it: it sets off for the opening if the swipe is held for 0.15 seconds.
 
 The simulations used to compare the old and new behaviour are in [`experiments/`](../experiments/README.md).
+10. **Movement sensitivity** (November 2026). The standard lean went 15°, 2°, 8°, 5° in an afternoon; then the owner replaced the Standard / My thumb switch and Match my thumb with one slider: Low 2°, Medium 5°, High 8°. [SWIPE-HISTORY.md](SWIPE-HISTORY.md).

@@ -26,9 +26,8 @@
  *      is an arc: left drifts up, right drifts down, up drifts right, down
  *      drifts left. Aiming each direction where the thumb really swipes puts
  *      those flicks in the middle of their quarter instead of on a border.
- *      By default all four aims lean the same 5 degrees (clockwise for a left
- *      thumb, anticlockwise for a right thumb); Match my thumb can
- *      set one lean for all four, or a lean for each. The aims change only
+ *      All four aims lean the same few degrees, set by Movement sensitivity
+ *      (clockwise for a left thumb, anticlockwise for a right thumb). The aims change only
  *      which direction a stroke counts as, never how far the thumb travels.
  *
  * All distances are CSS pixels; on a phone 5 to 6 px is about a millimetre.
@@ -44,12 +43,21 @@ const SETTLE_PX = 6; // a thumb that stays within this ...
 const SETTLE_MS = 120; // ... for this long has come to rest
 
 /**
- * Standard clockwise lean, in degrees, for a left thumb. A right thumb leans the same amount the other way.
- * 5°: the owner's pick (November 2026), between his own 2° and the 8° Claude chose as the best all-round lean
- * on simulated thumbs. It was 15° at first, then 2°, then 8°; docs/SWIPE-HISTORY.md has every version.
+ * Movement sensitivity, the one setting for how swipes are read (Settings › Controls): how far the four aims
+ * lean, clockwise for a left thumb (a right thumb leans the same amount the other way). The owner's design
+ * (November 2026), in place of a standard lean and Match my thumb: Low 2° (his own measured thumb), Medium 5°,
+ * High 8°. docs/SWIPE-HISTORY.md has every version before it and why.
  */
-export const DEFAULT_TILT = 5;
-/** The standard lean before November 2026, kept for the tests and experiments that were built on it. */
+export const SENSITIVITY = [
+  { name: 'Low', tilt: 2 },
+  { name: 'Medium', tilt: 5 },
+  { name: 'High', tilt: 8 },
+] as const;
+/** Medium. */
+export const DEFAULT_SENS = 1;
+/** The lean everyone starts with: Medium's. */
+export const DEFAULT_TILT = SENSITIVITY[DEFAULT_SENS].tilt;
+/** The first standard lean (until November 2026), kept for the tests and experiments that were built on it. */
 export const FIRST_TILT = 15;
 
 /** Which thumb steers: the pad sits on that side of the screen. */
@@ -68,8 +76,8 @@ export function uniformAims(tilt: number): number[] {
  * its own bottom corner of the screen, so the two are mirror images: a left
  * thumb's quick swipes lean clockwise, a right thumb's anticlockwise.
  */
-export function standardAims(hand: Hand): number[] {
-  return uniformAims(hand === 'right' ? -DEFAULT_TILT : DEFAULT_TILT);
+export function standardAims(hand: Hand, tilt: number = DEFAULT_TILT): number[] {
+  return uniformAims(hand === 'right' ? -tilt : tilt);
 }
 
 /**
@@ -109,7 +117,7 @@ export class SwipePad {
    * Called once for each stroke that starts from a resting thumb or a fresh
    * touch, with the thumb's movement in screen pixels: as soon as the stroke is
    * long enough to read properly, or when it ends if it never gets that long.
-   * Used by Match my thumb to measure how a player swipes.
+   * For measuring how a player swipes (Match my thumb used it, until it was replaced by Movement sensitivity).
    */
   onStroke: ((vx: number, vy: number) => void) | null = null;
 

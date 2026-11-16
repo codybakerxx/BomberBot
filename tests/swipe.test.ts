@@ -8,7 +8,7 @@
  */
 import assert from 'node:assert';
 import type { Dir } from '../src/sim';
-import { SwipePad, DEFAULT_TILT, FIRST_TILT } from '../src/swipe';
+import { SwipePad, DEFAULT_TILT, FIRST_TILT, SENSITIVITY, DEFAULT_SENS, standardAims, uniformAims } from '../src/swipe';
 
 {
   // moves the thumb in a straight line in 8 ms steps and returns every direction seen
@@ -127,7 +127,7 @@ import { SwipePad, DEFAULT_TILT, FIRST_TILT } from '../src/swipe';
     return pad.dir;
   };
   for (const going of [1, 2, 3, 4] as Dir[]) {
-    // the standard lean (5°): straight swipes, and swipes leaning up to 35° either way
+    // the standard lean (Medium, 5°): straight swipes, and swipes leaning up to 35° either way
     for (const want of [1, 2, 3, 4] as Dir[]) assert.equal(decode(going, ANG[want]), want, `straight ${want} while going ${going}`);
     for (const lean of [-35, -20, 20, 35]) {
       for (const want of [1, 2, 3, 4] as Dir[]) assert.equal(decode(going, ANG[want] - lean), want, `${want} leaning ${lean} while going ${going}`);
@@ -206,4 +206,13 @@ import { SwipePad, DEFAULT_TILT, FIRST_TILT } from '../src/swipe';
   assert.ok(small >= 18 && small <= 23, `small zone turned at ${small}`);
   pad.release();
   assert.equal(pad.dir, 0);
+}
+
+// Movement sensitivity: Low 2°, Medium 5° (the default), High 8°; a right thumb leans the other way
+assert.deepEqual(SENSITIVITY.map((x) => [x.name, x.tilt]), [['Low', 2], ['Medium', 5], ['High', 8]]);
+assert.equal(SENSITIVITY[DEFAULT_SENS].name, 'Medium');
+assert.equal(DEFAULT_TILT, 5);
+for (const x of SENSITIVITY) {
+  assert.deepEqual(standardAims('left', x.tilt), uniformAims(x.tilt));
+  assert.deepEqual(standardAims('right', x.tilt), uniformAims(-x.tilt));
 }

@@ -1,5 +1,7 @@
 # Match my thumb
 
+> **Taken out of the game (November 2026).** The owner replaced Match my thumb and the Standard / My thumb switch with one setting, Movement sensitivity (Low 2°, Medium 5°, High 8°). This page is kept as the record of how it worked; the code is on the branch `match-my-thumb-v2` and in git history. See [SWIPE-HISTORY.md](SWIPE-HISTORY.md).
+
 Match my thumb teaches the swipe pad how *your* swipes point. You make twelve swipes and it measures how far they lean away from straight. Then you make eight more, and it tests which setting reads those best: the one you had before, one lean for all four directions, or a lean for each direction. The winner is used from then on.
 
 <p align="center">

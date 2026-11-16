@@ -16,7 +16,8 @@ degrees, anticlockwise.
 | 1 | 15° clockwise / 15° anticlockwise | November 2026, from the first touch controls | Claude's middle course, chosen on simulated thumbs (`experiments/stroke-reading.ts`): almost no cost for a straight thumb, and most errors gone for one that leans. Kept in the code as `FIRST_TILT`. |
 | 2 | 2° clockwise / 2° anticlockwise | 16 November 2026, one afternoon | The owner's own thumb. Match my thumb with his left thumb chose **One lean** (all 8 test swipes right, the closest 30° from a border, against 19° for the old standard), and he said it felt really good. It became the standard for both thumbs, with no switch of its own (his call). His phone keeps it as his own match. |
 | 3 | 8° clockwise / 8° anticlockwise | 16 November 2026, briefly | Asked for "the ultimate setting", Claude compared leans of 2°, 6°, 8°, 10° and 15° on simulated thumbs (table below) and the owner said to use the best. 8° costs a straight thumb like his almost nothing and about halves the mistakes of a thumb that curves, compared with 2°; 15° helps strongly curving thumbs most but costs straight ones more and is worst for a thumb that curves the other way. |
-| 4 | **5° clockwise / 5° anticlockwise** | From 16 November 2026 | The owner's pick, between his own 2° and 8°. Measured on simulated thumbs (resting / straight after touching down): straight 0.0% / 0.3% wrong, curving 20° 0.1% / 2.5%, curving 30° 4.3% / 8.3% (8°: 2.4% / 6.2%; 2°: 6.9% / 14.3%), curving 10° the other way 0.5% / 2.3%. |
+| 4 | 5° clockwise / 5° anticlockwise | 16 November 2026, briefly | The owner's pick, between his own 2° and 8°. Measured on simulated thumbs (resting / straight after touching down): straight 0.0% / 0.3% wrong, curving 20° 0.1% / 2.5%, curving 30° 4.3% / 8.3% (8°: 2.4% / 6.2%; 2°: 6.9% / 14.3%), curving 10° the other way 0.5% / 2.3%. |
+| 5 | **Movement sensitivity: Low 2°, Medium 5° (default), High 8°** | From 16 November 2026 | The owner's design: one slider in Settings › Controls in place of a single standard lean, the Standard / My thumb switch and Match my thumb, all taken out. The three steps are the three leans tried that afternoon. A Match my thumb result saved on a phone becomes the nearest step (his own 2° reads as Low). |
 
 The run that set version 2 measured these leans in his swipes: left 5°, right 6°, up 9°, down −8°, spread 14°:
 close to straight overall (about 3°). One lean uses three quarters of the overall lean, rounded (`tiltFor` in
@@ -54,8 +55,7 @@ Version 3 compared more leans (share of strokes read wrong; resting thumb, then 
 | 30° | 6.9% / 14.3% | 3.9% / 8.2% | 2.4% / 6.2% | 1.7% / 4.2% | 0.3% / 2.0% |
 
 So 2° suits a thumb that swipes close to straight, like the owner's, and is clearly worse than 15° for a thumb
-whose quick swipes lean 30° or more; 8° sits between, giving up little anywhere. Such a player should run Match my thumb (Settings › Controls › My thumb),
-which measures their lean and keeps whichever setting reads their swipes best. If friends find the standard
+whose quick swipes lean 30° or more; 8° sits between, giving up little anywhere. Such a player now sets Movement sensitivity to High. If friends find the standard
 reads them wrongly, that is the number to look at again.
 
 ## Everything else, in order
@@ -82,3 +82,4 @@ reads them wrongly, that is the number to look at again.
 10. **Standard lean version 2** (16 November 2026): 2°, above.
 11. **Standard lean version 3** (16 November 2026): 8°, above.
 12. **Standard lean version 4** (16 November 2026): 5°, the owner's pick, above.
+13. **Movement sensitivity** (16 November 2026): Low 2°, Medium 5°, High 8°, one slider, and **Match my thumb taken out** with the Standard / My thumb switch (the owner's call). Its code is on the branch `match-my-thumb-v2` and in git history; its write-ups stay in `docs/MATCH-MY-THUMB.md` and `docs/MATCH-MY-THUMB-V1.md`.

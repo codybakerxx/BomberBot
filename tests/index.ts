@@ -5,7 +5,6 @@
  */
 import './rules.test';
 import './swipe.test';
-import './teach.test';
 import './bot.test';
 import './dances.test';
 import './lives.test';

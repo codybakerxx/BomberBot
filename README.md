@@ -9,7 +9,6 @@ It is a personal project for playing with friends.
   <img src="docs/screenshots/lobby.png" alt="The lobby: your robot and colour, and the CPU players" width="230">
   <img src="docs/screenshots/lobby-match.png" alt="The lobby's Match page: the arena and the rules" width="230">
   <img src="docs/screenshots/play.png" alt="A round in progress: a blast along the top row, power-ups in the open" width="230">
-  <img src="docs/screenshots/match-result.png" alt="Match my thumb showing its result" width="230">
 </p>
 
 ## Where it stands
@@ -64,7 +63,7 @@ Power-ups are hidden under some bricks:
 | Shield (very rare) | The next blast does not knock you out. Wears off after 30 seconds |
 | Skull (very rare) | A curse, not a gift: you walk slower than the starting speed for 8 seconds |
 
-If the pad sometimes reads your swipes as the wrong direction, open **Settings › Controls** (the gear in the lobby, or Settings in the menu during a match) and tap **My thumb** to run Match my thumb. Twelve swipes measure how yours lean, eight more test the result, and it keeps whichever setting reads you best. It takes about 40 seconds, and you only do it once. The tab and the corner of the swipe pad show whether Standard or My thumb is on. [How it works](docs/MATCH-MY-THUMB.md).
+If the pad sometimes reads your swipes as the wrong direction, open **Settings › Controls** (the gear in the lobby, or Settings in the menu during a match) and move **Movement sensitivity**: Low for straight swipes, Medium (the usual), High if your quick swipes curve a lot. [How it works](docs/CONTROLS.md).
 
 The full rules are in [docs/GAME-RULES.md](docs/GAME-RULES.md).
 
@@ -92,7 +91,6 @@ More, including how to play your own build on your phone: [docs/HOW-TO.md](docs/
 src/
   sim.ts        the game rules: arena, movement, bombs, blasts, power-ups, who wins
   swipe.ts      the swipe pad: turns thumb movement into up, down, left or right
-  teach.ts      the maths behind Match my thumb: measuring, testing, choosing
   bot.ts        the CPU players: how they dodge, dig, hunt and the three levels
   input.ts      keyboard, touch and game controller wiring
   bindings.ts   which keys and buttons do what, to start with
@@ -122,7 +120,7 @@ CLAUDE.md       notes for working on this project with Claude
 | [docs/GAME-RULES.md](docs/GAME-RULES.md) | Every rule of play, with the numbers |
 | [docs/CONTROLS.md](docs/CONTROLS.md) | The touch layout, how the swipe pad reads a thumb, how turning works |
 | [docs/SWIPE-HISTORY.md](docs/SWIPE-HISTORY.md) | Every version of the swipe controls and the standard lean, and why each change was made |
-| [docs/MATCH-MY-THUMB.md](docs/MATCH-MY-THUMB.md) | What Match my thumb measures, how it tests the result, and how the pad uses it (version 2, in the game now) |
+| [docs/MATCH-MY-THUMB.md](docs/MATCH-MY-THUMB.md) | Match my thumb version 2, taken out in November 2026 (Movement sensitivity replaced it), kept for reference |
 | [docs/MATCH-MY-THUMB-V1.md](docs/MATCH-MY-THUMB-V1.md) | The first version of Match my thumb, kept for reference |
 | [docs/CPU-PLAYERS.md](docs/CPU-PLAYERS.md) | How the CPU players think, the three levels, and what has been measured |
 | [docs/CODE-GUIDE.md](docs/CODE-GUIDE.md) | How the code is organised, file by file |

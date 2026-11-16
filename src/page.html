@@ -27,13 +27,12 @@
               arenaPrev, arenaNext, arenaDots, and a Start under it, arenaStart; the rules; rulesReset; startNote and lobbyStart, Start again at the end); playersNext ends lobbyPlayers
     cpuSheet  a CPU player's panel, over the lobby: colour and level (cpuRows), cpuRemove, cpuDone
     settings  your own settings, four pages: setControls (Steering thumb: handLeft, handRight; Swipe
-              direction: dirStandard, dirMine, matchState, matchStart; padOpts; keys: remapKeys, resetKeys),
+              Movement sensitivity: sensOpts; padOpts; keys: remapKeys, resetKeys),
               setGamepad (padStatus, remapPad, resetPad, rumbleBtn), setSound (soundOpts) and setGraphics
               (gfxOpts); then setPrev, setDone, setNext
     pause     the menu during a match: pauseState, pauseTitle, pauseInfo, standings, pauseResume, pauseSettings,
               pauseRestart (the whole match again, from 0), pauseLobby
     confirm   "are you sure?" before anything that cannot be undone (ui.ts)
-    teach     the Match my thumb panel, laid over the arena only
 -->
 <html lang="en">
 <head>
@@ -214,8 +213,6 @@
     text-transform: uppercase;
     color: rgba(255, 255, 255, 0.32);
   }
-  #padTag.mine { color: var(--accent); opacity: 0.8; }
-  #padTag.mine::before { content: '\2713\00a0'; }
   #dpad {
     position: absolute;
     left: 50%;
@@ -342,43 +339,6 @@
     cursor: pointer;
   }
   /* Match my thumb: covers the arena only, so the pad underneath stays usable */
-  #teach {
-    position: fixed;
-    display: grid;
-    place-items: center;
-    padding: 10px 16px;
-    background: rgba(5, 6, 11, 0.93);
-    text-align: center;
-    overflow: hidden;
-  }
-  #teach[hidden] { display: none; }
-  .teach-card { display: flex; flex-direction: column; align-items: center; gap: 8px; max-width: 36ch; }
-  .teach-step { margin: 0; font: 700 12px/1 var(--font-display); letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-dim); }
-  #teachArrow { width: 64px; height: 64px; fill: var(--accent); transition: transform 120ms; }
-  #teach h2 { font-size: clamp(22px, 5.5vmin, 32px); }
-  #teach .sub { font-size: 14px; line-height: 1.35; }
-  .teach-nums { font-variant-numeric: tabular-nums; color: var(--ink) !important; }
-  #teachChoices { display: flex; flex-direction: column; gap: 6px; width: min(100%, 320px); }
-  #teachChoices[hidden] { display: none; }
-  .choice {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: 10px;
-    padding: 9px 12px;
-    font: 500 14px/1.2 var(--font-body);
-    color: var(--ink);
-    text-align: left;
-    background: var(--panel);
-    border: 1.5px solid var(--line);
-    border-radius: 10px;
-    cursor: pointer;
-  }
-  .choice .score { color: var(--ink-dim); font-size: 13px; font-variant-numeric: tabular-nums; white-space: nowrap; }
-  .choice[aria-pressed="true"] { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
-  .choice[aria-pressed="true"] .score { color: var(--accent); }
-  #teach .row { justify-content: center; }
-  @media (prefers-reduced-motion: reduce) { #teachArrow { transition: none; } }
   .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
   .go {
     flex: 1 1 160px;
@@ -901,17 +861,8 @@
           <button type="button" id="handRight"><span class="on-tag">On</span><b>Right thumb</b><small>pad on the right</small></button>
         </div>
       </fieldset>
-      <fieldset class="tune">
-        <legend>Swipe direction</legend>
-        <p class="opt-desc">How the pad decides whether a swipe is up, down, left or right.</p>
-        <div class="switch" role="group" aria-label="Swipe direction setting">
-          <button type="button" id="dirStandard"><span class="on-tag">On</span><b>Standard</b><small id="dirStandardSub">typical left thumb</small></button>
-          <button type="button" id="dirMine"><span class="on-tag">On</span><b>My thumb</b><small id="dirMineSub">tap to set up</small></button>
-        </div>
-        <p class="opt-state" id="matchState" aria-live="polite"></p>
-        <button id="matchStart" class="mini" type="button" hidden>Match again</button>
+        <div class="opts" id="sensOpts"></div>
         <p class="opt-note" id="saveNote" hidden>This browser is not saving settings, so they last only until you close the game.</p>
-      </fieldset>
         <div class="opts" id="padOpts"></div>
         <div class="sec-head"><span>Keyboard</span><button class="mini" id="resetKeys" type="button">Reset</button></div>
         <div class="opts" id="remapKeys"></div>
@@ -994,21 +945,6 @@
       <button class="go" id="confirmYes" type="button">OK</button>
     </div>
   </section>
-</div>
-
-<div id="teach" hidden>
-  <div class="teach-card">
-    <p class="teach-step" id="teachStep"></p>
-    <svg id="teachArrow" viewBox="0 0 100 100" aria-hidden="true"><path d="M8 40h48V18l38 32-38 32V60H8z"/></svg>
-    <h2 id="teachWord"></h2>
-    <p class="sub" id="teachHint"></p>
-    <div id="teachChoices" role="group" aria-label="Swipe direction settings" hidden></div>
-    <p class="sub teach-nums" id="teachNums" hidden></p>
-    <div class="row">
-      <button id="teachAgain" class="mini" type="button" hidden>Try again</button>
-      <button id="teachClose" class="mini" type="button">Cancel</button>
-    </div>
-  </div>
 </div>
 
 <div id="result" hidden>

@@ -23,23 +23,9 @@ import { PAD } from './bindings';
 import { createRemap } from './remap';
 import { Guest, MatchSetup, Prefs, SHARPNESS, SOUND_NAMES, arenaOf, clockText, defaultSetup, load, readPrefs, readSetup, save, summary, wholeTile, worldConfig } from './setup';
 import { Opt, answerConfirm, choice, confirmFirst, confirmOpen, heading, mount, note, slider, toggle, wireConfirm, wireFlash } from './ui';
-import { Hand, STRAIGHT, standardAims, uniformAims } from './swipe';
+import { Hand, SENSITIVITY, DEFAULT_SENS, STRAIGHT, standardAims } from './swipe';
 import { Online } from './online';
 import { decodeWorld, packInput, readCode, unpackInput, type Score, type Seat, type ServerMsg } from './net';
-import {
-  TEACH_ORDER,
-  TEST_ORDER,
-  TestSwipe,
-  ThumbSummary,
-  judge,
-  leanOf,
-  perDirectionAims,
-  pickBest,
-  singleAims,
-  summarise,
-  tiltFor,
-} from './teach';
-
 /** Look up an element of src/page.html by its id. */
 const $ = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T;
 const canvas = $<HTMLCanvasElement>('cv');
@@ -54,7 +40,6 @@ let ghostTop = 0;
 let ghostsShown = false;
 const result = $('result');
 const touch = $('touch');
-const teach = $('teach');
 const title = $('title');
 const titleArt = $<HTMLCanvasElement>('titleArt');
 const tctx = titleArt.getContext('2d')!;
@@ -141,51 +126,16 @@ let decidedAt = -1;
 /** the frame clock: seconds, as passed to render() */
 let clock = 0;
 
-// Control settings, remembered on this device under the key "controls3".
+// Control settings, remembered on this device under the key "controls4".
 // (Swipe length is not a setting: the quiet zone is always the standard size, `QUIET` in swipe.ts.)
-
-/** A result of Match my thumb. */
-interface ThumbMatch {
-  /** one lean for all four directions, or a lean for each */
-  kind: 'single' | 'per';
-  /** the measured average lean, and per direction (index 1 to 4), for display */
-  lean: number;
-  by: number[];
-  /** what the pad uses: the screen angle each direction is read around (index 1 to 4) */
-  aims: number[];
-}
-
-/**
- * The swipe direction setting for one thumb.
- * `match` is the saved result of Match my thumb, or null if it has never been kept.
- * `useMatch` says whether the pad uses it ("My thumb") or the standard lean ("Standard").
- * Switching to Standard keeps the match, so it can be switched back on without redoing it.
- */
-interface ThumbSetting {
-  match: ThumbMatch | null;
-  useMatch: boolean;
-}
 
 /**
  * `hand` is the thumb that steers: the swipe pad sits on that side, A and B on the other.
- * Each thumb has its own swipe direction setting, because the two lean opposite ways.
+ * `sens` is Movement sensitivity, an index into SENSITIVITY in swipe.ts (Low, Medium, High: how far the pad
+ * reads swipes as leaning, 2°, 5° or 8°). It replaced the Standard / My thumb switch and Match my thumb
+ * (the owner's call, November 2026; docs/SWIPE-HISTORY.md).
  */
-const settings: { hand: Hand; left: ThumbSetting; right: ThumbSetting } = {
-  hand: 'left',
-  left: { match: null, useMatch: false },
-  right: { match: null, useMatch: false },
-};
-
-/** The swipe direction setting of the thumb in use. */
-function thumb(): ThumbSetting {
-  return settings[settings.hand];
-}
-
-/** The match the pad is using right now, or null when it is on the standard lean. */
-function activeMatch(): ThumbMatch | null {
-  const t = thumb();
-  return t.useMatch ? t.match : null;
-}
+const settings: { hand: Hand; sens: number } = { hand: 'left', sens: DEFAULT_SENS };
 
 /** False if this browser refuses to store anything, in which case settings last only until the game is closed. */
 let canSave = true;
@@ -196,43 +146,29 @@ try {
   canSave = false;
 }
 
-/** Aims that are safe to use: each within the limits tiltFor allows, for that thumb, of its straight direction. */
-function validAims(a: unknown, hand: Hand): a is number[] {
-  if (!Array.isArray(a) || a.length !== 5) return false;
-  const [lo, hi] = hand === 'right' ? [-25.5, 20.5] : [-20.5, 25.5];
-  for (let d = 1; d <= 4; d++) {
-    const lean = (((STRAIGHT[d] - a[d] + 180) % 360) + 360) % 360 - 180;
-    if (typeof a[d] !== 'number' || !Number.isFinite(a[d]) || lean < lo || lean > hi) return false;
-  }
-  return true;
-}
-
-/** Read one thumb's saved setting, ignoring anything that does not look right. */
-function readThumb(saved: { match?: Partial<ThumbMatch> | null; use?: boolean } | null | undefined, hand: Hand): ThumbSetting {
-  const sm = saved?.match;
-  if (sm && (sm.kind === 'single' || sm.kind === 'per') && validAims(sm.aims, hand) && typeof sm.lean === 'number' && Array.isArray(sm.by)) {
-    return { match: { kind: sm.kind, lean: sm.lean, by: sm.by, aims: sm.aims }, useMatch: saved?.use !== false };
-  }
-  return { match: null, useMatch: false };
-}
-
 try {
-  const saved = JSON.parse(localStorage.getItem('controls3') ?? 'null');
+  const saved = JSON.parse(localStorage.getItem('controls4') ?? 'null');
   if (saved) {
     settings.hand = saved.hand === 'right' ? 'right' : 'left';
-    settings.left = readThumb(saved.left, 'left');
-    settings.right = readThumb(saved.right, 'right');
+    if (Number.isInteger(saved.sens) && saved.sens >= 0 && saved.sens < SENSITIVITY.length) settings.sens = saved.sens;
   } else {
-    // Older versions kept one setting, for the left thumb, under "controls2".
-    // (A `zone` in it, from when swipe length was a choice, is ignored.)
-    const old = JSON.parse(localStorage.getItem('controls2') ?? 'null');
-    settings.left = readThumb(old, 'left');
-    if (!settings.left.match && old && typeof old.lean === 'number' && Math.abs(old.lean) <= 60) {
-      // saved by version 1 of Match my thumb: one measured lean
-      settings.left = {
-        match: { kind: 'single', lean: old.lean, by: [0, old.lean, old.lean, old.lean, old.lean], aims: uniformAims(tiltFor(old.lean)) },
-        useMatch: true,
-      };
+    // From before (controls3): the steering thumb, and a Match my thumb result in use becomes the nearest
+    // sensitivity (its average lean, which is how the owner's own 2° became Low)
+    const old = JSON.parse(localStorage.getItem('controls3') ?? 'null');
+    if (old) {
+      settings.hand = old.hand === 'right' ? 'right' : 'left';
+      const t = old[settings.hand];
+      const aims = t?.use !== false ? t?.match?.aims : null;
+      if (Array.isArray(aims) && aims.length === 5) {
+        let sum = 0;
+        for (let d = 1; d <= 4; d++) sum += ((((STRAIGHT[d] - aims[d] + 180) % 360) + 360) % 360) - 180;
+        const lean = Math.abs(sum / 4);
+        let best = DEFAULT_SENS;
+        SENSITIVITY.forEach((x, i) => {
+          if (Math.abs(x.tilt - lean) < Math.abs(SENSITIVITY[best].tilt - lean)) best = i;
+        });
+        settings.sens = best;
+      }
     }
   }
 } catch {
@@ -244,9 +180,9 @@ let T = 32; // tile size in canvas pixels
 /**
  * title: the title screen, shown when the game opens. lobby: setting up a match. settings: Settings, opened
  * from the lobby or from the menu. pause: the menu during a match (the round waits behind it). playing: a
- * round. over: the result panel is showing. teach: Match my thumb.
+ * round. over: the result panel is showing.
  */
-let mode: 'title' | 'lobby' | 'settings' | 'pause' | 'playing' | 'over' | 'teach' = 'title';
+let mode: 'title' | 'lobby' | 'settings' | 'pause' | 'playing' | 'over' = 'title';
 let overShown = false;
 /** True from the start of a round until its result: the round the menu pauses and can go back to. */
 let roundLive = false;
@@ -467,10 +403,6 @@ function layout(): void {
   resultCard.style.width = `${cardWidth}px`;
   resultCard.style.left = `${stacked ? 8 : Math.round((side - cardWidth) / 2)}px`;
   resultCard.style.top = `${stacked ? Math.round(topBar + infoRow + ch + 14) : box.top + box.height + 8}px`;
-  teach.style.left = canvas.style.left;
-  teach.style.top = canvas.style.top;
-  teach.style.width = canvas.style.width;
-  teach.style.height = canvas.style.height;
   redrawStatic();
 }
 
@@ -919,247 +851,47 @@ function keepSharp(): void {
 /** Push the control settings into the swipe pad, the screen layout, the menu and the pad's caption, and optionally save them. */
 function applySettings(save: boolean): void {
   const right = settings.hand === 'right';
-  const t = thumb();
-  const on = activeMatch();
-  input.pad.aims = on ? [...on.aims] : standardAims(settings.hand);
+  input.pad.aims = standardAims(settings.hand, SENSITIVITY[settings.sens].tilt);
 
   // which side the pad is on (page.html lays the controls out mirrored under body.righty)
   document.body.classList.toggle('righty', right);
   $('handLeft').setAttribute('aria-pressed', String(!right));
   $('handRight').setAttribute('aria-pressed', String(right));
-
-  // the Standard / My thumb switch: the setting in use is highlighted and tagged ON
-  const which = right ? 'right' : 'left';
-  $('dirStandard').setAttribute('aria-pressed', String(!on));
-  $('dirMine').setAttribute('aria-pressed', String(!!on));
-  $('dirStandardSub').textContent = `typical ${which} thumb`;
-  $('dirMineSub').textContent = !t.match ? 'tap to set up' : on ? 'matched to you' : 'matched, switched off';
-  $('matchState').textContent = on
-    ? `On now: My thumb. The pad reads your ${which} thumb's swipes the way you make them, with ${on.kind === 'per' ? 'a lean for each direction' : 'one lean for all four directions'}.`
-    : t.match
-      ? `On now: Standard, made for a typical ${which} thumb. Your match is saved: tap My thumb to switch it back on.`
-      : `On now: Standard, made for a typical ${which} thumb. Tap My thumb to measure yours in about 40 seconds.`;
-  // the numbers of the match in use: how far each direction is read leaning clockwise (+) or anticlockwise (−)
-  // from straight, so a setting that feels right can be noted down
-  if (on) {
-    const lean = (d: number): string => {
-      const v = Math.round(((((STRAIGHT[d] - on.aims[d] + 180) % 360) + 360) % 360) - 180);
-      return `${v > 0 ? '+' : v < 0 ? '−' : ''}${Math.abs(v)}°`;
-    };
-    $('matchState').textContent += ` Its lean: up ${lean(1)}, down ${lean(2)}, left ${lean(3)}, right ${lean(4)}.`;
-  }
-  $('matchStart').hidden = !t.match;
   $('saveNote').hidden = canSave;
+  refreshSens();
 
   // the caption on the swipe pad itself, visible while playing
-  const tag = $('padTag');
-  tag.textContent = on ? 'My thumb swipes' : 'Standard swipes';
-  tag.classList.toggle('mine', !!on);
+  $('padTag').textContent = `${SENSITIVITY[settings.sens].name} sensitivity`;
 
   if (!save) return;
   try {
-    const out = (s: ThumbSetting): object => ({ match: s.match, use: s.useMatch });
-    localStorage.setItem('controls3', JSON.stringify({ hand: settings.hand, left: out(settings.left), right: out(settings.right) }));
+    localStorage.setItem('controls4', JSON.stringify({ hand: settings.hand, sens: settings.sens }));
   } catch {
     /* storage is optional */
   }
 }
 
-// ---------------------------------------------------------------- Match my thumb
-// Twelve prompted swipes measure how this player's swipes lean; eight more test
-// the result. teach.ts does the maths. The panel covers only the arena so the
-// swipe pad stays usable under it. docs/MATCH-MY-THUMB.md explains the feature.
-
-const DIR_WORD = ['', 'Up', 'Down', 'Left', 'Right'];
-const ARROW_TURN = [0, -90, 90, 180, 0];
-
-/** learn: the twelve swipes. test: the eight. done: the result is showing. */
-let teachPhase: 'learn' | 'test' | 'done' = 'learn';
-let teachAt = 0;
-let learnSamples: { want: Dir; lean: number }[] = [];
-let testSwipes: TestSwipe[] = [];
-let teachSum: ThumbSummary | null = null;
-/** the three settings the test compares: the one in use before, one lean, a lean per direction */
-let candidates: { label: string; match: ThumbMatch | null; aims: number[] }[] = [];
-let chosen = 0;
-
-function teachOrder(): Dir[] {
-  return teachPhase === 'test' ? TEST_ORDER : TEACH_ORDER;
-}
-
-/** Show the next direction to swipe, with an optional note about the last attempt. */
-function teachPrompt(note = ''): void {
-  const order = teachOrder();
-  const want = order[teachAt];
-  $('teachStep').textContent =
-    teachPhase === 'test' ? `Test swipe ${teachAt + 1} of ${order.length}` : `Swipe ${teachAt + 1} of ${order.length}`;
-  $('teachWord').textContent = DIR_WORD[want];
-  $('teachArrow').style.transform = `rotate(${ARROW_TURN[want]}deg)`;
-  $('teachArrow').style.display = ''; // an svg has no `hidden` property, so use display
-  $('teachHint').textContent =
-    note ||
-    (teachPhase === 'test'
-      ? 'Now a few more to test the result. Swipe the same quick way.'
-      : 'Keep your thumb on the pad and swipe the way you do when playing. If the arrow does not change, swipe a little further.');
-  $('teachChoices').hidden = true;
-  $('teachNums').hidden = true;
-  $('teachAgain').hidden = true;
-  $('teachClose').textContent = 'Cancel';
-}
-
-function startTeach(): void {
-  mode = 'teach';
-  teachPhase = 'learn';
-  teachAt = 0;
-  learnSamples = [];
-  testSwipes = [];
-  teachSum = null;
-  hideScreens();
-  teach.hidden = false;
-  teachPrompt();
-}
-
-/** A swipe registered on the pad while matching. */
-function teachStroke(vx: number, vy: number): void {
-  if (mode !== 'teach' || teachPhase === 'done') return;
-  const order = teachOrder();
-  const want = order[teachAt];
-  if (Math.hypot(vx, vy) < 20) {
-    teachPrompt(`That one was very short. Swipe ${DIR_WORD[want].toLowerCase()} a little further.`);
-    return;
-  }
-  const lean = leanOf(want, vx, vy);
-  if (Math.abs(lean) > 80) {
-    teachPrompt(`That read as a different direction. Swipe ${DIR_WORD[want].toLowerCase()} again.`);
-    return;
-  }
-  if (teachPhase === 'learn') learnSamples.push({ want, lean });
-  else testSwipes.push({ want, vx, vy });
-  teachAt++;
-  if (teachAt < order.length) {
-    teachPrompt();
-    return;
-  }
-  if (teachPhase === 'learn') finishLearning();
-  else finishTesting();
-}
-
-/** The twelve learning swipes are in: work out the two candidate settings, then start the test. */
-function finishLearning(): void {
-  const sum = summarise(learnSamples);
-  teachSum = sum;
-  if (!sum.ok) {
-    teachPhase = 'done';
-    showTeachEnd('No match', 'Those swipes pointed too many different ways to learn from, so nothing was changed.');
-    $('teachNums').textContent = `Spread ${sum.spread}°. Up to 30° can be used.`;
-    $('teachNums').hidden = false;
-    return;
-  }
-  const before = activeMatch();
-  const one = singleAims(sum, settings.hand);
-  const each = perDirectionAims(sum, settings.hand);
-  candidates = [
-    {
-      label: before ? 'Before (your match)' : 'Before (Standard)',
-      match: before,
-      aims: before ? [...before.aims] : standardAims(settings.hand),
-    },
-    { label: 'One lean', match: { kind: 'single', lean: sum.lean, by: sum.by, aims: one }, aims: one },
-    { label: 'A lean per direction', match: { kind: 'per', lean: sum.lean, by: sum.by, aims: each }, aims: each },
-  ];
-  teachPhase = 'test';
-  teachAt = 0;
-  testSwipes = [];
-  teachPrompt();
-}
-
-/** The eight test swipes are in: read them with each candidate and offer the best. */
-function finishTesting(): void {
-  teachPhase = 'done';
-  const verdicts = candidates.map((c) => judge(c.aims, testSwipes));
-  chosen = pickBest(verdicts);
-  const sum = teachSum!;
-  const leanWords =
-    Math.abs(sum.lean) < 4
-      ? 'Your swipes are close to straight.'
-      : `Your swipes lean about ${Math.abs(sum.lean)}° ${sum.lean > 0 ? 'clockwise' : 'anticlockwise'}.`;
-  showTeachEnd(
-    'Tested',
-    chosen !== 0
-      ? `${leanWords} The best result is selected and will be switched on. Tap another to use it instead.`
-      : candidates[0].match
-        ? `${leanWords} Your current match read your test swipes best, so it stays on unless you pick another.`
-        : `${leanWords} Standard read your test swipes best, so Standard stays on unless you pick another.`,
-  );
-  const list = $('teachChoices');
-  list.textContent = '';
-  candidates.forEach((c, i) => {
-    const v = verdicts[i];
-    const b = document.createElement('button');
-    b.type = 'button';
-    b.className = 'choice';
-    b.setAttribute('aria-pressed', String(i === chosen));
-    const name = document.createElement('span');
-    name.textContent = c.label;
-    const score = document.createElement('span');
-    score.className = 'score';
-    score.textContent = v.right === v.total ? `${v.right} of ${v.total} · closest ${Math.round(v.closest)}°` : `${v.right} of ${v.total}`;
-    b.append(name, score);
-    b.addEventListener('click', () => {
-      chosen = i;
-      for (const el of list.querySelectorAll('.choice')) el.setAttribute('aria-pressed', String(el === b));
-    });
-    list.append(b);
-  });
-  list.hidden = false;
-  $('teachNums').textContent = `Lean: left ${sum.by[3]}°, right ${sum.by[4]}°, up ${sum.by[1]}°, down ${sum.by[2]}°. Spread ${sum.spread}°.`;
-  $('teachNums').hidden = false;
-}
-
-/** The final panel: a title and a message, the arrow hidden, Try again and Done. */
-function showTeachEnd(title: string, text: string): void {
-  $('teachStep').textContent = '';
-  $('teachArrow').style.display = 'none';
-  $('teachWord').textContent = title;
-  $('teachHint').textContent = text;
-  $('teachChoices').hidden = true;
-  $('teachAgain').hidden = false;
-  $('teachClose').textContent = 'Done';
-}
-
-/** Done or Cancel: keep the chosen setting if a test has just finished, then back to Settings › Controls. */
-function closeTeach(): void {
-  if (teachPhase === 'done' && teachSum?.ok && candidates.length) {
-    const pick = candidates[chosen];
-    if (chosen !== 0) {
-      const t = thumb();
-      t.match = pick.match;
-      t.useMatch = true;
+/** Movement sensitivity: Low, Medium or High (SENSITIVITY in swipe.ts). */
+const sensOpts: Opt[] = [
+  slider({
+    label: 'Movement sensitivity',
+    hint: () =>
+      `How far a swipe can curve and still go the way you meant. ${
+        ['Low suits thumbs that swipe dead straight.', 'Medium suits most thumbs.', 'High suits thumbs whose quick swipes curve a lot.'][settings.sens]
+      } (The swipes are read leaning ${SENSITIVITY[settings.sens].tilt}° ${settings.hand === 'right' ? 'anticlockwise' : 'clockwise'}.)`,
+    min: 0,
+    max: SENSITIVITY.length - 1,
+    get: () => settings.sens,
+    set: (v) => {
+      settings.sens = v;
       applySettings(true);
-    }
-  }
-  teach.hidden = true;
-  showSettings('controls');
-}
+    },
+    text: (v) => SENSITIVITY[v].name,
+  }),
+];
+let refreshSens = (): void => {};
 
-input.pad.onStroke = teachStroke;
-$('matchStart').addEventListener('click', startTeach);
-$('teachAgain').addEventListener('click', startTeach);
-$('teachClose').addEventListener('click', closeTeach);
-// The Standard / My thumb switch. My thumb with no match saved yet starts the matching.
-$('dirStandard').addEventListener('click', () => {
-  thumb().useMatch = false;
-  applySettings(true);
-});
-$('dirMine').addEventListener('click', () => {
-  if (!thumb().match) {
-    startTeach();
-    return;
-  }
-  thumb().useMatch = true;
-  applySettings(true);
-});
-// Which thumb steers. Each thumb keeps its own swipe direction setting.
+// Which thumb steers. The sensitivity leans the other way for a right thumb (mirrored).
 $('handLeft').addEventListener('click', () => {
   settings.hand = 'left';
   applySettings(true);
@@ -1171,13 +903,12 @@ $('handRight').addEventListener('click', () => {
 
 // ---------------------------------------------------------------- screens, rounds and the match
 
-/** Hide every screen and panel over the game: the lobby, Settings, the menu, the result panel, Match my thumb. */
+/** Hide every screen and panel over the game: the lobby, Settings, the menu, the result panel. */
 function hideScreens(): void {
   lobby.hide();
   $('settings').hidden = true;
   $('pause').hidden = true;
   result.hidden = true;
-  teach.hidden = true;
   $('onlineSheet').hidden = true;
   document.body.classList.remove('menu-open');
 }
@@ -1892,6 +1623,7 @@ const gfxOpts: Opt[] = [
 ];
 const refreshSound = mount($('soundOpts'), soundOpts);
 const refreshPad = mount($('padOpts'), padOpts);
+refreshSens = mount($('sensOpts'), sensOpts);
 const refreshGfx = mount($('gfxOpts'), gfxOpts);
 function refreshPrefs(): void {
   remap?.refresh();
@@ -1913,7 +1645,6 @@ function goBack(): void {
   else if (mode === 'settings') closeSettings();
   else if (mode === 'pause') closePause();
   else if (mode === 'playing' || mode === 'over') openPause();
-  else if (mode === 'teach') closeTeach();
 }
 /** The key or button given to Pause (P, or ≡ on a controller): opens the menu in a round, closes it again. */
 function pauseKey(): void {
@@ -1982,7 +1713,7 @@ function padTop(): HTMLElement | null {
   if (confirmOpen()) return $('confirm');
   if (mode === 'title' && !$('onlineSheet').hidden) return $('onlineSheet');
   if (mode === 'lobby' && lobby.sheetOpen()) return $('cpuSheet');
-  const screens: Partial<Record<typeof mode, string>> = { title: 'title', lobby: 'lobby', settings: 'settings', pause: 'pause', over: 'result', teach: 'teach' };
+  const screens: Partial<Record<typeof mode, string>> = { title: 'title', lobby: 'lobby', settings: 'settings', pause: 'pause', over: 'result' };
   const id = screens[mode];
   return id ? $(id) : null;
 }
