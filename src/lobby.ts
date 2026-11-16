@@ -253,7 +253,7 @@ export function createLobby(host: LobbyHost): {
     }
     const name = document.getElementById(`dp-name-${who}`);
     if (name) {
-      name.textContent = danceOf(id).name;
+      name.querySelector('.dp-text')!.textContent = danceOf(id).name;
       name.setAttribute('aria-label', `Victory dance: ${danceOf(id).name}. Tap to see it.`);
     }
     preview(who);
@@ -276,7 +276,9 @@ export function createLobby(host: LobbyHost): {
     const step = (d: number): void => setCardDance(who, stepDance(cardDance(who), d));
     const name = mk(`dp-name-${who}`, '', `Victory dance: ${danceOf(cardDance(who)).name}. Tap to see it.`, () => preview(who));
     name.className = 'dp-name';
-    name.textContent = danceOf(cardDance(who)).name;
+    // a small "Emote" over the dance's name, so it is clear what it is (the owner's ask)
+    name.innerHTML = '<span class="dp-label">Emote</span><span class="dp-text"></span>';
+    name.querySelector('.dp-text')!.textContent = danceOf(cardDance(who)).name;
     row.append(
       mk(`dp-prev-${who}`, '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>', 'Previous dance', () => step(-1)),
       name,
