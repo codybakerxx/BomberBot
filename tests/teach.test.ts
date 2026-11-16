@@ -82,7 +82,7 @@ import { STRAIGHT, uniformAims, standardAims, nearestDir, DEFAULT_TILT } from '.
   }
 
   // a right thumb is the mirror image: standard lean and limits the other way round
-  assert.equal(DEFAULT_TILT, 8, 'the standard lean (docs/SWIPE-HISTORY.md)');
+  assert.equal(DEFAULT_TILT, 5, 'the standard lean (docs/SWIPE-HISTORY.md)');
   assert.deepEqual(standardAims('left'), uniformAims(DEFAULT_TILT));
   assert.deepEqual(standardAims('right'), uniformAims(-DEFAULT_TILT));
   assert.equal(tiltFor(40, 'right'), 20);

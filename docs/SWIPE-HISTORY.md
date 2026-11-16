@@ -15,7 +15,8 @@ degrees, anticlockwise.
 |---|---|---|---|
 | 1 | 15° clockwise / 15° anticlockwise | November 2026, from the first touch controls | Claude's middle course, chosen on simulated thumbs (`experiments/stroke-reading.ts`): almost no cost for a straight thumb, and most errors gone for one that leans. Kept in the code as `FIRST_TILT`. |
 | 2 | 2° clockwise / 2° anticlockwise | 16 November 2026, one afternoon | The owner's own thumb. Match my thumb with his left thumb chose **One lean** (all 8 test swipes right, the closest 30° from a border, against 19° for the old standard), and he said it felt really good. It became the standard for both thumbs, with no switch of its own (his call). His phone keeps it as his own match. |
-| 3 | **8° clockwise / 8° anticlockwise** | From 16 November 2026 | Asked for "the ultimate setting", Claude compared leans of 2°, 6°, 8°, 10° and 15° on simulated thumbs (table below) and the owner said to use the best. 8° costs a straight thumb like his almost nothing and about halves the mistakes of a thumb that curves, compared with 2°; 15° helps strongly curving thumbs most but costs straight ones more and is worst for a thumb that curves the other way. |
+| 3 | 8° clockwise / 8° anticlockwise | 16 November 2026, briefly | Asked for "the ultimate setting", Claude compared leans of 2°, 6°, 8°, 10° and 15° on simulated thumbs (table below) and the owner said to use the best. 8° costs a straight thumb like his almost nothing and about halves the mistakes of a thumb that curves, compared with 2°; 15° helps strongly curving thumbs most but costs straight ones more and is worst for a thumb that curves the other way. |
+| 4 | **5° clockwise / 5° anticlockwise** | From 16 November 2026 | The owner's pick, between his own 2° and 8°. On simulated thumbs it sits between them too: about 0.1% to 0.4% wrong for a straight thumb, and for a thumb curving 30°, roughly 5% to 10% wrong, against 2.4% to 6.2% at 8° and 6.9% to 14.3% at 2°. |
 
 The run that set version 2 measured these leans in his swipes: left 5°, right 6°, up 9°, down −8°, spread 14°:
 close to straight overall (about 3°). One lean uses three quarters of the overall lean, rounded (`tiltFor` in
@@ -44,7 +45,7 @@ strokes read the wrong way:
 
 Version 3 compared more leans (share of strokes read wrong; resting thumb, then straight after touching down):
 
-| The thumb leans | 2° | 6° | 8° (now) | 10° | 15° |
+| The thumb leans | 2° | 6° | 8° | 10° | 15° |
 |---|---|---|---|---|---|
 | −10° (the other way) | 0.3% / 0.9% | 0.9% / 2.1% | 1.0% / 3.7% | 1.8% / 4.3% | 4.3% / 9.1% |
 | 0° | 0.0% / 0.2% | 0.0% / 0.3% | 0.1% / 0.6% | 0.1% / 0.5% | 0.2% / 1.7% |
@@ -80,3 +81,4 @@ reads them wrongly, that is the number to look at again.
    can be written down. That is how version 2 of the standard lean was found.
 10. **Standard lean version 2** (16 November 2026): 2°, above.
 11. **Standard lean version 3** (16 November 2026): 8°, above.
+12. **Standard lean version 4** (16 November 2026): 5°, the owner's pick, above.
