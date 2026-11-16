@@ -127,7 +127,7 @@ import { SwipePad, DEFAULT_TILT, FIRST_TILT } from '../src/swipe';
     return pad.dir;
   };
   for (const going of [1, 2, 3, 4] as Dir[]) {
-    // the standard lean (2°, the owner's match): straight swipes, and swipes leaning up to 35° either way
+    // the standard lean (8°): straight swipes, and swipes leaning up to 35° either way
     for (const want of [1, 2, 3, 4] as Dir[]) assert.equal(decode(going, ANG[want]), want, `straight ${want} while going ${going}`);
     for (const lean of [-35, -20, 20, 35]) {
       for (const want of [1, 2, 3, 4] as Dir[]) assert.equal(decode(going, ANG[want] - lean), want, `${want} leaning ${lean} while going ${going}`);

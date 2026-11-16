@@ -253,9 +253,9 @@ Local storage belongs to one browser on one device. Clearing the browser's site 
 
 ## The standard lean
 
-Until someone runs Match my thumb, the pad leans **2°** in all four directions: clockwise when the left thumb steers, anticlockwise when the right thumb does (`DEFAULT_TILT` and `standardAims` in `src/swipe.ts`).
+Until someone runs Match my thumb, the pad leans **8°** in all four directions: clockwise when the left thumb steers, anticlockwise when the right thumb does (`DEFAULT_TILT` and `standardAims` in `src/swipe.ts`).
 
-That is the owner's own match (November 2026). It was 15° before: a middle course that took most errors away for a thumb whose swipes lean, at a small cost for a straight one. 2° suits a straight thumb and is worse for one that leans 30° or more, which is what Match my thumb is for. [SWIPE-HISTORY.md](SWIPE-HISTORY.md) has every version and the numbers. The tables below were measured with the 15° lean.
+It was 15° at first, then 2° (the owner's own match), and is now 8°, the best all-round lean on simulated thumbs: little cost for a straight thumb, about half the mistakes of 2° for one that curves. A thumb that curves a lot is what Match my thumb is for. [SWIPE-HISTORY.md](SWIPE-HISTORY.md) has every version and the numbers. The tables below were measured with the 15° lean.
 
 ## What it cannot do
 

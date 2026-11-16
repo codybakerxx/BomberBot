@@ -26,7 +26,7 @@
  *      is an arc: left drifts up, right drifts down, up drifts right, down
  *      drifts left. Aiming each direction where the thumb really swipes puts
  *      those flicks in the middle of their quarter instead of on a border.
- *      By default all four aims lean the same 2 degrees (clockwise for a left
+ *      By default all four aims lean the same 8 degrees (clockwise for a left
  *      thumb, anticlockwise for a right thumb); Match my thumb can
  *      set one lean for all four, or a lean for each. The aims change only
  *      which direction a stroke counts as, never how far the thumb travels.
@@ -45,10 +45,10 @@ const SETTLE_MS = 120; // ... for this long has come to rest
 
 /**
  * Standard clockwise lean, in degrees, for a left thumb. A right thumb leans the same amount the other way.
- * The owner's own match (November 2026: Match my thumb's "one lean", which felt really good): 2°. It was 15°
- * from the first touch controls until then; docs/SWIPE-HISTORY.md has every version and why.
+ * 8°: the best all-round lean on simulated thumbs (November 2026), chosen by Claude at the owner's word. It
+ * was 15° at first, then 2° (the owner's own match) for an afternoon; docs/SWIPE-HISTORY.md has every version.
  */
-export const DEFAULT_TILT = 2;
+export const DEFAULT_TILT = 8;
 /** The standard lean before November 2026, kept for the tests and experiments that were built on it. */
 export const FIRST_TILT = 15;
 
