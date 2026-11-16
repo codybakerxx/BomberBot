@@ -30,6 +30,13 @@
  * docs/CPU-PLAYERS.md explains all of this in plain words.
  */
 import {
+  ANGEL_BOMBS,
+  ANGEL_CHARGE_TICKS,
+  ANGEL_MAX_TILES,
+  ANGEL_MIN_TILES,
+  angelAim,
+  perimeterAt,
+  wallLength,
   World,
   Player,
   Bomb,
@@ -222,7 +229,9 @@ export interface Bot {
   /** its current plan knowingly walks through a curse, because nothing was worth doing on this side of it */
   throughCurse: boolean;
   /** what it was doing on its last tick, for tests and debugging */
-  doing: 'idle' | 'flee' | 'travel' | 'bomb' | 'script' | 'trapped';
+  doing: 'idle' | 'flee' | 'travel' | 'bomb' | 'script' | 'trapped' | 'angel';
+  /** as an angel: the world tick it may next throw from (it rests between throws, longer at easy levels) */
+  angelRest: number;
 }
 
 export function createBot(id: number, level: BotLevel, seed: number): Bot {
@@ -242,6 +251,7 @@ export function createBot(id: number, level: BotLevel, seed: number): Bot {
     stuck: 0,
     throughCurse: false,
     doing: 'idle',
+    angelRest: 0,
   };
 }
 
@@ -817,7 +827,13 @@ function inSquare(world: World, me: Player): boolean {
 
 export function botInput(world: World, bot: Bot): PlayerInput {
   const me = world.players[bot.id];
-  if (!me || !me.alive) return NONE;
+  if (!me) return NONE;
+  if (!me.alive) {
+    // knocked out: forget the plan (a lost life comes back somewhere else); as an angel, haunt the wall
+    bot.path = [];
+    bot.script = [];
+    return me.angel ? angelInput(world, bot, me) : NONE;
+  }
   if (bot.script.length) {
     bot.doing = 'script';
     bot.path = [];
@@ -1346,4 +1362,73 @@ function wayOut(c: Ctx): PlayerInput[] | null {
 export function previewBomb(world: World, cx: number, cy: number, range: number): { tiles: number[]; bricks: number } {
   const fx = bombEffect(world, dangerMap(world, null, 0), cx, cy, range);
   return { tiles: fx.tiles, bricks: fx.bricks };
+}
+
+// ---------------------------------------------------------------- as an angel
+
+/** Rest between an angel's throws, in ticks, by level: Beginner throws now and then, Hard often. */
+const ANGEL_REST: Record<BotLevel, number> = { beginner: 150, normal: 70, hard: 25 };
+
+/**
+ * A CPU player out of the round, as an angel on the wall (sim.ts `angelStep`). It picks the robot nearest to
+ * it, goes to the place on the wall in line with it (the top or bottom edge over its column, or a side by its
+ * row) that is closest round the wall and near enough to reach, winds the throw up to that distance and lets
+ * go. It aims where the robot is now, not where it is going, so a robot that keeps moving is hard to hit.
+ */
+function angelInput(world: World, bot: Bot, me: Player): PlayerInput {
+  bot.doing = 'angel';
+  if (world.over || world.tick < me.angelFrom) return NONE;
+  const L = wallLength(world);
+  const W = world.w - 1;
+  const H = world.h - 1;
+  const here = perimeterAt(world, me.angelS);
+  // the robot to go for: the nearest one still standing
+  let target: Player | null = null;
+  let bestD = Infinity;
+  for (const p of world.players) {
+    if (!p.alive || p.id === me.id) continue;
+    const d = Math.abs(p.x - here.x) + Math.abs(p.y - here.y);
+    if (d < bestD) {
+      bestD = d;
+      target = p;
+    }
+  }
+  if (!target) return NONE;
+  const tx = Math.round(target.x);
+  const ty = Math.round(target.y);
+  // the places on the wall in line with it, with how far in each throw must go
+  const spots: { s: number; dist: number }[] = [
+    { s: tx, dist: ty }, // top edge, over its column
+    { s: W + ty, dist: W - tx }, // right edge, by its row
+    { s: W + H + (W - tx), dist: H - ty }, // bottom edge
+    { s: 2 * W + H + (H - ty), dist: tx }, // left edge
+  ].filter((o) => o.dist >= ANGEL_MIN_TILES && o.dist <= ANGEL_MAX_TILES);
+  if (!spots.length) return NONE;
+  const round = (from: number, to: number): number => {
+    let d = (((to - from) % L) + L) % L;
+    if (d > L / 2) d -= L;
+    return d;
+  };
+  let best = spots[0];
+  for (const o of spots) if (Math.abs(round(me.angelS, o.s)) < Math.abs(round(me.angelS, best.s))) best = o;
+  const delta = round(me.angelS, best.s);
+  if (Math.abs(delta) > 0.08) {
+    // glide that way round the wall (the same directions angelStep reads, side by side)
+    const plus = delta > 0;
+    let dir: Dir;
+    if (here.y < 0.5) dir = plus ? 4 : 3;
+    else if (here.x > W - 0.5) dir = plus ? 2 : 1;
+    else if (here.y > H - 0.5) dir = plus ? 3 : 4;
+    else dir = plus ? 1 : 2;
+    // keep a throw being wound up wound up while it lines up
+    return { dir, a: me.angelHeld > 0 && me.activeBombs < ANGEL_BOMBS, b: false };
+  }
+  if (me.activeBombs >= ANGEL_BOMBS || world.tick < bot.angelRest || !angelAim(world, me).dir) return NONE;
+  // wound up far enough: let go
+  const need = (best.dist - ANGEL_MIN_TILES) * ANGEL_CHARGE_TICKS + 1;
+  if (me.angelHeld >= need) {
+    bot.angelRest = world.tick + ANGEL_REST[bot.level];
+    return NONE;
+  }
+  return { dir: 0, a: true, b: false };
 }

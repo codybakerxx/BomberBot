@@ -92,6 +92,11 @@
   #score { position: fixed; pointer-events: none; }
   /* the layer the ghosts of knocked-out robots float up on: as wide as the arena, from the top of the screen to the arena's bottom edge. layout() places it. */
   #ghosts { position: fixed; top: 0; pointer-events: none; }
+  /* a short line over the top of the arena during a round (showTip in main.ts): how angels play */
+  #playTip { position: fixed; transform: translateX(-50%); z-index: 2; max-width: 94vw; padding: 5px 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-transform: none; letter-spacing: 0; pointer-events: none; text-align: center; font: 600 13px/1.3 var(--font-body); color: #fff6e0; background: rgba(12, 16, 28, 0.82); border: 1px solid rgba(255, 220, 140, 0.55); border-radius: 10px; }
+  #playTip.go { animation: tip-life 4.5s ease forwards; }
+  @keyframes tip-life { 0% { opacity: 0; } 8% { opacity: 1; } 85% { opacity: 1; } 100% { opacity: 0; } }
+  body.menu-open #playTip { visibility: hidden; }
   body.menu-open #ghosts { visibility: hidden; }
   /* the result of a round: a panel that leaves the arena in view. layout() places it. */
   #result { position: fixed; inset: 0; pointer-events: none; }
@@ -745,6 +750,7 @@
 <canvas id="score" role="img" aria-label="Rounds won"></canvas>
 <button id="menuBtn" type="button" aria-label="Menu"><i></i></button>
 <canvas id="ghosts" aria-hidden="true"></canvas>
+<div id="playTip" role="status" aria-live="polite" hidden></div>
 
 <div id="touch">
   <div id="dzone">

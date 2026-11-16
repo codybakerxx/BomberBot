@@ -12,7 +12,7 @@
  */
 import { createWorld, step, ticksLeft, World, PlayerInput, Dir, TICK_HZ, DEATH_TICKS } from './sim';
 import { Bot, BotLevel, BOT_LEVELS, LEVELS, createBot, botInput } from './bot';
-import { COLORS, NOBODY, botName, colorById, drawHead, drawStatic, drawDynamic, drawGhosts, warmSprites } from './render';
+import { COLORS, NOBODY, botName, colorById, drawAngels, drawHead, drawStatic, drawDynamic, drawGhosts, warmSprites } from './render';
 import { Input, PadReader, typing } from './input';
 import { drawTitle, closeTitle } from './title';
 import { initAudio, preview, setSound, sfx } from './audio';
@@ -107,6 +107,20 @@ let blastedBy = -1;
 const CRUSHED = -2;
 /** true once this round's "blocks are falling" warning has sounded */
 let hurried = false;
+/** the angel tip has been shown this match (it says how angels play, the first time someone here is one) */
+let angelTipShown = false;
+const playTip = $('playTip');
+let tipTimer = 0;
+/** A short line over the top of the arena for a few seconds, during a round. */
+function showTip(text: string): void {
+  playTip.textContent = text;
+  playTip.hidden = false;
+  playTip.classList.remove('go');
+  void playTip.offsetWidth;
+  playTip.classList.add('go');
+  clearTimeout(tipTimer);
+  tipTimer = window.setTimeout(() => (playTip.hidden = true), 4500);
+}
 /** Rounds won in this match by each of the four places on the scoreboard. Place 0 is you. */
 const wins = Array<number>(9).fill(0);
 /** Which round of the match this is: 1 for the first. */
@@ -353,6 +367,9 @@ function layout(): void {
   ghosts.style.width = canvas.style.width;
   ghosts.style.height = `${ghosts.height / dpr}px`;
   ghostsShown = false;
+  // the tip: upright, in the free line over the arena (one line); otherwise over the top of the arena
+  playTip.style.top = stacked ? `${topBar + Math.max(0, Math.round((infoRow - 26) / 2))}px` : `${parseInt(canvas.style.top, 10) + 8}px`;
+  playTip.style.left = `${Math.round(W / 2)}px`;
   touch.style.setProperty('--ctl-top', `${Math.round(topBar + infoRow + ch + 8)}px`);
   // the styles use this to keep B the size it was before the line was added (see page.html)
   touch.style.setProperty('--info-row', `${infoRow}px`);
@@ -438,7 +455,7 @@ let scoreKey = '';
 function drawScore(): void {
   const places = Array.from({ length: Math.max(4, world.players.length) }, (_, i) => world.players[i]);
   const winner = world.over ? world.over.winner : -1;
-  const key = places.map((p, i) => (p ? `${p.colorId}${p.alive ? '' : 'x'}${wins[i]}` : '-')).join('|') + `|${winner}|${leader}|${score.width}x${score.height}`;
+  const key = places.map((p, i) => (p ? `${p.colorId}${p.alive ? '' : 'x'}${wins[i]}l${p.lives}` : '-')).join('|') + `|${winner}|${leader}|${score.width}x${score.height}`;
   if (key === scoreKey) return;
   scoreKey = key;
   const k = score.width / (parseFloat(score.style.width) || score.width); // screen pixels to canvas pixels
@@ -477,6 +494,17 @@ function drawScore(): void {
     if (i === leader) drawHead(sctx, cx, cy, r, col, { crownOnly: true });
     sctx.fillStyle = i === winner ? col.glow : p.alive ? '#eef1fb' : '#8a90a3';
     sctx.fillText(label, cx + r + gap, cy + 1);
+    // with more than one life a round, a little dot under the head for each life left
+    if (setup.lives > 1 && p.lives > 0) {
+      const dr = Math.max(1.3, r * 0.14);
+      const step = dr * 3;
+      sctx.fillStyle = col.glow;
+      for (let n = 0; n < p.lives; n++) {
+        sctx.beginPath();
+        sctx.arc(cx + (n - (p.lives - 1) / 2) * step, cy + r + dr + 2, dr, 0, Math.PI * 2);
+        sctx.fill();
+      }
+    }
     said.push(`${nameOf(i)} ${wins[i]}${i === leader ? ' (in the lead)' : ''}`);
   });
   score.setAttribute('aria-label', `Rounds won: ${said.join(', ')}`);
@@ -522,6 +550,8 @@ function render(time: number): void {
   if (ghostsShown) gctx.clearRect(0, 0, ghosts.width, ghosts.height);
   gctx.setTransform(1, 0, 0, 1, 0, ghostTop);
   ghostsShown = prefs.ghosts ? drawGhosts(gctx, world, T, -ghostTop) : false; // they can be switched off in Settings › Graphics
+  // angels on the wall are part of the game, so they are drawn whatever that setting says
+  if (drawAngels(gctx, world, T, time)) ghostsShown = true;
   drawTimer();
   drawScore();
 }
@@ -591,11 +621,18 @@ function tick(): void {
       // the arena has one more solid block: the picture of the floor and blocks needs redrawing
       sfx.block();
       redrawStatic();
-    } else if (e.type === 'death') {
+    } else if (e.type === 'respawn' || e.type === 'revive') sfx.shield(); // back in the round
+    else if (e.type === 'death') {
       sfx.death();
-      if (e.player === 0) blastedBy = e.cause === 'block' ? CRUSHED : e.by;
+      if (e.player === 0 && e.out) blastedBy = e.cause === 'block' ? CRUSHED : e.by;
       if (prefs.rumble && human(e.player)) padOf(e.player)?.rumble(1, 0.7, 380); // a strong shake: you are out
     }
+  }
+  // out of lives and an angel now (or the first time someone here is): say how angels play, once a match
+  const firstAngel = world.players.findIndex((p, i) => human(i) && p.angel && world.tick >= p.angelFrom);
+  if (firstAngel >= 0 && !angelTipShown) {
+    angelTipShown = true;
+    showTip(guests.length ? `${nameOf(firstAngel)}: an angel! Slide the wall, hold A to throw` : 'You are an angel! Slide the wall, hold A to throw');
   }
   // the moment the first block starts to fall
   if (world.shrinkNext === 1 && world.falling.length === 1 && !hurried) {
@@ -628,10 +665,10 @@ function tick(): void {
     else if (winner === 0) finish('You win the round', `Last bot standing. ${wins[0]} of ${setup.firstTo} to win the match.`);
     else if (winner > 0) finish(`${nameOf(winner)} wins the round`, me.alive ? '' : how);
     else finish('Draw', me.alive ? 'Nobody was left standing.' : `${how} Nobody was left standing.`);
-  } else if (!world.over && !overShown && guests.length && world.players.every((p, i) => !human(i) || (!p.alive && p.deadTicks >= DEATH_TICKS))) {
+  } else if (!world.over && !overShown && guests.length && world.players.every((p, i) => !human(i) || (!p.alive && p.lives === 0 && !p.angel && p.deadTicks >= DEATH_TICKS))) {
     // everyone here is out and CPU players are still at it, as below
     finish('Everyone here is out', 'The CPU players are still fighting. Next round gives this round to one of them at random.');
-  } else if (!world.over && !overShown && !guests.length && !me.alive && me.deadTicks >= DEATH_TICKS) {
+  } else if (!world.over && !overShown && !guests.length && !me.alive && me.lives === 0 && !me.angel && me.deadTicks >= DEATH_TICKS) {
     // You are out and the others are still at it. The round carries on behind this panel, and its
     // winner still gets the win; Next round does not wait for it.
     finish(crushed ? 'You got crushed' : 'You got blasted', `${how} The others are still fighting. Next round gives this round to one of them at random.`);
@@ -1052,6 +1089,7 @@ function newMatch(): void {
   leader = -1;
   roundNo = 0;
   matchWinner = -1;
+  angelTipShown = false;
   start();
 }
 /** Start the next round of the match in a fresh arena. */
@@ -1137,7 +1175,8 @@ function fillPause(): void {
     const st = document.createElement('span');
     const won = world.over && world.over.winner === i;
     st.className = `st${p.alive ? ' in' : ''}`;
-    st.textContent = won ? 'Won' : p.alive ? 'In' : 'Out';
+    // (with more than one life: how many are left; out of lives with angels on: an angel)
+    st.textContent = won ? 'Won' : p.alive || p.respawnAt >= 0 ? (setup.lives > 1 ? `${p.lives} ${p.lives === 1 ? 'life' : 'lives'}` : 'In') : p.angel ? 'Angel' : 'Out';
     const w = document.createElement('span');
     w.className = 'wins';
     w.textContent = String(wins[i]);

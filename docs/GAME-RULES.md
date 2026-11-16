@@ -197,6 +197,26 @@ The blocks were made 20% faster on 11 November 2026, after play-testing: they to
 - Once a round is decided, nothing more can happen to the winner, no more blocks start to fall, and nobody moves.
 - The other bots are CPU players, each at the level the lobby gave it. Be the last one in and the round is won.
 
+## Lives and angels
+
+*`knockOut`, `bringBack`, `comeBackTile`, `angelStep` and the end of `step`, in sim.ts*
+
+**Lives** (the lobby's Lives, 1 to 5; 1 by default) are per round: everyone starts each round with that many.
+
+- Knocked out with a life left, a robot loses that life and comes back 2 seconds later (`RESPAWN_TICKS`) at its starting place, or, if that tile is now a block, a bomb, a blast or under a falling block, the nearest tile that is none of those.
+- It comes back with only what a robot starts the round with (the owner's choice): the lobby's starting bombs, blast and speed, no boot, glove, shield or curse.
+- For 2 seconds after (`SAFE_TICKS`) blasts cannot hurt it, and it blinks. A falling block still can.
+- While it is on its way back it is still in the round: the round is not decided until only one robot is left that is standing or coming back, and if that last one is on its way back, the round waits for it to be standing.
+- The scoreboard shows a dot under each head for each life left, when the lobby gives more than one.
+
+**Angels** (the lobby's Angels, on by default): a robot out of lives becomes an angel once its knocked-out animation has played (`ANGEL_DELAY`), on the outer wall at the point nearest where it fell.
+
+- The direction glides it round the wall (`ANGEL_SPEED`, 4.5 tiles a second): along the top and bottom, left and right; up and down the sides; either at a corner. Let go and it settles on the middle of a wall tile.
+- **Hold A and let go** to throw a bomb over the wall into the arena, straight in from the tile it is over: a tap throws it 2 tiles in (`ANGEL_MIN_TILES`), and each quarter of a second held (`ANGEL_CHARGE_TICKS`) adds a tile, up to 6 (`ANGEL_MAX_TILES`). A ring in its colour marks where it will land while A is held. It lands like any thrown bomb (on a taken tile it bounces on), has the usual fuse, and a blast of 2 tiles each way (`ANGEL_FIRE`). One out at a time (`ANGEL_BOMBS`); not from a corner.
+- Angels cannot be hurt, and do not count as still in the round.
+- **Angels come back** (off by default): an angel whose bomb knocks a robot out comes back in its place, on that tile, with what a robot starts with, one life, and the same 2 seconds of safety. Without it, an angel stays an angel to the end of the round.
+- CPU players are angels too: they go along the wall to line up with the nearest robot, wind the throw up to its distance and let go, resting between throws (Beginner 2.5 s, Normal 1.2 s, Hard 0.4 s).
+
 ### The scoreboard and the end of a round
 
 *`drawScore`, `tick` and `finish` in main.ts*
@@ -230,6 +250,15 @@ All of these are named constants near the top of `src/sim.ts`. Changing one chan
 
 | Constant | Value | Meaning |
 |---|---|---|
+| `RESPAWN_TICKS` | 120 (2 s) | A lost life comes back this long after the knockout |
+| `SAFE_TICKS` | 120 (2 s) | Blasts cannot hurt a robot this long after it comes back |
+| `MAX_LIVES` | 5 | Most lives the lobby can give |
+| `ANGEL_DELAY` | 90 (1.5 s) | An angel takes to the wall once the knocked-out animation has played |
+| `ANGEL_SPEED` | 0.075 tiles a tick | How fast an angel glides round the wall |
+| `ANGEL_MIN_TILES`, `ANGEL_MAX_TILES` | 2, 6 | How far in an angel's throw lands: a tap, and held longest |
+| `ANGEL_CHARGE_TICKS` | 14 | Each tile further takes this long with A held |
+| `ANGEL_FIRE` | 2 | An angel's bomb's blast, tiles each way |
+| `ANGEL_BOMBS` | 1 | An angel's bombs out at once |
 | `TICK_HZ` | 60 | Rule steps per second |
 | `BASE_SPEED` | 0.04250390625 | Starting walking speed in tiles per tick (2.55 a second) |
 | `SPEED_STEP` | 0.5 / 60 (0.00833) | Extra speed per speed power-up (0.5 a second) |
@@ -275,6 +304,8 @@ The host can change these before a match. Left alone, every one is the usual rul
 | Bricks | Few, Some, Normal, Lots, Packed | `softDensity` (see The arena) |
 | Custom start | Bombs 1 to 8, blast 1 to 8 tiles, speed +0 to +6 | What everyone starts each round with (`startBombs`, `startFire`, `startSpeed`) |
 | Custom power-ups | For each kind: Off, Rare (half), Normal, Lots (double) | Its chance under a brick (`itemChance`). A boot and a glove are only made sure of when they are not Off |
+| Lives | 1 to 5 | Lives each robot has in a round (`lives`); see Lives and angels |
+| Angels | On (the default) or off; under it, Angels come back | Out of lives, a robot haunts the wall and throws bombs in (`angels`: 'on'; 'revive' with Angels come back) |
 
 ## Not in the game yet
 

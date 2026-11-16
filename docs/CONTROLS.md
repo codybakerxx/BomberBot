@@ -67,6 +67,10 @@ When a round ends, the result panel offers **Next round** and **Menu**. When som
 
 Keys in the menus: Tab moves between buttons, ← and → change the setting in focus, Q and E turn the pages, and Escape goes back one step (closes a question or a panel, leaves Settings, resumes from the menu, goes from the lobby to the title).
 
+## As an angel
+
+Out of lives, with Angels on in the lobby, you are an angel on the arena's outer wall (see GAME-RULES.md, Lives and angels). The same controls work: the pad (or keys, or stick) glides you round the wall, and **A** throws, further the longer it is held, with a ring showing where it will land. A short line over the arena says so the first time in a match. Once you are an angel there is no knocked-out panel; the round goes on until it is decided.
+
 ## Keyboard and game controller
 
 On a computer the touch controls are hidden and the keyboard is used. An Xbox controller (or any controller the browser knows as a standard one) works too, for playing and for every menu; it is noticed as soon as one of its buttons is pressed. These are what each action starts with:

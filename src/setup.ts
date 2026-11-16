@@ -12,7 +12,7 @@
 import { readDance, type DanceId } from './dances';
 import { BotLevel, BOT_LEVELS } from './bot';
 import { KeyMap, PadMap, defaultKeys, defaultPad, readKeys, readPad } from './bindings';
-import { ItemKind, ITEM_CHANCE, MAX_BOMBS, MAX_FIRE, MAX_SPEED_ITEMS, START_FIRE, TICK_HZ, WorldConfig } from './sim';
+import { ItemKind, ITEM_CHANCE, MAX_BOMBS, MAX_FIRE, MAX_LIVES, MAX_SPEED_ITEMS, START_FIRE, TICK_HZ, WorldConfig } from './sim';
 
 // ---------------------------------------------------------------- the match
 
@@ -107,7 +107,7 @@ export const MAX_FIRST_TO = 9;
  * call; it was 3), so a setup saved before then has its Rounds to win put back to 1. 3: Closing in has five
  * steps in place of three (Slow, Normal, Fast became Very slow, Normal, Fast).
  */
-export const SETUP_VERSION = 3;
+export const SETUP_VERSION = 4;
 
 export interface MatchSetup {
   /** SETUP_VERSION when it was saved */
@@ -132,6 +132,12 @@ export interface MatchSetup {
   itemsOn: boolean;
   /** index into ITEM_AMOUNTS for each kind */
   items: Record<ItemKind, number>;
+  /** lives each robot has in a round, 1 to MAX_LIVES (sim.ts) */
+  lives: number;
+  /** knocked-out players out of lives become angels on the wall, throwing bombs in */
+  angels: boolean;
+  /** and an angel whose bomb knocks a robot out comes back in its place */
+  angelsBack: boolean;
 }
 
 export function defaultSetup(myColor: string): MatchSetup {
@@ -151,6 +157,9 @@ export function defaultSetup(myColor: string): MatchSetup {
     startSpeed: 0,
     itemsOn: false,
     items: { bomb: 2, fire: 2, speed: 2, kick: 2, grab: 2, shield: 2, curse: 2 },
+    lives: 1,
+    angels: true,
+    angelsBack: false,
   };
 }
 
@@ -199,6 +208,8 @@ export function worldConfig(s: MatchSetup, myColor: string, seed: number, guests
     startBombs: s.startOn ? s.startBombs : 1,
     startFire: s.startOn ? s.startFire : START_FIRE,
     startSpeed: s.startOn ? s.startSpeed : 0,
+    lives: s.lives,
+    angels: !s.angels ? 'off' : s.angelsBack ? 'revive' : 'on',
   };
 }
 
@@ -215,6 +226,8 @@ export function summary(s: MatchSetup, guests = 0): string {
     s.timerOn ? `${clockText(s.roundSecs)} rounds` : 'No timer',
     `First to ${s.firstTo}`,
   ];
+  if (s.lives > 1) parts.push(`${s.lives} lives`);
+  if (s.angels) parts.push(s.angelsBack ? 'Angels come back' : 'Angels');
   if (s.startOn) parts.push('Custom start');
   if (s.itemsOn) parts.push('Custom power-ups');
   return parts.join(' · ');
@@ -263,6 +276,10 @@ export function readSetup(raw: unknown, myColor: string, colorIds: string[]): Ma
   if (r.items && typeof r.items === 'object') {
     for (const [k] of ITEM_CHANCE) out.items[k] = clampInt((r.items as Record<string, unknown>)[k], 0, ITEM_AMOUNTS.length - 1, 2);
   }
+  out.lives = clampInt(r.lives, 1, MAX_LIVES, 1);
+  // (saved before version 4 there were no angels: they come on, as for a new setup)
+  if (typeof r.angels === 'boolean') out.angels = r.angels;
+  if (typeof r.angelsBack === 'boolean') out.angelsBack = r.angelsBack;
   return out;
 }
 

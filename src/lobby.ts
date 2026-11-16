@@ -22,7 +22,7 @@
  */
 import { BOT_LEVELS, LEVELS } from './bot';
 import { COLORS, botName, colorById, drawRobot, drawStatic, drawDynamic, ROBOT } from './render';
-import { createWorld, MAX_BOMBS, MAX_FIRE, MAX_SPEED_ITEMS, START_FIRE } from './sim';
+import { createWorld, MAX_BOMBS, MAX_FIRE, MAX_LIVES, MAX_SPEED_ITEMS, START_FIRE } from './sim';
 import {
   CpuSlot,
   Guest,
@@ -698,6 +698,39 @@ export function createLobby(host: LobbyHost): {
       text: (v) => (v === 1 ? 'One round' : `First to ${v}`),
     }),
     slider({
+      label: 'Lives',
+      hint: 'Each round. Lose one and you are back in your corner, starting from scratch',
+      min: 1,
+      max: MAX_LIVES,
+      get: () => s().lives,
+      set: (v) => {
+        s().lives = v;
+        changed();
+      },
+      text: (v) => (v === 1 ? 'One life' : `${v} lives`),
+    }),
+    toggle({
+      label: 'Angels',
+      hint: 'Out of lives? Haunt the wall and throw bombs in: hold A to throw further',
+      get: () => s().angels,
+      set: (v) => {
+        s().angels = v;
+        changed();
+      },
+      offText: 'Out of lives, you watch the rest of the round.',
+      under: [
+        toggle({
+          label: 'Angels come back',
+          hint: 'An angel whose bomb knocks a robot out takes its place',
+          get: () => s().angelsBack,
+          set: (v) => {
+            s().angelsBack = v;
+            changed();
+          },
+        }),
+      ],
+    }),
+    slider({
       label: 'Bricks',
       hint: 'How much of the arena starts filled. The picture above shows it.',
       min: 0,
@@ -751,7 +784,7 @@ export function createLobby(host: LobbyHost): {
   ];
   const refreshRules = mount($('rules'), rules);
   $('rulesReset').addEventListener('click', () =>
-    confirmFirst('Put the rules back to normal?', 'The arena, timer, rounds, bricks, start and power-ups go back to the usual ones. Your players stay as they are.', 'Reset rules', (yes) => {
+    confirmFirst('Put the rules back to normal?', 'The arena, timer, rounds, lives, angels, bricks, start and power-ups go back to the usual ones. Your players stay as they are.', 'Reset rules', (yes) => {
       if (!yes) return;
       host.setup = defaultRules(s(), host.myColor);
       changed();

@@ -10,7 +10,7 @@
 import { drawRobot, warmRobots, GHOST_ARMS, ROBOT, type Pose, type Wanted } from './robot';
 import { danceFrame, danceSamples, type DanceId } from './dances';
 export { warmRobots } from './robot';
-import { World, FLOOR, HARD, SOFT, FLAME_TICKS, DEATH_TICKS, GHOST_TICKS, SHIELD_GRACE_TICKS, FALL_TICKS, TICK_HZ, ItemKind, Player, Bomb, FLY_TICKS_PER_TILE, THROW_TILES, FUSE_TICKS, CARRY_FUSE_TICKS } from './sim';
+import { World, FLOOR, HARD, SOFT, FLAME_TICKS, DEATH_TICKS, GHOST_TICKS, SHIELD_GRACE_TICKS, FALL_TICKS, TICK_HZ, ItemKind, Player, Bomb, FLY_TICKS_PER_TILE, THROW_TILES, FUSE_TICKS, CARRY_FUSE_TICKS, DX, DY, angelAim, angelReach, perimeterAt } from './sim';
 
 export interface BotColor {
   /** saved with the player's choice and sent to the rules as Player.colorId */
@@ -737,7 +737,16 @@ function drawPlayer(ctx: Ctx, world: World, p: Player, T: number, celebrate?: Ce
       // the winner: their victory dance
       const f = danceFrame(celebrate.dance ?? 'party', celebrate.t);
       drawRobot(ctx, x + f.dx * T, y, T, col, f.facing, f.walk, f.moving, { ...f.pose, crown: crowned === p.id });
-    } else drawRobot(ctx, x, y, T, col, p.facing, p.walk, p.moving, crowned === p.id ? { crown: true } : undefined);
+    } else {
+      // just back after losing a life (or an angel back in the round): blinking while blasts cannot hurt it
+      const blink = p.safeTicks > 0 && Math.floor(p.safeTicks / 5) % 2 === 0;
+      if (blink) {
+        ctx.save();
+        ctx.globalAlpha = 0.3;
+      }
+      drawRobot(ctx, x, y, T, col, p.facing, p.walk, p.moving, crowned === p.id ? { crown: true } : undefined);
+      if (blink) ctx.restore();
+    }
     drawStatus(ctx, p, x, (p.y + 0.5) * T, T);
     return;
   }
@@ -858,7 +867,8 @@ function drawHalo(ctx: Ctx, x: number, y: number, s: number): void {
 export function drawGhosts(ctx: Ctx, world: World, T: number, top: number): boolean {
   let any = false;
   for (const p of world.players) {
-    if (p.alive || p.deadTicks < GHOST_FROM || p.deadTicks >= GHOST_TICKS) continue;
+    // (an angel goes to the wall instead: drawAngels; a robot with a life left comes back instead)
+    if (p.alive || p.angel || p.respawnAt >= 0 || p.deadTicks < GHOST_FROM || p.deadTicks >= GHOST_TICKS) continue;
     const t = p.deadTicks - GHOST_FROM;
     const rise = ((GHOST_SPEED * t * t) / (t + GHOST_EASE)) * T;
     const x = (p.x + 0.5) * T + Math.sin(p.deadTicks * 0.12) * T * 0.07;
@@ -874,6 +884,55 @@ export function drawGhosts(ctx: Ctx, world: World, T: number, top: number): bool
     drawHalo(ctx, x, y, T);
     ctx.restore();
     any = true;
+  }
+  return any;
+}
+
+/**
+ * Angels: robots out of lives (with angels on) haunting the outer wall, on the ghost layer so their wings and
+ * halo can reach above the arena. Each is its ghost (pale, wings, halo), a little smaller, bobbing gently,
+ * fading in as it takes to the wall. Winding up a throw it holds both arms up with a bomb over its head, and a
+ * ring in its colour marks where the bomb will land, moving further in the longer A is held. Returns whether
+ * anything was drawn.
+ */
+export function drawAngels(ctx: Ctx, world: World, T: number, time: number): boolean {
+  let any = false;
+  for (const p of world.players) {
+    if (!p.angel || p.alive || world.tick < p.angelFrom - 20) continue;
+    any = true;
+    const col = colorById(p.colorId);
+    const at = perimeterAt(world, p.angelS);
+    const x = (at.x + 0.5) * T;
+    const y = (at.y + 0.5) * T + T * 0.36 + Math.sin(time * 2.4 + p.id) * T * 0.05; // its feet
+    const s = T * 0.8;
+    const winding = p.angelHeld > 0;
+    ctx.save();
+    ctx.globalAlpha = 0.92 * Math.min(1, (world.tick - (p.angelFrom - 20)) / 20);
+    // where the throw will land, while it is wound up
+    if (winding) {
+      const aim = angelAim(world, p);
+      if (aim.dir) {
+        const d = angelReach(world, aim.dir, p.angelHeld);
+        const tx = (aim.cx + DX[aim.dir] * d + 0.5) * T;
+        const ty = (aim.cy + DY[aim.dir] * d + 0.5) * T;
+        ctx.strokeStyle = col.glow;
+        ctx.lineWidth = Math.max(1.5, T * 0.06);
+        ctx.setLineDash([T * 0.12, T * 0.08]);
+        ctx.beginPath();
+        ctx.arc(tx, ty, T * 0.36, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.beginPath();
+        ctx.arc(tx, ty, T * 0.06, 0, Math.PI * 2);
+        ctx.fillStyle = col.glow;
+        ctx.fill();
+      }
+    }
+    drawWings(ctx, x, y, s, time * 9 + p.id);
+    drawRobot(ctx, x, y, s, ghostOf(col), 2, 0, false, { noShadow: true, pale: true, arms: winding ? [1, 1] : GHOST_ARMS });
+    drawHalo(ctx, x, y, s);
+    if (winding) drawBombArt(ctx, x, y + (ROBOT.top - 0.12) * s, s * 0.85, col.glow, 0.7, Math.floor(time * 60));
+    ctx.restore();
   }
   return any;
 }

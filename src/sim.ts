@@ -98,6 +98,22 @@ export interface Player {
   prevB: boolean;
   /** id of the bomb being carried, or 0 */
   carrying: number;
+  /** lives left this round, the one in use included (WorldConfig.lives). 0 once out of the round. */
+  lives: number;
+  /** a life was lost and another is left: the tick it comes back on, at its starting place; -1 otherwise */
+  respawnAt: number;
+  /** ticks left in which blasts do no harm, just after coming back (it is drawn blinking) */
+  safeTicks: number;
+  /**
+   * Out of lives, with angels on (WorldConfig.angels): an angel on the arena's outer wall, gliding round it and
+   * throwing bombs in (`angelStep`). It starts acting at `angelFrom`.
+   */
+  angel: boolean;
+  angelFrom: number;
+  /** where the angel is on the wall: tiles round it clockwise from the top-left corner (see `perimeterAt`) */
+  angelS: number;
+  /** how many ticks A has been held for the throw being wound up; 0 when not */
+  angelHeld: number;
 }
 
 export interface Bomb {
@@ -181,7 +197,11 @@ export type GameEvent =
    * `cause` says what knocked the player out: a blast, or a falling block.
    * `by` is the player whose bomb made the blast, or -1 for a block.
    */
-  | { type: 'death'; player: number; cause: 'blast' | 'block'; by: number };
+  | { type: 'death'; player: number; cause: 'blast' | 'block'; by: number; out: boolean }
+  /** a player who lost a life is back, at their starting place (or the nearest free tile to it) */
+  | { type: 'respawn'; player: number }
+  /** an angel's bomb knocked a robot out and, with Angels come back on, the angel took its place */
+  | { type: 'revive'; player: number; victim: number };
 
 /** A block on its way down. It lands, and turns its tile solid, when `world.tick` reaches `landAt`. */
 export interface FallingBlock {
@@ -225,7 +245,16 @@ export interface World {
   overCountdown: number;
   /** optional and off by default: letting go finishes the step so players stop in the middle of a tile */
   stepAssist: boolean;
+  /** knocked-out players out of lives become angels on the wall: 'off', 'on', or 'revive' (an angel whose bomb knocks a robot out takes its place) */
+  angels: AngelRule;
+  /** where each player started the round, by id: where a lost life comes back */
+  spawns: { x: number; y: number }[];
+  /** what a robot starts with, and comes back with after losing a life */
+  start: { bombs: number; fire: number; speed: number };
 }
+
+/** Knocked-out players as angels: off, on (they throw bombs in), or on and able to come back (`revive`). */
+export type AngelRule = 'off' | 'on' | 'revive';
 
 export interface WorldConfig {
   /** the same seed always builds the same arena */
@@ -256,6 +285,10 @@ export interface WorldConfig {
   startBombs?: number;
   startFire?: number;
   startSpeed?: number;
+  /** Lives each robot has in the round, 1 (the default) to MAX_LIVES. */
+  lives?: number;
+  /** Knocked-out players as angels (World.angels). Default 'off'. */
+  angels?: AngelRule;
 }
 
 // ---------------------------------------------------------------- constants
@@ -305,6 +338,20 @@ export const CARRY_FUSE_TICKS = 180; // 3 s from the first pick-up, and it keeps
 export const KICK_SPEED = 0.14; // a kicked bomb slides at 8.4 tiles a second
 export const THROW_TILES = 3; // a thrown bomb lands this many tiles away
 export const FLY_TICKS_PER_TILE = 7; // how long a thrown bomb takes over each tile
+
+// lives
+export const MAX_LIVES = 5;
+export const RESPAWN_TICKS = 120; // a lost life comes back 2 s after the knockout, at the robot's starting place
+export const SAFE_TICKS = 120; // and blasts do it no harm for 2 s after that (it blinks)
+
+// angels: out of lives, a robot haunts the outer wall and throws bombs in
+export const ANGEL_DELAY = DEATH_TICKS; // it takes to the wall once the knocked-out animation has played
+export const ANGEL_SPEED = 0.075; // gliding round the wall, tiles a tick (4.5 tiles a second)
+export const ANGEL_MIN_TILES = 2; // a tap of A throws the bomb this many tiles in from the wall
+export const ANGEL_MAX_TILES = 6; // holding A throws it further, up to this
+export const ANGEL_CHARGE_TICKS = 14; // each tile further takes this long held (about a quarter of a second)
+export const ANGEL_FIRE = 2; // an angel's bomb reaches two tiles each way
+export const ANGEL_BOMBS = 1; // one of its bombs out at a time
 
 // ---------------------------------------------------------------- world creation
 
@@ -404,6 +451,7 @@ export function createWorld(cfg: WorldConfig): World {
   const startBombs = within(cfg.startBombs, 1, MAX_BOMBS, 1);
   const startFire = within(cfg.startFire, START_FIRE, MAX_FIRE, START_FIRE);
   const startSpeed = within(cfg.startSpeed, 0, MAX_SPEED_ITEMS, 0);
+  const lives = within(cfg.lives, 1, MAX_LIVES, 1);
   const players: Player[] = cfg.players.map((p, id) => ({
     id,
     colorId: p.colorId,
@@ -431,6 +479,13 @@ export function createWorld(cfg: WorldConfig): World {
     prevA: false,
     prevB: false,
     carrying: 0,
+    lives,
+    respawnAt: -1,
+    safeTicks: 0,
+    angel: false,
+    angelFrom: -1,
+    angelS: 0,
+    angelHeld: 0,
   }));
 
   return {
@@ -454,6 +509,9 @@ export function createWorld(cfg: WorldConfig): World {
     over: null,
     overCountdown: -1,
     stepAssist: cfg.stepAssist ?? false,
+    angels: cfg.angels === 'on' || cfg.angels === 'revive' ? cfg.angels : 'off',
+    spawns: spawns.map((p) => ({ ...p })),
+    start: { bombs: startBombs, fire: startFire, speed: startSpeed },
   };
 }
 
@@ -551,10 +609,8 @@ function fallBlocks(world: World): void {
       if (px === cx && py === cy && world.over && world.over.winner === p.id) {
         // the round is decided and this is the winner: the block leaves it be
       } else if (px === cx && py === cy) {
-        p.alive = false;
-        p.moving = false;
+        knockOut(world, p, 'block', -1);
         under.push(p);
-        world.events.push({ type: 'death', player: p.id, cause: 'block', by: -1 });
       } else if (Math.abs(p.x - cx) < 1 && Math.abs(p.y - cy) < 1) {
         if (px !== cx) p.x = px;
         if (py !== cy) p.y = py;
@@ -563,7 +619,7 @@ function fallBlocks(world: World): void {
     world.events.push({ type: 'block', cx, cy });
     // The last robot standing wins even if a block gets it a moment after the others went.
     // (Several under the same block went together: that is left to end as a draw.)
-    if (!world.over && under.length === 1 && world.players.length > 1 && !world.players.some((p) => p.alive)) {
+    if (!world.over && under.length === 1 && world.players.length > 1 && !world.players.some((p) => p.alive || p.respawnAt >= 0) && under[0].lives === 0) {
       world.over = { winner: under[0].id };
     }
   }
@@ -1047,6 +1103,219 @@ function applyItem(p: Player, kind: ItemKind): void {
   else p.speed = Math.min(MAX_SPEED_ITEMS, p.speed + 1);
 }
 
+
+// ---------------------------------------------------------------- lives and angels
+
+/**
+ * A robot is knocked out (by a blast or a falling block). With a life left it comes back at its starting
+ * place in RESPAWN_TICKS; with none it is out of the round, and with angels on it becomes an angel on the
+ * wall once its knocked-out animation has played, at the point of the wall nearest where it fell.
+ */
+function knockOut(world: World, p: Player, cause: 'blast' | 'block', by: number): void {
+  p.alive = false;
+  p.moving = false;
+  p.deadTicks = 0;
+  p.lives = Math.max(0, p.lives - 1);
+  p.safeTicks = 0;
+  if (p.lives > 0) p.respawnAt = world.tick + RESPAWN_TICKS;
+  else if (world.angels !== 'off') {
+    p.angel = true;
+    p.angelFrom = world.tick + ANGEL_DELAY;
+    p.angelS = nearestOnWall(world, p.x, p.y);
+    p.angelHeld = 0;
+  }
+  world.events.push({ type: 'death', player: p.id, cause, by, out: p.lives === 0 });
+}
+
+/**
+ * Put a robot back in the round at (x, y), as at the start of a round: starting bombs, blast and speed, no
+ * kick, glove, shield or curse; blasts cannot hurt it for SAFE_TICKS. Buttons held now count once let go.
+ */
+function bringBack(world: World, p: Player, x: number, y: number): void {
+  Object.assign(p, {
+    alive: true,
+    x,
+    y,
+    facing: 2,
+    moving: false,
+    walk: 0,
+    mvx: 0,
+    mvy: 0,
+    heading: 2,
+    askDir: 0,
+    askTicks: 0,
+    deadTicks: 0,
+    bombsMax: world.start.bombs,
+    fire: world.start.fire,
+    speed: world.start.speed,
+    canKick: false,
+    canGrab: false,
+    shieldTicks: 0,
+    graceTicks: 0,
+    curseTicks: 0,
+    prevA: true,
+    prevB: true,
+    carrying: 0,
+    respawnAt: -1,
+    safeTicks: SAFE_TICKS,
+    angel: false,
+    angelFrom: -1,
+    angelHeld: 0,
+  } satisfies Partial<Player>);
+}
+
+/**
+ * Where a robot coming back appears: its starting tile, or if that is now a block, a bomb, a blast or under a
+ * falling block, the nearest tile that is none of those (counted in steps across open floor and bricks alike,
+ * so it is never far). The square kept open in the middle always has room.
+ */
+function comeBackTile(world: World, from: { x: number; y: number }): { x: number; y: number } {
+  const ok = (cx: number, cy: number): boolean =>
+    tileAt(world, cx, cy) === FLOOR &&
+    !bombAt(world, cx, cy) &&
+    !world.flames.some((f) => f.cx === cx && f.cy === cy) &&
+    !world.falling.some((f) => f.cx === cx && f.cy === cy);
+  const seen = new Set<number>([from.y * world.w + from.x]);
+  let ring = [from];
+  while (ring.length) {
+    for (const t of ring) if (ok(t.x, t.y)) return t;
+    const next: { x: number; y: number }[] = [];
+    for (const t of ring) {
+      for (let d = 1; d <= 4; d++) {
+        const nx = t.x + DX[d];
+        const ny = t.y + DY[d];
+        if (nx < 1 || ny < 1 || nx > world.w - 2 || ny > world.h - 2) continue;
+        const k = ny * world.w + nx;
+        if (seen.has(k)) continue;
+        seen.add(k);
+        next.push({ x: nx, y: ny });
+      }
+    }
+    ring = next;
+  }
+  return from;
+}
+
+/** How far it is round the outer wall, in tiles: along the top, down the right, back along the bottom, up the left. */
+export function wallLength(world: World): number {
+  return 2 * (world.w - 1) + 2 * (world.h - 1);
+}
+
+/** The point on the outer wall `s` tiles round it clockwise from the top-left corner (wrapping). */
+export function perimeterAt(world: World, s: number): { x: number; y: number } {
+  const W = world.w - 1;
+  const H = world.h - 1;
+  const L = 2 * W + 2 * H;
+  const t = ((s % L) + L) % L;
+  if (t < W) return { x: t, y: 0 };
+  if (t < W + H) return { x: W, y: t - W };
+  if (t < 2 * W + H) return { x: W - (t - W - H), y: H };
+  return { x: 0, y: H - (t - 2 * W - H) };
+}
+
+/** The place on the wall nearest to (x, y), as a distance round it (see perimeterAt). */
+function nearestOnWall(world: World, x: number, y: number): number {
+  const W = world.w - 1;
+  const H = world.h - 1;
+  const options: [number, number][] = [
+    [y, Math.max(0, Math.min(W, x))], // top: distance, then where along it
+    [W - x, W + Math.max(0, Math.min(H, y))], // right
+    [H - y, W + H + (W - Math.max(0, Math.min(W, x)))], // bottom
+    [x, 2 * W + H + (H - Math.max(0, Math.min(H, y)))], // left
+  ];
+  let best = options[0];
+  for (const o of options) if (o[0] < best[0]) best = o;
+  return best[1];
+}
+
+/**
+ * The way into the arena from the wall tile an angel is over, or 0 at a corner (nothing to throw across).
+ * Also the tile, rounded.
+ */
+export function angelAim(world: World, p: Player): { cx: number; cy: number; dir: Dir } {
+  const at = perimeterAt(world, Math.round(p.angelS));
+  const W = world.w - 1;
+  const H = world.h - 1;
+  const corner = (at.x === 0 || at.x === W) && (at.y === 0 || at.y === H);
+  const dir: Dir = corner ? 0 : at.y === 0 ? 2 : at.x === W ? 3 : at.y === H ? 1 : 4;
+  return { cx: at.x, cy: at.y, dir };
+}
+
+/** How far in a throw wound up for `held` ticks goes: a tap ANGEL_MIN_TILES, then a tile more every ANGEL_CHARGE_TICKS. */
+export function angelReach(world: World, dir: Dir, held: number): number {
+  const across = dir === 1 || dir === 2 ? world.h - 2 : world.w - 2;
+  return Math.min(ANGEL_MAX_TILES, across, ANGEL_MIN_TILES + Math.floor(held / ANGEL_CHARGE_TICKS));
+}
+
+/**
+ * An angel's tick. The direction glides it round the wall: along the top, right and left go each way; down
+ * the sides, up and down; at a corner either works. Holding A winds up a throw (further the longer it is
+ * held), and letting go throws a bomb over the wall onto the floor that many tiles in. One bomb out at a time;
+ * not from a corner. Nothing an angel does happens once the round is decided.
+ */
+function angelStep(world: World, p: Player, inp: PlayerInput | undefined): void {
+  const a = !!inp?.a;
+  if (world.over || world.tick < p.angelFrom) {
+    p.prevA = a;
+    return;
+  }
+  const L = wallLength(world);
+  const at = perimeterAt(world, p.angelS);
+  const W = world.w - 1;
+  const H = world.h - 1;
+  const d = inp?.dir ?? 0;
+  let move = 0;
+  if (d) {
+    // which way round the wall each direction goes, on each side (both apply near a corner)
+    if (at.y < 0.5 && (d === 4 || d === 3)) move = d === 4 ? 1 : -1;
+    else if (at.x > W - 0.5 && (d === 2 || d === 1)) move = d === 2 ? 1 : -1;
+    else if (at.y > H - 0.5 && (d === 3 || d === 4)) move = d === 3 ? 1 : -1;
+    else if (at.x < 0.5 && (d === 1 || d === 2)) move = d === 1 ? 1 : -1;
+  }
+  if (move) {
+    p.angelS = (((p.angelS + move * ANGEL_SPEED) % L) + L) % L;
+    p.moving = true;
+    p.walk += 0.25;
+  } else {
+    // at rest it settles on the middle of a wall tile, so the throw lines up with a row or column
+    const target = Math.round(p.angelS);
+    const gap = target - p.angelS;
+    p.angelS = Math.abs(gap) <= ANGEL_SPEED ? target % L : p.angelS + Math.sign(gap) * ANGEL_SPEED;
+    p.moving = false;
+  }
+  if (a && p.activeBombs < ANGEL_BOMBS) p.angelHeld++;
+  if (!a && p.prevA && p.angelHeld > 0) {
+    const aim = angelAim(world, p);
+    if (aim.dir) {
+      world.bombs.push({
+        id: world.nextBombId++,
+        owner: p.id,
+        x: aim.cx,
+        y: aim.cy,
+        cx: aim.cx,
+        cy: aim.cy,
+        fuse: FUSE_TICKS,
+        range: ANGEL_FIRE,
+        age: 0,
+        state: 'air',
+        slide: 0,
+        heldBy: -1,
+        lifted: false,
+        fromX: aim.cx,
+        fromY: aim.cy,
+        flyDir: aim.dir,
+        flyDist: angelReach(world, aim.dir, p.angelHeld),
+        flyT: 0,
+      });
+      p.activeBombs++;
+      world.events.push({ type: 'throw' });
+    }
+    p.angelHeld = 0;
+  }
+  if (!a) p.angelHeld = 0;
+  p.prevA = a;
+}
+
 // ---------------------------------------------------------------- one tick
 
 /**
@@ -1063,8 +1332,17 @@ export function step(world: World, inputs: (PlayerInput | undefined)[]): void {
   for (const p of world.players) {
     if (!p.alive) {
       if (p.deadTicks < GHOST_TICKS) p.deadTicks++;
-      continue;
+      if (p.respawnAt >= 0 && world.tick >= p.respawnAt && !world.over) {
+        // a lost life comes back
+        const at = comeBackTile(world, world.spawns[p.id]);
+        bringBack(world, p, at.x, at.y);
+        world.events.push({ type: 'respawn', player: p.id });
+      } else {
+        if (p.angel) angelStep(world, p, inputs[p.id]);
+        continue;
+      }
     }
+    if (p.safeTicks > 0) p.safeTicks--;
     if (p.shieldTicks > 0) p.shieldTicks--;
     if (p.graceTicks > 0) p.graceTicks--;
     if (p.curseTicks > 0) p.curseTicks--;
@@ -1121,6 +1399,7 @@ export function step(world: World, inputs: (PlayerInput | undefined)[]): void {
   if (world.roundTicks > 0) fallBlocks(world);
 
   // players against flames and items
+  const comebacks: [Player, number, number, number][] = []; // angels coming back: the angel, where, and whose place
   for (const p of world.players) {
     if (!p.alive) continue;
     const cx = Math.round(p.x);
@@ -1128,16 +1407,18 @@ export function step(world: World, inputs: (PlayerInput | undefined)[]): void {
     const flame = world.flames.find((f) => f.cx === cx && f.cy === cy);
     // (once the round is decided, nothing more can happen to the winner)
     if (flame && !(world.over && world.over.winner === p.id)) {
-      if (p.graceTicks > 0) {
+      if (p.graceTicks > 0 || p.safeTicks > 0) {
+        // its shield has just taken this blast, or it has only just come back
         // its shield has just taken this blast
       } else if (p.shieldTicks > 0) {
         p.shieldTicks = 0;
         p.graceTicks = SHIELD_GRACE_TICKS;
         world.events.push({ type: 'shield', player: p.id });
       } else {
-        p.alive = false;
-        p.moving = false;
-        world.events.push({ type: 'death', player: p.id, cause: 'blast', by: flame.owner });
+        knockOut(world, p, 'blast', flame.owner);
+        // an angel's bomb, with Angels come back on: the angel takes this robot's place
+        const by = world.players[flame.owner];
+        if (world.angels === 'revive' && by && by.angel && by.id !== p.id && !comebacks.some((c) => c[0] === by)) comebacks.push([by, cx, cy, p.id]);
         continue;
       }
     }
@@ -1150,14 +1431,24 @@ export function step(world: World, inputs: (PlayerInput | undefined)[]): void {
     }
   }
 
-  // last one standing wins; a short wait lets a double knockout count as a draw
+  for (const [angel, cx, cy, victim] of comebacks) {
+    if (world.over) break;
+    bringBack(world, angel, cx, cy);
+    angel.lives = 1;
+    world.events.push({ type: 'revive', player: angel.id, victim });
+  }
+
+  // last one standing wins; a short wait lets a double knockout count as a draw. A robot waiting to come
+  // back with a life left is still in; an angel is not (unless it comes back, which calls the wait off).
   if (!world.over) {
-    const alive = world.players.filter((p) => p.alive);
-    if (alive.length <= 1 && world.players.length > 1) {
+    const still = world.players.filter((p) => p.alive || p.respawnAt >= 0);
+    // (the one left is waiting to come back: let it come back first, so the winner is standing)
+    const waitFor = still.length === 1 && !still[0].alive;
+    if (still.length <= 1 && world.players.length > 1 && !waitFor) {
       if (world.overCountdown < 0) world.overCountdown = 45;
       else if (--world.overCountdown === 0) {
-        world.over = { winner: alive.length === 1 ? alive[0].id : -1 };
+        world.over = { winner: still.length === 1 ? still[0].id : -1 };
       }
-    }
+    } else world.overCountdown = -1;
   }
 }
