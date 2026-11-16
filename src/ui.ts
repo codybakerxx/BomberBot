@@ -239,29 +239,63 @@ export function mount(parent: HTMLElement, opts: Opt[]): () => void {
   return all;
 }
 
+/** How far a finger must go sideways to count as a swipe. */
+const SWIPE_PX = 28;
+
 /**
- * Swipes across an element: a quick sideways drag of at least 36 pixels calls `go(-1)` (towards the left)
- * or `go(1)`. Used on the robot and the arena picture, as a third way to change them besides the arrows
- * and the dots.
+ * Swipes across an area: a sideways drag of at least SWIPE_PX calls `go(1)` (finger moving left, so the
+ * next one) or `go(-1)`. Used on the whole robot panel and the whole arena panel, as a third way to change
+ * them besides the arrows and the dots (the owner asked for a bigger area that catches swipes every time).
+ *
+ * It counts as soon as the finger has gone far enough, not when it lifts, and it keeps following the finger
+ * after it leaves the area. A swipe that starts on a button inside (a dot, Ready, Start) does not also press
+ * it. Up and down are left to the page, so it still scrolls.
  */
-export function swipeable(target: HTMLElement, go: (d: number) => void): void {
+export function swipeable(area: HTMLElement, go: (d: number) => void): void {
   let x0 = 0;
   let y0 = 0;
   let id = -1;
-  target.style.touchAction = 'pan-y';
-  target.addEventListener('pointerdown', (e) => {
+  let fired = false;
+  let quietUntil = 0;
+  area.style.touchAction = 'pan-y';
+  area.addEventListener('pointerdown', (e) => {
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+    if ((e.target as HTMLElement).closest('input, textarea')) return; // typing a name: not a swipe
     id = e.pointerId;
     x0 = e.clientX;
     y0 = e.clientY;
+    fired = false;
   });
-  target.addEventListener('pointerup', (e) => {
-    if (e.pointerId !== id) return;
-    id = -1;
+  const follow = (e: PointerEvent): void => {
+    if (e.pointerId !== id || fired) return;
     const dx = e.clientX - x0;
     const dy = e.clientY - y0;
-    if (Math.abs(dx) >= 36 && Math.abs(dx) > Math.abs(dy) * 1.3) go(dx < 0 ? 1 : -1);
+    if (Math.abs(dx) >= SWIPE_PX && Math.abs(dx) > Math.abs(dy) * 1.2) {
+      fired = true;
+      quietUntil = performance.now() + 600;
+      go(dx < 0 ? 1 : -1);
+    }
+  };
+  window.addEventListener('pointermove', follow);
+  window.addEventListener('pointerup', (e) => {
+    follow(e);
+    if (e.pointerId === id) id = -1;
   });
-  target.addEventListener('pointercancel', () => (id = -1));
+  window.addEventListener('pointercancel', (e) => {
+    if (e.pointerId === id) id = -1; // the page took it over, to scroll
+  });
+  // the click a swipe can leave behind on a button inside is not a press
+  area.addEventListener(
+    'click',
+    (e) => {
+      if (performance.now() < quietUntil) {
+        e.preventDefault();
+        e.stopPropagation();
+        quietUntil = 0;
+      }
+    },
+    true,
+  );
 }
 
 // ---------------------------------------------------------------- asking first

@@ -183,7 +183,7 @@ export function createLobby(host: LobbyHost): {
   // ------------------------------------------------------------ the Players page
   $('colPrev').addEventListener('click', () => stepMine(-1));
   $('colNext').addEventListener('click', () => stepMine(1));
-  swipeable($('youBot'), stepMine);
+  swipeable($('youBot').closest<HTMLElement>('.panel')!, stepMine); // the whole robot panel
   const dots = $('youDots');
   for (const c of COLORS) {
     // a dot, with a tag under it saying which player wears that colour (P1 is you)
@@ -464,7 +464,7 @@ export function createLobby(host: LobbyHost): {
   // ------------------------------------------------------------ the Match page
   $('arenaPrev').addEventListener('click', () => stepArena(-1));
   $('arenaNext').addEventListener('click', () => stepArena(1));
-  swipeable($('arenaPic'), stepArena);
+  swipeable($('arenaPic').closest<HTMLElement>('.panel')!, stepArena); // the whole arena panel
   for (const a of ARENAS) {
     const b = document.createElement('button');
     b.type = 'button';
@@ -769,9 +769,12 @@ export function createLobby(host: LobbyHost): {
     const a = arenaOf(s());
     const size = arenaSize(s(), G);
     $('arenaName').textContent = a.name;
-    $('arenaBlurb').textContent = size.grown
-      ? `${size.cols} by ${size.rows} tiles: grown by two each way for more than ${GROW_AFTER} players. ${a.blurb}`
-      : `${a.cols} by ${a.rows} tiles. ${a.blurb}`;
+    // just the size in tiles, no other words (the owner's ask); a grown arena shows its grown size
+    $('arenaBlurb').textContent = `${size.cols} × ${size.rows}`;
+    $('arenaBlurb').setAttribute(
+      'aria-label',
+      size.grown ? `${size.cols} by ${size.rows} tiles, grown for more than ${GROW_AFTER} players` : `${size.cols} by ${size.rows} tiles`,
+    );
     $('arenaCount').textContent = `${ARENAS.indexOf(a) + 1} of ${ARENAS.length}`;
     for (const b of $('arenaDots').querySelectorAll<HTMLButtonElement>('.dot')) b.setAttribute('aria-pressed', String(b.dataset.arena === a.id));
     if (!$('lobbyMatch').hidden || window.matchMedia('(min-width: 820px) and (min-height: 480px)').matches) drawArena();
