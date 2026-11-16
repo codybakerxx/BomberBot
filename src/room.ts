@@ -19,16 +19,18 @@ import { MAX_CPUS, problem, readSetup, worldConfig, type CpuSlot, type MatchSetu
 import { readDance, type DanceId } from './dances';
 import {
   CHECK_EVERY,
+  PROTOCOL,
   encodeWorld,
+  newQueue,
   packInput,
   readName,
   roundWorld,
+  takeInput,
   tickText,
   unpackInput,
   worldHash,
-  IN_A,
-  IN_B,
   type ClientMsg,
+  type InputQueue,
   type MemberInfo,
   type Score,
   type Seat,
@@ -69,11 +71,15 @@ export interface Member {
   awaySince: number;
   /** in the match being played */
   playing: boolean;
-  /** what they are pressing now (packInput), and a press of A or B not yet given to a tick */
-  held: number;
-  pressA: boolean;
-  pressB: boolean;
+  /** what they are pressing, and the presses waiting for their tick (net.ts) */
+  q: InputQueue;
+  /** goes up each time `q` starts afresh (a new round, or the whole world sent again); presses say which they are for */
+  epoch: number;
 }
+
+/** A press can be for a tick at most this far ahead (two seconds), and this many can wait. */
+const MAX_STAMP_AHEAD = 2 * TICK_HZ;
+const MAX_WAITING = 120;
 
 export class Room {
   readonly code: string;
@@ -96,6 +102,8 @@ export class Room {
   /** the tick the round was decided on, or -1 */
   private overTick = -1;
   private counted = false;
+  /** the acks last sent with the ticks, as text (they are sent again only when they change) */
+  private lastAcks = '';
 
   constructor(code: string, random: () => number) {
     this.code = code;
@@ -151,6 +159,8 @@ export class Room {
       conn.close(4000, why);
       return null;
     };
+    // a page from before the last update speaks an older version of the messages: it needs the new page
+    if (msg.pv !== PROTOCOL) return refuse('This game has been updated. Reload the page to get the new version, then join again.');
     const key = typeof msg.id === 'string' ? msg.id.slice(0, 40) : '';
     if (!key) return refuse('Something went wrong. Try again.');
     let m = this.members.find((x) => x.key === key);
@@ -176,9 +186,8 @@ export class Room {
       conn,
       awaySince: -1,
       playing: false,
-      held: 0,
-      pressA: false,
-      pressB: false,
+      q: newQueue(),
+      epoch: 0,
     };
     if (msg.create) {
       // a new room: three Normal CPU players to start with, as in a new local lobby; the host can change them
@@ -211,8 +220,7 @@ export class Room {
     if (m.conn !== conn) return; // an old connection of someone already back
     m.conn = null;
     m.awaySince = now;
-    m.held = 0;
-    m.pressA = m.pressB = false;
+    this.freshInput(m); // their robot stands still meanwhile
     this.sendRoom();
   }
 
@@ -267,12 +275,16 @@ export class Room {
     const isHost = m.id === this.hostId;
     switch (msg.t) {
       case 'in': {
-        if (!m.playing || typeof msg.v !== 'number') return;
-        const v = msg.v & 31;
-        // a press is kept for the next tick even if it is let go before then (a quick tap)
-        if (v & IN_A && !(m.held & IN_A)) m.pressA = true;
-        if (v & IN_B && !(m.held & IN_B)) m.pressB = true;
-        m.held = v;
+        const w = this.world;
+        if (!m.playing || !w || msg.e !== m.epoch) return; // (a press sent before this round, or before the world was sent again)
+        if (typeof msg.v !== 'number' || !Number.isFinite(msg.k) || !Number.isFinite(msg.n)) return;
+        const q = m.q;
+        const last = q.pending[q.pending.length - 1];
+        if (msg.n <= (last ? last.n : q.acked) || q.pending.length >= MAX_WAITING) return;
+        // for the tick it names: not before the press ahead of it, and not far in the future. One for a tick
+        // that has gone by is taken in on the next (takeInput).
+        const k = Math.max(last ? last.k : 0, Math.min(Math.floor(msg.k), w.tick + MAX_STAMP_AHEAD));
+        q.pending.push({ k, v: msg.v & 31, n: Math.floor(msg.n) });
         return;
       }
       case 'me': {
@@ -354,7 +366,9 @@ export class Room {
         return;
       }
       case 'ping': {
-        send(m.conn, { t: 'pong', c: typeof msg.c === 'number' ? msg.c : 0 });
+        // in a round: where its clock stands now, so the page can time its presses to arrive just ahead of their tick
+        const d = this.playing && this.world ? (now - this.startAt) / TICK_MS + 1 : undefined;
+        send(m.conn, { t: 'pong', c: typeof msg.c === 'number' ? msg.c : 0, ...(d === undefined ? {} : { d }) });
         return;
       }
       case 'bye': {
@@ -373,8 +387,7 @@ export class Room {
     for (const m of this.members) {
       m.playing = false;
       m.ready = false;
-      m.held = 0;
-      m.pressA = m.pressB = false;
+      this.freshInput(m);
     }
     if (!this.host()) this.hostId = this.members[0]?.id ?? -1;
     this.makeRoom();
@@ -396,11 +409,17 @@ export class Room {
     this.overTick = -1;
     this.counted = false;
     this.score.roundNo++;
+    this.lastAcks = '';
     for (const m of this.members) {
-      m.held = 0;
-      m.pressA = m.pressB = false;
+      this.freshInput(m);
+      if (m.playing) send(m.conn, { t: 'round', cfg, seats: this.seats, score: this.score, ep: m.epoch });
     }
-    this.broadcast({ t: 'round', cfg, seats: this.seats, score: this.score });
+  }
+
+  /** Start a person's presses afresh: nothing held, nothing waiting, and a new number for the presses to come. */
+  private freshInput(m: Member): void {
+    m.q = newQueue();
+    m.epoch++;
   }
 
   /**
@@ -418,13 +437,11 @@ export class Room {
     let n = 0;
     while (w.tick < due && n < CATCH_UP && this.busy()) {
       const codes = this.seats.map((s, i) => {
-        if (w.over) return 0; // once the round is decided nobody is asked for anything
-        if (s.member === null) return packInput(botInput(w, this.bots[i - (this.seats.length - this.bots.length)]));
+        if (s.member === null) return w.over ? 0 : packInput(botInput(w, this.bots[i - (this.seats.length - this.bots.length)]));
         const m = this.members.find((x) => x.id === s.member);
         if (!m || !m.conn) return 0;
-        const v = m.held | (m.pressA ? IN_A : 0) | (m.pressB ? IN_B : 0);
-        m.pressA = m.pressB = false;
-        return v;
+        const v = takeInput(m.q, w.tick + 1);
+        return w.over ? 0 : v; // once the round is decided nobody is asked for anything
       });
       step(w, codes.map(unpackInput));
       ticks.push(tickText(codes));
@@ -443,7 +460,12 @@ export class Room {
       }
     }
     if (n === CATCH_UP && w.tick < due) this.startAt = now - (w.tick - 1) * TICK_MS; // too far behind: carry on from here
-    this.broadcast({ t: 'ticks', from, i: ticks, ...(sum ? { sum } : {}) });
+    // how far each person's presses have been taken in, when that has changed
+    const acks = this.seats.map((s) => (s.member === null ? 0 : (this.members.find((x) => x.id === s.member)?.q.acked ?? 0)));
+    const said = acks.join(',');
+    const a = said !== this.lastAcks ? { a: acks } : {};
+    this.lastAcks = said;
+    this.broadcast({ t: 'ticks', from, i: ticks, ...(sum ? { sum } : {}), ...a });
   }
 
   // ------------------------------------------------------------ sending
@@ -459,13 +481,14 @@ export class Room {
   }
   private sendSnap(m: Member): void {
     if (!this.world) return;
-    send(m.conn, { t: 'snap', world: encodeWorld(this.world), seats: this.seats, score: this.score });
+    this.freshInput(m);
+    this.lastAcks = '';
+    send(m.conn, { t: 'snap', world: encodeWorld(this.world), seats: this.seats, score: this.score, ep: m.epoch });
   }
   private broadcast(msg: ServerMsg): void {
     const text = JSON.stringify(msg);
-    // a round and its ticks go to those playing in it; someone waiting for the next match does not need them
-    const roundOnly = msg.t === 'round' || msg.t === 'ticks';
-    for (const m of this.members) if (m.conn && (m.playing || !roundOnly)) m.conn.send(text);
+    // a round's ticks go to those playing in it; someone waiting for the next match does not need them
+    for (const m of this.members) if (m.conn && (m.playing || msg.t !== 'ticks')) m.conn.send(text);
   }
 }
 

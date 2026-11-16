@@ -25,8 +25,8 @@ interface Env {
   ASSETS: Stub;
 }
 
-/** How often the round's clock ticks over: the round is stepped up to the time each time (60 ticks a second). */
-const FAST_MS = 16;
+/** How often the round's clock is looked at: each time, the round is stepped up to the time (60 ticks a second), so a tick goes out within this long of when it is due. */
+const FAST_MS = 8;
 /** How often a room tidies itself up (people gone too long, a host gone). */
 const SLOW_MS = 4000;
 

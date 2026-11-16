@@ -41,40 +41,82 @@ anyone is in it. Rooms are not saved anywhere; when everyone has gone, the room 
 
 **The server runs the round.** It steps `sim.ts` 60 times a second and asks `bot.ts` for the CPU players' moves,
 exactly as a phone does. Each tick it sends every page what every player pressed on that tick, one character each
-(`tickText` in `src/net.ts`). Each page steps its own copy of the world with those inputs (`playout` in
-`src/online.ts`), and because the rules give the same match for the same seed and inputs, every copy stays the
-same. Pages never run the CPU players. This is why the pure modules must stay pure.
+(`tickText` in `src/net.ts`). Each page steps its own copy of the server's world with those inputs the moment
+they arrive, and because the rules give the same match for the same seed and inputs, every copy stays the same.
+Pages never run the CPU players. This is why the pure modules must stay pure.
 
 - **Checksums.** Every 30 ticks the server adds a checksum of its world (`worldHash`). A page whose world differs
   asks for the whole world (`sync`, answered by `snap`) and carries on from it. Two browsers playing each other
   have never differed in testing.
-- **Smoothness.** A page keeps two ticks in hand before stepping, steps one extra a frame when it falls more than
-  five behind, and jumps to the latest when far behind (back from the background).
-- **Inputs.** A page sends what you press when it changes. A press of A or B is kept for the next tick even if it
-  is let go before then, so a quick tap is never lost.
-- **Delay.** There is no prediction yet: your robot moves when the server's tick comes back, so it lags by the
-  round trip to the server (about 30 to 100 ms between nearby players; more across a continent). If it feels
-  slow, the fix is to step your own robot ahead of the server and correct it (`cloneWorld` makes that possible).
 - **Who is who.** The server sends each round's `seats` (a person or a CPU player in each place). `main.ts` uses
   your place (`meIdx`) wherever it used to assume player 0 is you.
+
+### Why it feels like playing on one screen (`src/predict.ts`)
+
+The server's world on a page is always right but a little in the past: by the time a tick arrives, the server
+is already further on, and a press takes a trip there and back before it shows. Drawing that world as it
+arrives is what the first version did, and it felt slow and jerky (the owner's report; the numbers are below).
+So the page does not draw it. It draws a **picture** run on from it:
+
+- **Your robot moves at once.** Every frame the page copies the server's world and plays it on to *now*, with
+  what you have pressed since. Your robot, your bombs, and everything that follows from bombs already down
+  (fuses, blasts, falling blocks, the timer) are drawn where they will be when the server gets there. The copy
+  is thrown away and made again whenever the server says more, so it cannot drift. It costs about 0.02 ms on a laptop.
+- **Presses say which tick they are for.** The server keeps a press until its tick (`InputQueue` in `net.ts`,
+  the same lines on both sides). So when that tick comes back from the server it is the tick the picture
+  already showed, and nothing moves on the screen. A press that reaches the server after its tick is taken in
+  on the next one; the server's acks tell the page, the picture is made again from that, and your robot shifts
+  by a tick's walk, about a pixel. A quick tap of A or B, let go before the next tick, still counts.
+- **A clock that runs just far enough ahead.** For a press to arrive before its tick, the picture runs ahead of
+  the server by the trip there and back. Pings measure it twice a second (five quick ones as a round starts):
+  each pong says where the round's clock stood when the ping arrived. The page runs at the slowest of the last
+  ten, one freak aside, plus two ticks (`MARGIN`), and moves there gently: up to a quarter faster or a twentieth
+  slower for a moment, never backwards. If the connection stalls, the picture waits after 40 ticks.
+- **The other robots are not guessed at.** Guessing where someone else will walk makes them snap back at every
+  turn. In the picture they are drawn where the server last said they were, a few ticks back, read from a short
+  history, so they walk evenly however unevenly the ticks arrive. How far back follows the connection: as far
+  as the ticks have lately been late, easing forward a tick a second. The cost: you see the others a fraction
+  of a second behind your own robot (about the ping plus that cushion).
+- **Sounds** your own actions make, and blasts, are played from the picture, on time, and not again when the
+  server confirms them (`heard`). Knock-outs and everything about the others sound on the server's word.
+- **Scores, results and who is out** come only from the server's world.
+
+**Measured** in two browsers playing each other through a made-up connection (`tools/online-feel.py`), as seen
+on one of them. "Uneven" is the share of frames, while walking, in which a robot stood still or leapt.
+
+| Connection each way | First version: press to move | uneven: yours / theirs | Now: press to move | uneven: yours / theirs |
+|---|---|---|---|---|
+| 5 to 7 ms (wired) | 95 ms | 38% / 36% | 20 ms | 3% / 1% |
+| 35 to 60 ms, with spikes | 181 ms | 38% / 39% | 23 ms | 0% / 3% |
+| 70 to 120 ms, with spikes | 352 ms | 75% / 71% | 27 ms | 1% / 1% |
+| Playing on one screen, for comparison | | | 26 ms | 4 to 9% |
+
+About 20 to 27 ms is one frame, the least the test can see. The first version was uneven even on a perfect
+connection: it held ticks back to step them evenly and kept running dry. `tests/predict.test.ts` checks the same
+things without a browser, at 60 and 120 frames a second, on connections up to 150 ms each way.
+
+What nobody can measure here is the real connection between a phone and Cloudflare, or the feel under a thumb.
+The menu during an online match shows the ping, to tell a slow connection from a fault.
 
 ### The messages (`src/net.ts`)
 
 | From the page | |
 |---|---|
-| `hello` | first: the page's own id (kept in sessionStorage, so a reload is the same person), name, robot, dance, and whether it is making the room |
+| `hello` | first: the page's own id (kept in sessionStorage, so a reload is the same person), name, robot, dance, whether it is making the room, and the version of these messages (`PROTOCOL`: a page left open from before an update is turned away and told to reload) |
 | `me` | your robot, Ready, dance and name in the lobby |
 | `setup` | the host's setup |
 | `start`, `next`, `restart`, `lobby` | the host's buttons |
-| `in` | what you are pressing (five bits) |
-| `sync`, `ping`, `bye` | out of step; keeping the connection alive (every 15 s); leaving |
+| `in` | what you are pressing (five bits), the tick it is for (`k`), its number (`n`) and the round's (`e`) |
+| `ping` | every 15 s to keep the connection open; twice a second in a round, for the clock |
+| `sync`, `bye` | out of step; leaving |
 
 | From the server | |
 |---|---|
 | `room` | who is in the room, the host, the setup, whether a match is on |
-| `round` | a new round: its world config, the seats, the score |
-| `ticks` | inputs for a run of ticks, and sometimes a checksum |
-| `snap` | the whole world, the seats and the score |
+| `round` | a new round: its world config, the seats, the score, and the number to send with its presses (`ep`) |
+| `ticks` | inputs for a run of ticks; sometimes a checksum; how far each person's presses have been taken in (`a`), when that changes |
+| `snap` | the whole world, the seats and the score, and a new `ep` |
+| `pong` | the ping's own number back; in a round, where the round's clock stood when it arrived (`d`) |
 | `error` | something went wrong (`fatal`: the connection is closing: no such room, room full) |
 
 ## Costs
@@ -91,7 +133,8 @@ uploads with `wrangler deploy` (`wrangler.jsonc` says what to upload). Claude's 
 directly, so GitHub does the upload.
 
 **Trying it on a computer:** `npm run build`, then `npx wrangler dev`, and open http://127.0.0.1:8787 in two
-browser windows. The server runs locally with the same code.
+browser windows. The server runs locally with the same code. `tools/online-feel.py` then measures how it feels
+over a slow connection (above); run it before and after any change to `predict.ts`, `online.ts` or `room.ts`.
 
 ### One-time setup (done, November 2026)
 

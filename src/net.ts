@@ -8,10 +8,20 @@
  * copy of the world with exactly those inputs, so every copy stays the same as the server's (the rules give
  * the same match for the same seed and inputs). Every CHECK_EVERY ticks the server adds a checksum of its
  * world; a page whose copy differs asks for the whole world (`snap`) and carries on from it.
+ *
+ * How your own robot moves at once: the page does not wait for the server. It runs a little ahead of it
+ * (predict.ts), and says of each press which tick it is for (`k`). The server keeps the press until that tick
+ * (`InputQueue`, the same few lines on both sides), so the tick comes out as the page already drew it.
  */
 import { createWorld, type Dir, type ItemKind, type PlayerInput, type World, type WorldConfig } from './sim';
 import type { MatchSetup } from './setup';
 import type { DanceId } from './dances';
+
+/**
+ * The version of these messages. A page says it in `hello`; the server turns away a page with another (one
+ * left open from before an update), telling it to reload. Raise it whenever a message changes its meaning.
+ */
+export const PROTOCOL = 2;
 
 /** Room codes: four letters, without the ones easily mixed up (I, O) or that spell words easily (vowels). */
 export const CODE_LETTERS = 'BCDFGHJKLMNPQRSTVWXZ';
@@ -58,6 +68,45 @@ export function tickText(codes: number[]): string {
 }
 export function tickCodes(text: string): number[] {
   return [...text].map((ch) => Math.max(0, DIGITS.indexOf(ch)));
+}
+
+/** What a player pressed, and the tick it is for. `n` counts a page's presses in a round, so the server can say how far it has got. */
+export interface StampedInput {
+  /** the tick this takes effect on; if that tick has gone by when it arrives, the next one */
+  k: number;
+  /** packInput */
+  v: number;
+  n: number;
+}
+/**
+ * One player's presses on their way into the round: what is held now, a press of A or B not yet given to a
+ * tick (so a quick tap, let go before the next tick, still counts), and the presses waiting for their tick.
+ * The server keeps one for each person; the page keeps a copy of its own to work out what the server will do.
+ */
+export interface InputQueue {
+  held: number;
+  pressA: boolean;
+  pressB: boolean;
+  pending: StampedInput[];
+  /** `n` of the last press taken in */
+  acked: number;
+}
+export function newQueue(held = 0, pending: StampedInput[] = []): InputQueue {
+  return { held, pressA: false, pressB: false, pending, acked: 0 };
+}
+/** What this player asks for on tick `tick` (packInput): every press due by then is taken in, in order. */
+export function takeInput(q: InputQueue, tick: number): number {
+  while (q.pending.length && q.pending[0].k <= tick) {
+    const m = q.pending.shift()!;
+    const v = m.v & 31;
+    if (v & IN_A && !(q.held & IN_A)) q.pressA = true;
+    if (v & IN_B && !(q.held & IN_B)) q.pressB = true;
+    q.held = v;
+    q.acked = m.n;
+  }
+  const code = q.held | (q.pressA ? IN_A : 0) | (q.pressB ? IN_B : 0);
+  q.pressA = q.pressB = false;
+  return code;
 }
 
 // ---------------------------------------------------------------- keeping copies the same
@@ -169,15 +218,15 @@ export interface Score {
 /** What the page sends. */
 export type ClientMsg =
   /** the first message: who this is (an id kept by the page, so a dropped connection comes back as the same person) */
-  | { t: 'hello'; id: string; name: string; colorId: string; dance: DanceId; create: boolean }
+  | { t: 'hello'; id: string; name: string; colorId: string; dance: DanceId; create: boolean; pv?: number }
   /** their robot, Ready, dance and name in the lobby */
   | { t: 'me'; colorId: string; ready: boolean; dance: DanceId; name: string }
   /** the host's match setup (the CPU players and the rules) */
   | { t: 'setup'; setup: MatchSetup }
   /** the host: start the match */
   | { t: 'start' }
-  /** what this player is pressing now (packInput) */
-  | { t: 'in'; v: number }
+  /** what this player is pressing (StampedInput), in the round with this number (`e`: the `ep` the page was last given) */
+  | { t: 'in'; v: number; k: number; n: number; e: number }
   /** the host: the next round, or a rematch once the match is won */
   | { t: 'next' }
   /** the host: the whole match again from 0 */
@@ -194,13 +243,17 @@ export type ClientMsg =
 export type ServerMsg =
   /** the room: who is in it, who hosts, the setup, and whether a match is on. Sent whenever any of it changes. */
   | { t: 'room'; code: string; you: number; host: number; members: MemberInfo[]; setup: MatchSetup; playing: boolean }
-  /** a round starts: build its world from `cfg`. `seats` says who is in each place. */
-  | { t: 'round'; cfg: WorldConfig; seats: Seat[]; score: Score }
-  /** inputs for ticks `from`, `from + 1`... (tickText each); `sum`: the checksum after tick sum[0] */
-  | { t: 'ticks'; from: number; i: string[]; sum?: [number, number] }
+  /** a round starts: build its world from `cfg`. `seats` says who is in each place. `ep`: to send back with every press. */
+  | { t: 'round'; cfg: WorldConfig; seats: Seat[]; score: Score; ep: number }
+  /**
+   * inputs for ticks `from`, `from + 1`... (tickText each); `sum`: the checksum after tick sum[0]; `a`: for each
+   * place, the `n` of the last press taken in (sent when it has changed)
+   */
+  | { t: 'ticks'; from: number; i: string[]; sum?: [number, number]; a?: number[] }
   /** the whole world (after `world.tick`), to carry on from */
-  | { t: 'snap'; world: WorldData; seats: Seat[]; score: Score }
-  | { t: 'pong'; c: number }
+  | { t: 'snap'; world: WorldData; seats: Seat[]; score: Score; ep: number }
+  /** `d`, in a round: where the round's clock stood when the ping arrived, in ticks (tick T is stepped when it reaches T) */
+  | { t: 'pong'; c: number; d?: number }
   /** something went wrong; `why` is said to the player. `fatal`: the connection is closing. */
   | { t: 'error'; why: string; fatal?: boolean };
 

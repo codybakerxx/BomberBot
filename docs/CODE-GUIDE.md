@@ -29,7 +29,7 @@ flowchart LR
 
 Keeping the rules apart is the most important decision in the project. It is why the rules can be tested without a browser, and it is what lets the same file run on the server for online play (below, and `docs/ONLINE.md`).
 
-**Online**, the loop is the same except where the inputs come from: the server (`room.ts`, run by `worker.ts` on Cloudflare) steps its own world and the CPU players, and sends every page each tick's inputs for every player. `online.ts` hands them to `advance()` in `main.ts` at 60 a second, which steps the page's world exactly as `tick()` does. What you press goes to the server instead of straight into `step`.
+**Online**, the rules run in two places on a page. The server (`room.ts`, run by `worker.ts` on Cloudflare) steps its own world and the CPU players, and sends every page each tick's inputs for every player; the page steps its copy of that world with them the moment they arrive (`advance()` in `main.ts`, exactly what `tick()` does after reading input). That copy is always right and a little in the past. What is drawn (`shownWorld()`) is a picture `predict.ts` runs on from it to now with your own presses, so your robot moves at once. What you press goes to the server, marked with the tick it is for.
 
 ## One frame, step by step
 
@@ -194,13 +194,14 @@ Everything that ties the game to the page:
 
 It holds no game rules.
 
-### Online play: `src/net.ts`, `src/room.ts`, `src/worker.ts`, `src/online.ts`
+### Online play: `src/net.ts`, `src/room.ts`, `src/worker.ts`, `src/online.ts`, `src/predict.ts`
 
-- `net.ts` (pure, shared by page and server): the messages each way, a player's input in five bits and a tick's inputs as one character each, the world checksum (`worldHash`), the whole world as plain data (`encodeWorld`, `decodeWorld`), room codes and names.
+- `net.ts` (pure, shared by page and server): the messages each way, a player's input in five bits and a tick's inputs as one character each, presses waiting for their tick (`InputQueue`, `takeInput`: the server and the page take presses in with the same lines), the world checksum (`worldHash`), the whole world as plain data (`encodeWorld`, `decodeWorld`), room codes and names.
 - `room.ts` (the server's decisions, with no network or clock of its own, so `tests/room.test.ts` plays rooms through): joining by code, robots staying different, the host's setup and buttons, starting a match (people in joining order, then CPU players: `seats`), stepping the round to the time (`advance`), counting wins, dropped connections and a host handing on (`housekeep`).
 - `worker.ts`: the Cloudflare side. Requests for `/api/room/CODE` go to that code's Durable Object (`RoomDO`), which holds a `Room`, turns WebSocket messages into calls on it, and runs two clocks: the round's (every 16 ms while one is played) and a tidying one (every 4 s). Everything else is the game page (`env.ASSETS`).
-- `online.ts`: the page's connection (`Online`): making or joining, trying again after a drop, the round's ticks played out smoothly (`playout`), checksums compared, and asking for the whole world when they differ.
-- In `main.ts`: `joinOnline`, `onRoom` (the room's people become the lobby's `guests`, with `remote` set), `onRound` (a round or a whole world from the server), `leaveOnline`; `net`, `seats` and `meIdx` (your place: player 0 is you only on this screen), `couch()`, `human()`, `nameOf()`; `advance()` is the half of a tick that does not read input; `announce()` writes the result.
+- `online.ts`: the page's connection (`Online`): making or joining, trying again after a drop, pings, and asking for the whole world when a checksum differs. It hands a round to a `Predictor`.
+- `predict.ts` (pure: the time is handed in, so `tests/predict.test.ts` runs it against a room over made-up connections): the round on the page. `ticks` steps the server's world as its inputs arrive and keeps a short history of where everyone was. `frame`, once a frame, sends a press when what you hold changes (marked with the picture's next tick), moves the clock (`pong`, `slew`), copies the server's world and plays it on to now with your presses (`rebuild`, `stepOn`), and makes the world to draw (`view`): that picture, with the other robots from the history a few ticks back. `heard` stops a sound made early from being made again. The header of the file explains each part.
+- In `main.ts`: `joinOnline`, `onRoom` (the room's people become the lobby's `guests`, with `remote` set), `onRound` (a round or a whole world from the server), `leaveOnline`; `net`, `seats` and `meIdx` (your place: player 0 is you only on this screen), `couch()`, `human()`, `nameOf()`; `advance()` is the half of a tick that does not read input (online it steps the server's world, from the connection, not from the frame loop); `shownWorld()` is the world that is drawn; `soundOf()` plays an event's sound; `announce()` writes the result.
 - In `lobby.ts`: `host.online()` says whether you are in a room and whether you host; the Match page and the CPU players are then read-only for the others (`canEdit`).
 
 ### `src/page.html`: the page
@@ -252,6 +253,7 @@ Bundles `src/main.ts` with esbuild, pastes it into `src/page.html`, and writes `
 | `tests/swipe.test.ts` | The pad: when a stroke starts, wiggles, drift and bounce-back ignored, turns and reverses mid-swipe, leaning swipes read correctly from every starting direction, the stroke reports Match my thumb relies on, a separate aim per direction |
 | `tests/teach.test.ts` | Measuring a lean, averaging, rejecting scattered swipes, the three-quarters rule and its limits, the two candidate settings, that a straight swipe always keeps 20° of room, judging test swipes, and choosing the winner |
 | `tests/room.test.ts` | Online rooms: codes, joining and refusing, robots kept different, only the host setting up and starting, a match played through with every page's world checked against the server's, a quick tap of A not lost, a dropped page coming back mid-round, only the host moving on or restarting, a host handing on |
+| `tests/predict.test.ts` | How an online round feels on a page, over made-up connections from wired to bad, at 60 and 120 frames a second: your robot moving on the frame of the press and walking evenly, the other robot walking evenly, the page's world staying the server's, a press that arrives late being put right, sounds made once, carrying on after the whole world is sent again |
 | `tests/bot.test.ts` | The CPU players: the danger map and chain reactions, slow levels noticing bombs late, that thinking never changes the world, no bomb without a way out, every level surviving two minutes in a full arena, every level finding and beating a player who stands still, and repeatability |
 
 To add a check, copy a block in the nearest file and change what it sets up and what it asserts.
@@ -262,6 +264,7 @@ There are no automatic browser tests. The game has been checked in a phone-sized
 
 - [`experiments/`](../experiments/README.md) holds simulations used to decide how the controls should work, and the script that plays CPU players against each other. They are not part of the game and nothing depends on them.
 - `tools/screenshots.py` retakes the pictures in `docs/screenshots/`. It needs Python and a Chrome browser, and is optional.
+- `tools/online-feel.py` measures how online play feels: two browsers play each other through a slow, uneven connection, and it reports how long a press takes to show and how evenly the robots walk (`docs/ONLINE.md` has the numbers).
 - `tools/portraits.py` saves large pictures of the robots as PNG files with transparent backgrounds, for title screens and other artwork: the robot exactly as the game draws it (`tools/portrait.ts` calls `drawRobot`), at a size where the soft finish shows, from the front or with `--view back`, `right` or `left`. Not part of the game.
 
 ## Where new features will go
@@ -270,5 +273,4 @@ There are no automatic browser tests. The game has been checked in a phone-sized
 |---|---|
 | More than four players, bigger arenas | `spawnPoints` and `createWorld` in `sim.ts`. The arena size is already a setting (`cols`, `rows`). |
 | Teams | A team field on `Player`, and the win check at the end of `step`. |
-| Online: smoother own movement | Step your own robot ahead of the server's ticks on a copy of the world (`cloneWorld`) and put it right as they arrive (`playout` in `online.ts`). |
 | Menus for characters, levels and custom items | `page.html` and `main.ts`. |

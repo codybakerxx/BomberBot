@@ -10,5 +10,6 @@ import './bot.test';
 import './dances.test';
 import './lives.test';
 import './room.test';
+import './predict.test';
 
 console.log('all checks passed');

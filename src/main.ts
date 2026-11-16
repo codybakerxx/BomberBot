@@ -10,7 +10,7 @@
  *
  * It holds no game rules. Those are all in sim.ts.
  */
-import { createWorld, step, ticksLeft, World, PlayerInput, Dir, TICK_HZ, DEATH_TICKS } from './sim';
+import { createWorld, step, ticksLeft, World, PlayerInput, Dir, TICK_HZ, DEATH_TICKS, type GameEvent } from './sim';
 import { Bot, BotLevel, BOT_LEVELS, LEVELS, createBot, botInput } from './bot';
 import { COLORS, NOBODY, botName, colorById, drawAngels, drawHead, drawStatic, drawDynamic, drawGhosts, warmSprites } from './render';
 import { Input, PadReader, typing } from './input';
@@ -461,12 +461,25 @@ function layout(): void {
   redrawStatic();
 }
 
-/** The floor and solid blocks never change during a match, so they are drawn once and reused. */
+/**
+ * The world that is drawn. On this screen it is the world itself. Online it is the picture the page runs on
+ * from the server's world to now (predict.ts): your robot where your presses have put it, the rest on time.
+ */
+function shownWorld(): World {
+  return (net && netRound && net.view()) || world;
+}
+/** Blocks that have landed in a world: when the drawn world has another, the floor picture is redrawn. */
+const landedIn = (w: World): number => w.shrinkNext - w.falling.length;
+let staticLanded = -1;
+
+/** The floor and solid blocks change only when a block lands, so they are drawn once and reused. */
 function redrawStatic(): void {
   if (!world) return;
+  const w = shownWorld();
+  staticLanded = landedIn(w);
   staticLayer.width = canvas.width;
   staticLayer.height = canvas.height;
-  drawStatic(staticLayer.getContext('2d')!, world, T);
+  drawStatic(staticLayer.getContext('2d')!, w, T);
 }
 
 const score = $<HTMLCanvasElement>('score');
@@ -551,7 +564,7 @@ let timerKey = '';
  */
 function drawTimer(): void {
   if (world.over && timerKey) return; // the round is decided: the timer stops where it was
-  const left = ticksLeft(world);
+  const left = ticksLeft(shownWorld());
   if (left === Infinity) {
     timer.hidden = true;
     return;
@@ -569,19 +582,22 @@ function drawTimer(): void {
 
 /** Draw one frame. */
 function render(time: number): void {
+  // (online the drawn world runs a little ahead of the server's: a block that has landed in it is drawn in now)
+  const w = shownWorld();
+  if (landedIn(w) !== staticLanded) redrawStatic();
   ctx.drawImage(staticLayer, 0, 0);
   clock = time;
   const winner = world.over ? world.over.winner : -1;
-  drawDynamic(ctx, world, T, time, 0, winner >= 0 && decidedAt >= 0 ? { player: winner, t: time - decidedAt, dance: danceOf(winner) } : undefined, leader);
+  drawDynamic(ctx, w, T, time, myIdx(), winner >= 0 && decidedAt >= 0 ? { player: winner, t: time - decidedAt, dance: danceOf(winner) } : undefined, leader);
   // a few of the robots' pictures made ahead of need, so play does not stutter (the winner's dance included)
-  warmSprites(ctx, world, T, 4, world.over && world.over.winner >= 0 ? danceOf(world.over.winner) : 'party');
+  warmSprites(ctx, w, T, 4, world.over && world.over.winner >= 0 ? danceOf(world.over.winner) : 'party');
   // the ghosts, on their own layer, which is only cleared when it has something on it
   gctx.setTransform(1, 0, 0, 1, 0, 0);
   if (ghostsShown) gctx.clearRect(0, 0, ghosts.width, ghosts.height);
   gctx.setTransform(1, 0, 0, 1, 0, ghostTop);
-  ghostsShown = prefs.ghosts ? drawGhosts(gctx, world, T, -ghostTop) : false; // they can be switched off in Settings › Graphics
+  ghostsShown = prefs.ghosts ? drawGhosts(gctx, w, T, -ghostTop) : false; // they can be switched off in Settings › Graphics
   // angels on the wall are part of the game, so they are drawn whatever that setting says
-  if (drawAngels(gctx, world, T, time)) ghostsShown = true;
+  if (drawAngels(gctx, w, T, time)) ghostsShown = true;
   drawTimer();
   drawScore();
 }
@@ -591,7 +607,10 @@ function render(time: number): void {
  * the match, Rematch (the same setup, the score back to 0) and Lobby.
  */
 function finish(title: string, text: string): void {
-  mode = 'over';
+  // online the round goes on behind the menu and Settings: one open now stays open, and the panel is there
+  // when it closes (closePause goes to `watch`)
+  const menuUp = mode === 'pause' || mode === 'settings';
+  if (!menuUp) mode = 'over';
   overShown = true;
   roundLive = false;
   $('resultTitle').textContent = title;
@@ -610,6 +629,10 @@ function finish(title: string, text: string): void {
       $('resultText').textContent = `${text ? text + ' ' : ''}${hostName()} starts the ${done ? 'rematch' : 'next round'}.`;
       $('resultText').hidden = false;
     }
+  }
+  if (menuUp) {
+    if (mode === 'pause') fillPause();
+    return;
   }
   if (result.hidden) {
     result.hidden = false;
@@ -636,6 +659,20 @@ function nameOf(i: number): string {
   return human(i) ? `${name} (P${i + 1})` : name;
 }
 
+/** The sound of something the rules report. */
+function soundOf(e: GameEvent): void {
+  if (e.type === 'place') sfx.place();
+  else if (e.type === 'explode') sfx.explode();
+  else if (e.type === 'pickup') e.kind === 'curse' ? sfx.curse() : sfx.pickup();
+  else if (e.type === 'shield') sfx.shield();
+  else if (e.type === 'kick' || e.type === 'throw') sfx.kick();
+  else if (e.type === 'lift' || e.type === 'land') sfx.lift();
+  else if (e.type === 'block') sfx.block();
+  else if (e.type === 'respawn' || e.type === 'revive') sfx.shield(); // back in the round
+  else if (e.type === 'rise') sfx.curse(); // a zombie gets up
+  else if (e.type === 'death') sfx.death();
+}
+
 /** One step of the game rules on this screen: read the input, then advance (below). */
 function tick(): void {
   // player 0 is you; then the other players here; then the CPU players, which are asked for the same thing
@@ -658,28 +695,20 @@ function advance(inputs: (PlayerInput | undefined)[]): void {
   const mi = myIdx();
   const me = world.players[mi];
   for (const e of world.events) {
-    if (e.type === 'place') sfx.place();
-    else if (e.type === 'explode') {
-      sfx.explode();
+    // (online, a sound the picture already made ahead of the server is not made twice; nor are the sounds
+    // of ticks caught up on while the page was out of sight)
+    if (!(net && (net.heard(world.tick, e) || document.hidden))) soundOf(e);
+    if (e.type === 'explode') {
       // a light shake for a blast within two tiles of a robot played on a controller
       if (prefs.rumble)
-        for (let i = 0; i <= guests.length; i++) {
+        for (let i = 0; i < world.players.length; i++) {
           const p = world.players[i];
-          if (p.alive && Math.abs(e.cx - Math.round(p.x)) + Math.abs(e.cy - Math.round(p.y)) <= 2) padOf(i)?.rumble(0.2, 0.5, 120);
+          if (human(i) && p.alive && Math.abs(e.cx - Math.round(p.x)) + Math.abs(e.cy - Math.round(p.y)) <= 2) padOf(i)?.rumble(0.2, 0.5, 120);
         }
-    }
-    else if (e.type === 'pickup') e.kind === 'curse' ? sfx.curse() : sfx.pickup();
-    else if (e.type === 'shield') sfx.shield();
-    else if (e.type === 'kick' || e.type === 'throw') sfx.kick();
-    else if (e.type === 'lift' || e.type === 'land') sfx.lift();
-    else if (e.type === 'block') {
+    } else if (e.type === 'block') {
       // the arena has one more solid block: the picture of the floor and blocks needs redrawing
-      sfx.block();
       redrawStatic();
-    } else if (e.type === 'respawn' || e.type === 'revive') sfx.shield(); // back in the round
-    else if (e.type === 'rise') sfx.curse(); // a zombie gets up
-    else if (e.type === 'death') {
-      sfx.death();
+    } else if (e.type === 'death') {
       if (e.player === mi && e.out) blastedBy = e.cause === 'block' ? CRUSHED : e.by;
       if (prefs.rumble && human(e.player)) padOf(e.player)?.rumble(1, 0.7, 380); // a strong shake: you are out
     }
@@ -765,10 +794,10 @@ function frame(now: number): void {
   padNav.step(now, mode !== 'playing');
   guestPads();
   if (net && netRound) {
-    // online: what you press goes to the server (nothing while a menu is open), and the round moves on as
-    // the server's ticks come in, whatever screen is showing: nobody can pause it
-    net.sendInput(mode === 'playing' ? packInput(input.state()) : 0);
-    net.playout(dt);
+    // online: the server's world moves on as its ticks come in (onRound's hooks), whatever screen is showing:
+    // nobody can pause it. Here, what you press goes to the server (nothing while a menu is open) and the
+    // picture that is drawn moves on to now, your robot with it (predict.ts).
+    net.frame(now, mode === 'playing' ? packInput(input.state()) : 0);
   } else if (mode === 'playing' || mode === 'over') {
     acc += dt;
     const stepLen = 1 / TICK_HZ;
@@ -1274,7 +1303,8 @@ function fillPause(): void {
   $('pauseTitle').textContent = done ? `${nameOf(matchWinner)} won the match` : `Round ${roundNo}`;
   const left = ticksLeft(world);
   const time = world.over || left === Infinity ? '' : left > 0 ? ` · ${clockText(Math.ceil(left / TICK_HZ))} left` : ' · Blocks falling';
-  $('pauseInfo').textContent = `${summary(setup, guests.length)}${time}`;
+  // (online: the round trip to the server, so a slow connection can be told from a fault)
+  $('pauseInfo').textContent = `${summary(setup, guests.length)}${time}${net && net.rtt ? ` · ping ${net.rtt} ms` : ''}`;
   $('pauseResume').textContent = roundLive && !net ? 'Resume' : 'Back to the round';
   const list = $('standings');
   list.textContent = '';
@@ -1464,6 +1494,9 @@ function joinOnline(code: string | null): void {
       snap: (w, s, score) => onRound(decodeWorld(w), s, score, false),
       world: () => (netRound ? world : null),
       step: (codes) => advance(codes.map(unpackInput)),
+      early: (e) => {
+        if (!document.hidden) soundOf(e);
+      },
       status: (st) => {
         if (st === 'lost') sayNet('Connection lost. Reconnecting…');
         else if (st === 'open') sayNet('');
@@ -2023,5 +2056,9 @@ requestAnimationFrame(frame);
   },
   get net() {
     return net;
+  },
+  /** the world that is drawn (online: the picture ahead of the server's world) */
+  get view() {
+    return shownWorld();
   },
 };

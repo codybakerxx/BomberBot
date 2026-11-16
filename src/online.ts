@@ -1,19 +1,22 @@
 /**
- * The game page's side of online play: the connection to a room on the server, and the round's ticks as they
- * come in. main.ts owns the screens and the world; this file hands it what the server says, at the right pace.
- * docs/ONLINE.md explains the design, net.ts the messages.
+ * The game page's side of online play: the connection to a room on the server. main.ts owns the screens and
+ * the server's world; predict.ts runs the round on this page. docs/ONLINE.md explains the design, net.ts the
+ * messages.
  *
  * - Connecting: a room is made (`create`) or joined by its code. A page has an id of its own for the rest of
  *   the time it is open (sessionStorage), so a dropped connection comes back as the same person, in the same
  *   place, and is sent the round as it is.
- * - A round: the server sends what everyone pressed on each tick. `playout` steps the world with them at 60 a
- *   second, keeping a couple of ticks in hand so an uneven connection does not make the round stutter, and
- *   catching up gently if more arrive. Every half second the server's checksum is compared with this page's
- *   world; if they differ, the page asks for the whole world and carries on from it.
- * - What you press is sent whenever it changes (`sendInput`), and on to the server's next tick.
+ * - A round: the server sends what everyone pressed on each tick, and the server's world is stepped with them
+ *   the moment they arrive (`Predictor.ticks`). What is drawn is a picture run on from it to now, with your
+ *   own presses (`frame`, `view`), so your robot answers at once and moves evenly whatever the connection does.
+ *   Every half second the server's checksum is compared with this page's world; if they differ, the page asks
+ *   for the whole world and carries on from it.
+ * - Pings: every 15 seconds to keep the connection open; in a round twice a second, to keep the picture's
+ *   clock in step with the server's (predict.ts).
  */
-import { makeCode, parseMsg, tickCodes, worldHash, type ClientMsg, type MemberInfo, type Score, type Seat, type ServerMsg, type WorldData } from './net';
-import type { World, WorldConfig } from './sim';
+import { PROTOCOL, makeCode, parseMsg, type ClientMsg, type MemberInfo, type Score, type Seat, type ServerMsg, type WorldData } from './net';
+import { Predictor } from './predict';
+import type { GameEvent, World, WorldConfig } from './sim';
 import type { MatchSetup } from './setup';
 import type { DanceId } from './dances';
 
@@ -24,22 +27,22 @@ export interface OnlineHooks {
   round(cfg: WorldConfig, seats: Seat[], score: Score): void;
   /** the whole world, to carry on from (after a dropped connection, or out of step) */
   snap(world: WorldData, seats: Seat[], score: Score): void;
-  /** the world this page is stepping (null between rounds) */
+  /** the server's world, as this page has it (null between rounds) */
   world(): World | null;
-  /** step the world once, with these inputs (packInput codes, one per player) */
+  /** step that world once, with these inputs (packInput codes, one per player) */
   step(codes: number[]): void;
+  /** something happened in the picture ahead of the server's word on it: play its sound now */
+  early(e: GameEvent): void;
   /** connecting, connected, or the connection dropped and is being tried again */
   status(s: 'connecting' | 'open' | 'lost'): void;
   /** something went wrong. `fatal`: the room is gone for this page (no room with that code, full...). */
   error(why: string, fatal: boolean): void;
 }
 
-/** Ticks kept in hand before stepping, against an uneven connection. */
-const KEEP = 2;
-/** More than this many in hand: step one extra a frame to catch up. */
-const BEHIND = 5;
-/** Far behind (the page was in the background): jump to two ticks short of the latest. */
-const JUMP = 40;
+/** In a round: a ping twice a second for the picture's clock, and a quick few at the start of each round. */
+const ROUND_PING_MS = 500;
+const FIRST_PINGS = 5;
+const FIRST_PING_MS = 110;
 /** Give up trying to reconnect after this long. */
 const RETRY_FOR_MS = 60_000;
 /** A message every so often keeps the connection from being closed as idle, and measures the delay. */
@@ -82,17 +85,19 @@ export class Online {
   private lostAt = 0;
   private retry = 0;
   private pinger = 0;
-  /** ticks received and not yet stepped: their inputs, and the checksum after them if one came */
-  private queue: { tick: number; codes: number[]; sum?: number }[] = [];
-  private acc = 0;
-  /** stepping has started with ticks in hand (false at the start, and after running dry) */
-  private primed = false;
-  private sentInput = -1;
+  /** the round on this page (predict.ts), while one is being played */
+  private pred: Predictor | null = null;
   /** asked for the whole world and waiting for it */
   private syncing = false;
-  /** checksums compared, and how many differed (for a check from the browser console) */
+  /** the round's pings: when the next is due, and how many quick ones are left */
+  private pingAt = 0;
+  private quick = 0;
+  /** the last few round trips, for `rtt` */
+  private trips: number[] = [];
+  /** checksums compared and how many differed, and presses that reached the server late, over this visit */
   checks = 0;
   misses = 0;
+  corrections = 0;
 
   /** the server's address (host and port) */
   private server: string;
@@ -134,7 +139,7 @@ export class Online {
     }
     this.ws = ws;
     ws.onopen = () => {
-      this.send({ t: 'hello', id: this.key, ...this.you, create: this.creating && !this.joined });
+      this.send({ t: 'hello', id: this.key, ...this.you, create: this.creating && !this.joined, pv: PROTOCOL });
     };
     ws.onmessage = (e) => {
       const m = parseMsg<ServerMsg>(e.data);
@@ -177,6 +182,7 @@ export class Online {
         this.members = m.members;
         this.setup = m.setup;
         this.playing = m.playing;
+        if (!m.playing) this.endRound();
         if (first) {
           clearInterval(this.pinger);
           this.pinger = window.setInterval(() => this.send({ t: 'ping', c: performance.now() }), PING_MS);
@@ -187,36 +193,26 @@ export class Online {
         return;
       }
       case 'round':
-        this.queue = [];
-        this.acc = 0;
-        this.primed = false;
-        this.syncing = false;
-        this.sentInput = -1;
+        this.endRound();
         this.hooks.round(m.cfg, m.seats, m.score);
+        this.beginRound(m.seats, m.ep);
         return;
       case 'snap':
-        this.queue = [];
-        this.acc = 0;
-        this.primed = false;
-        this.syncing = false;
+        this.endRound();
         this.hooks.snap(m.world, m.seats, m.score);
+        this.beginRound(m.seats, m.ep);
         return;
-      case 'ticks': {
-        const last = this.queue.length ? this.queue[this.queue.length - 1].tick : (this.hooks.world()?.tick ?? 0);
-        if (m.from !== last + 1) {
-          // a gap: something was missed. The whole world puts it right.
-          this.askSync();
-          return;
-        }
-        m.i.forEach((t, k) => {
-          const tick = m.from + k;
-          this.queue.push({ tick, codes: tickCodes(t), ...(m.sum && m.sum[0] === tick ? { sum: m.sum[1] } : {}) });
-        });
+      case 'ticks':
+        // (while the whole world is on its way, ticks that came before it are of no use)
+        if (this.pred && !this.syncing && !this.pred.ticks(m)) this.askSync();
+        return;
+      case 'pong': {
+        this.trips.push(performance.now() - m.c);
+        if (this.trips.length > 7) this.trips.shift();
+        this.rtt = Math.round([...this.trips].sort((a, b) => a - b)[this.trips.length >> 1]);
+        if (m.d !== undefined) this.pred?.pong(m.c, m.d);
         return;
       }
-      case 'pong':
-        this.rtt = Math.round(performance.now() - m.c);
-        return;
       case 'error': {
         if (m.fatal && this.creating && !this.joined && m.why.includes('taken') && this.tries++ < 6) {
           // that code was in use: another
@@ -236,22 +232,42 @@ export class Online {
     }
   }
 
+  /** A round (or the whole world again) has come: run it on this page from here. */
+  private beginRound(seats: Seat[], epoch: number): void {
+    const world = this.hooks.world();
+    if (!world) return;
+    this.syncing = false;
+    this.pred = new Predictor(
+      {
+        world: () => this.hooks.world() ?? world,
+        step: (codes) => this.hooks.step(codes),
+        send: (msg) => this.send(msg),
+        early: (e) => this.hooks.early(e),
+      },
+      Math.max(0, seats.findIndex((s) => s.member === this.me)),
+      epoch,
+    );
+    // a quick few pings, so the picture's clock is set before the round's first tick
+    this.quick = FIRST_PINGS;
+    this.pingAt = 0;
+  }
+  private endRound(): void {
+    if (!this.pred) return;
+    const st = this.pred.stats();
+    this.checks += st.checks;
+    this.misses += st.misses;
+    this.corrections += st.corrections;
+    this.pred = null;
+  }
+
   private askSync(): void {
     if (this.syncing) return;
     this.syncing = true;
-    this.queue = [];
     this.send({ t: 'sync' });
   }
 
   send(msg: ClientMsg): void {
     if (this.ws && this.ws.readyState === WebSocket.OPEN) this.ws.send(JSON.stringify(msg));
-  }
-
-  /** What you are pressing now (packInput): sent when it changes. */
-  sendInput(v: number): void {
-    if (v === this.sentInput) return;
-    this.sentInput = v;
-    this.send({ t: 'in', v });
   }
 
   /** Your robot, Ready, dance and name in the lobby. Also what hello says next time. */
@@ -261,59 +277,40 @@ export class Online {
   }
 
   /**
-   * Step the round on by `dt` seconds' worth of ticks, as far as the ticks received allow. Returns how many
-   * were stepped.
+   * Once a frame in a round: `now` (performance.now()), and what you are pressing (packInput). Sends your
+   * presses, keeps the clock's pings going, and moves the picture on to now.
    */
-  playout(dt: number): number {
-    const w = this.hooks.world();
-    if (!w || this.syncing) return 0;
-    // ticks already behind the world (a snapshot came after them) are dropped
-    while (this.queue.length && this.queue[0].tick <= w.tick) this.queue.shift();
-    if (this.queue.length && this.queue[0].tick !== w.tick + 1) {
-      this.askSync();
-      return 0;
+  frame(now: number, v: number): void {
+    if (!this.pred || this.syncing) return;
+    if (now >= this.pingAt) {
+      this.pingAt = now + (this.quick-- > 0 ? FIRST_PING_MS : ROUND_PING_MS);
+      this.send({ t: 'ping', c: now });
     }
-    const len = 1 / 60;
-    const have = this.queue.length;
-    // start (and start again after running dry) only with a couple of ticks in hand
-    if (!this.primed) {
-      if (have <= KEEP) {
-        this.acc = 0;
-        return 0;
-      }
-      this.primed = true;
-    }
-    this.acc += dt;
-    let n = Math.floor(this.acc / len);
-    this.acc -= n * len;
-    if (have > JUMP) n = have - KEEP;
-    else if (have > BEHIND) n += 1;
-    let stepped = 0;
-    while (stepped < n) {
-      if (!this.queue.length) {
-        this.primed = false; // ran dry: wait for a couple in hand again
-        this.acc = 0;
-        break;
-      }
-      const t = this.queue.shift()!;
-      this.hooks.step(t.codes);
-      stepped++;
-      if (t.sum !== undefined) {
-        this.checks++;
-        const world = this.hooks.world();
-        if (world && worldHash(world) !== t.sum) {
-          this.misses++;
-          this.askSync();
-          break;
-        }
-      }
-    }
-    return stepped;
+    this.pred.frame(now, v);
   }
 
-  /** Ticks received and waiting to be stepped. */
-  get waiting(): number {
-    return this.queue.length;
+  /** The world to draw in a round: the picture, a little ahead of the server's world (null between rounds). */
+  view(): World | null {
+    return this.pred ? this.pred.view() : this.hooks.world();
+  }
+
+  /** Was this event of the server's tick `tick` already sounded ahead of time? */
+  heard(tick: number, e: GameEvent): boolean {
+    return !!this.pred && this.pred.heard(tick, e);
+  }
+
+  /** How the connection is doing, for the menu and for checking from the console. */
+  stats(): { rtt: number; ahead: number; behind: number; synced: boolean; checks: number; misses: number; corrections: number } {
+    const st = this.pred?.stats();
+    return {
+      rtt: this.rtt,
+      ahead: st?.ahead ?? 0,
+      behind: st?.behind ?? 0,
+      synced: st?.synced ?? false,
+      checks: this.checks + (st?.checks ?? 0),
+      misses: this.misses + (st?.misses ?? 0),
+      corrections: this.corrections + (st?.corrections ?? 0),
+    };
   }
 
   /** Leave the room for good. */

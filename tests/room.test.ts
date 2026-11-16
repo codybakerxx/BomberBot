@@ -18,6 +18,7 @@ import {
   unpackInput,
   worldHash,
   makeCode,
+  PROTOCOL,
   type ClientMsg,
   type ServerMsg,
 } from '../src/net';
@@ -46,6 +47,10 @@ class Page {
   world: World | null = null;
   checked = 0;
   member: Member | null = null;
+  /** the number the server gave for this round's presses, how many have been sent, and the server's acks */
+  ep = 0;
+  n = 0;
+  acks: number[] = [];
   conn: Conn = {
     send: (t) => {
       const m = JSON.parse(t) as ServerMsg;
@@ -63,9 +68,12 @@ class Page {
   }
   /** what a page does with a round, its ticks and a whole world (online.ts does the same) */
   take(m: ServerMsg): void {
-    if (m.t === 'round') this.world = roundWorld(m.cfg);
-    else if (m.t === 'snap') this.world = decodeWorld(m.world);
-    else if (m.t === 'ticks' && this.world) {
+    if (m.t === 'round' || m.t === 'snap') {
+      this.world = m.t === 'round' ? roundWorld(m.cfg) : decodeWorld(m.world);
+      this.ep = m.ep;
+      this.n = 0;
+    } else if (m.t === 'ticks' && this.world) {
+      if (m.a) this.acks = m.a;
       assert.strictEqual(m.from, this.world.tick + 1, `${this.key}: ticks arrive in order`);
       for (const t of m.i) {
         step(this.world, tickCodes(t).map(unpackInput));
@@ -81,8 +89,18 @@ class Page {
 let now = 1000;
 const room = new Room('BCDF', makeRng(99));
 const hello = (p: Page, create: boolean, colorId = 'gold', name = ''): Member | null =>
-  (p.member = room.hello(p.conn, { t: 'hello', id: p.key, name, colorId, dance: 'spin', create }, now));
+  (p.member = room.hello(p.conn, { t: 'hello', id: p.key, name, colorId, dance: 'spin', create, pv: PROTOCOL }, now));
 const say = (p: Page, msg: ClientMsg): void => room.message(p.member!, msg, now);
+/** What a page presses, for the tick `ahead` after the server's next (0: as soon as it can be). */
+const press = (p: Page, v: number, ahead = 0): void => say(p, { t: 'in', v, k: (room.world?.tick ?? 0) + 1 + ahead, n: ++p.n, e: p.ep });
+
+// a page left open from before an update is told to reload
+{
+  const old = new Page('old');
+  assert.strictEqual(room.hello(old.conn, { t: 'hello', id: 'old', name: '', colorId: 'gold', dance: 'party', create: true }, now), null);
+  assert.ok(old.closed && /reload/i.test(old.last('error')!.why), 'an out-of-date page is turned away, and told to reload');
+  assert.ok(room.empty(), 'and makes no room');
+}
 
 // nobody can join a room that does not exist
 const lost = new Page('lost');
@@ -158,15 +176,43 @@ function run(ms: number, drive?: (tick: number) => void): void {
 let friendBombed = false;
 run(LEAD_MS + 2000, (t) => {
   // the host walks and drops a bomb; the friend taps B very quickly (pressed and let go between ticks)
-  say(host, { t: 'in', v: packInput({ dir: t % 120 < 60 ? 2 : 4, a: t % 50 === 0, b: false }) });
+  press(host, packInput({ dir: t % 120 < 60 ? 4 : 3, a: t % 50 === 0, b: false })); // right, then left
   if (t % 37 === 0) {
-    say(friend, { t: 'in', v: packInput({ dir: 0, a: true, b: false }) });
-    say(friend, { t: 'in', v: 0 });
+    press(friend, packInput({ dir: 0, a: true, b: false }));
+    press(friend, 0);
   }
 });
 assert.ok(room.world!.tick > 100, 'the round is being stepped');
 assert.ok(host.checked > 2 && friend.checked > 2, 'checksums were compared');
 assert.ok(friendBombed, 'a quick tap of A, let go before the next tick, still drops a bomb');
+assert.ok(host.acks[0] > 50 && host.acks[1] > 2 && host.acks[2] === 0, 'the server says how far it has taken in each person’s presses');
+
+// a press says which tick it is for, and the server keeps it until then
+{
+  const at = room.world!.tick;
+  const x = room.world!.players[0].x;
+  press(host, 0);
+  run(5 * TICK_MS);
+  const still = room.world!.players[0].x;
+  press(host, packInput({ dir: 4, a: false, b: false }), 6); // right, for seven ticks from now
+  const sent = room.world!.tick;
+  run(5 * TICK_MS);
+  assert.strictEqual(room.world!.players[0].x, still, 'a press for a later tick waits for it');
+  run(20 * TICK_MS);
+  const codes = host.sent.filter((m): m is Extract<ServerMsg, { t: 'ticks' }> => m.t === 'ticks' && m.from > at).flatMap((m) => m.i.map((t, k) => [m.from + k, tickCodes(t)[0]] as const));
+  const first = codes.find(([, c]) => (c & 7) === 4)!;
+  assert.strictEqual(first[0], sent + 7, 'and is taken in on exactly that tick');
+  void x;
+  // presses from before the world was sent again (another round, a reconnect) are dropped
+  say(host, { t: 'in', v: packInput({ dir: 3, a: false, b: false }), k: room.world!.tick + 1, n: ++host.n, e: host.ep - 1 });
+  run(3 * TICK_MS);
+  assert.notStrictEqual(room.world!.players[0].facing, 3, 'a press for an earlier round is ignored');
+  // a ping is answered with where the round's clock stands
+  host.sent.length = 0;
+  say(host, { t: 'ping', c: 7 });
+  const pong = host.last('pong')!;
+  assert.ok(pong.c === 7 && typeof pong.d === 'number' && Math.abs(pong.d - (room.world!.tick + 1)) < 1.01, 'a pong says where the round’s clock stands');
+}
 
 // a dropped page comes back in the middle of the round and carries on in step
 room.disconnect(friend.member!, friend.conn, now);
@@ -179,9 +225,8 @@ run(2000);
 assert.ok(back.checked > 0, 'and stays in step after');
 
 // play the rest of the round: everyone stands still, the CPU player hunts
-run(10 * 60 * 1000, () => {
-  say(host, { t: 'in', v: 0 });
-});
+press(host, 0);
+run(10 * 60 * 1000);
 assert.ok(room.world!.over, 'the round ends');
 assert.ok(!room.busy() || room.world!.tick > 0);
 // only the host moves on
