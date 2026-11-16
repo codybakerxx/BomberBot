@@ -8,7 +8,7 @@
  */
 import assert from 'node:assert';
 import type { Dir } from '../src/sim';
-import { SwipePad, DEFAULT_TILT } from '../src/swipe';
+import { SwipePad, DEFAULT_TILT, FIRST_TILT } from '../src/swipe';
 
 {
   // moves the thumb in a straight line in 8 ms steps and returns every direction seen
@@ -127,16 +127,20 @@ import { SwipePad, DEFAULT_TILT } from '../src/swipe';
     return pad.dir;
   };
   for (const going of [1, 2, 3, 4] as Dir[]) {
-    // straight swipes read as themselves
+    // the standard lean (2°, the owner's match): straight swipes, and swipes leaning up to 35° either way
     for (const want of [1, 2, 3, 4] as Dir[]) assert.equal(decode(going, ANG[want]), want, `straight ${want} while going ${going}`);
-    // the natural arc of a left thumb: left drifts up, right drifts down, up drifts right, down drifts left
+    for (const lean of [-35, -20, 20, 35]) {
+      for (const want of [1, 2, 3, 4] as Dir[]) assert.equal(decode(going, ANG[want] - lean), want, `${want} leaning ${lean} while going ${going}`);
+    }
+    // the first standard lean (15°): the natural arc of a left thumb, left drifting up, right down, up right,
+    // down left, up to 50°, and a little the other way
+    for (const want of [1, 2, 3, 4] as Dir[]) assert.equal(decode(going, ANG[want], FIRST_TILT), want);
     for (const lean of [20, 35, 50]) {
       for (const want of [1, 2, 3, 4] as Dir[]) {
-        assert.equal(decode(going, ANG[want] - lean), want, `${want} leaning ${lean} while going ${going}`);
+        assert.equal(decode(going, ANG[want] - lean, FIRST_TILT), want, `${want} leaning ${lean} while going ${going} (15°)`);
       }
     }
-    // and a little the other way is still fine
-    for (const want of [1, 2, 3, 4] as Dir[]) assert.equal(decode(going, ANG[want] + 20), want);
+    for (const want of [1, 2, 3, 4] as Dir[]) assert.equal(decode(going, ANG[want] + 20, FIRST_TILT), want);
   }
   // the same swipe gives the same answer whichever way the robot is going
   for (let deg = 0; deg < 360; deg += 7) {

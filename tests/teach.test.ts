@@ -19,7 +19,7 @@ import {
   summarise,
   tiltFor,
 } from '../src/teach';
-import { STRAIGHT, uniformAims, standardAims, nearestDir } from '../src/swipe';
+import { STRAIGHT, uniformAims, standardAims, nearestDir, DEFAULT_TILT } from '../src/swipe';
 
 {
   // on screen, y grows downward: (-1, -0.7) is left and up
@@ -82,8 +82,9 @@ import { STRAIGHT, uniformAims, standardAims, nearestDir } from '../src/swipe';
   }
 
   // a right thumb is the mirror image: standard lean and limits the other way round
-  assert.deepEqual(standardAims('left'), uniformAims(15));
-  assert.deepEqual(standardAims('right'), uniformAims(-15));
+  assert.equal(DEFAULT_TILT, 2, 'the standard lean is the owner’s match (docs/SWIPE-HISTORY.md)');
+  assert.deepEqual(standardAims('left'), uniformAims(DEFAULT_TILT));
+  assert.deepEqual(standardAims('right'), uniformAims(-DEFAULT_TILT));
   assert.equal(tiltFor(40, 'right'), 20);
   assert.equal(tiltFor(-40, 'right'), -25);
   assert.equal(tiltFor(-20, 'right'), -15);
@@ -98,11 +99,12 @@ import { STRAIGHT, uniformAims, standardAims, nearestDir } from '../src/swipe';
       }
     }
   }
-  // a right thumb's natural swipes (leaning 30 degrees anticlockwise) are read right by its standard aims, wrong-ish by the left's
+  // a right thumb's natural swipes (leaning 30 degrees anticlockwise) are read right by its standard aims, with
+  // more room than the left thumb's would give them (the mirror image: twice the lean between them)
   for (const d of [1, 2, 3, 4] as Dir[]) {
     const s = swipe(d, -30);
     assert.equal(nearestDir(standardAims('right'), s.vx, s.vy), d);
-    assert.ok(marginOf(standardAims('right'), d, s.vx, s.vy) > marginOf(standardAims('left'), d, s.vx, s.vy) + 25);
+    assert.ok(marginOf(standardAims('right'), d, s.vx, s.vy) > marginOf(standardAims('left'), d, s.vx, s.vy) + DEFAULT_TILT * 2 - 1e-9);
   }
 
   // margins: a straight swipe right with the standard 15 degree lean is 30 degrees from the border with up

@@ -121,6 +121,7 @@ CLAUDE.md       notes for working on this project with Claude
 | [docs/HOW-TO.md](docs/HOW-TO.md) | Running, building, testing, changing things, sharing the game |
 | [docs/GAME-RULES.md](docs/GAME-RULES.md) | Every rule of play, with the numbers |
 | [docs/CONTROLS.md](docs/CONTROLS.md) | The touch layout, how the swipe pad reads a thumb, how turning works |
+| [docs/SWIPE-HISTORY.md](docs/SWIPE-HISTORY.md) | Every version of the swipe controls and the standard lean, and why each change was made |
 | [docs/MATCH-MY-THUMB.md](docs/MATCH-MY-THUMB.md) | What Match my thumb measures, how it tests the result, and how the pad uses it (version 2, in the game now) |
 | [docs/MATCH-MY-THUMB-V1.md](docs/MATCH-MY-THUMB-V1.md) | The first version of Match my thumb, kept for reference |
 | [docs/CPU-PLAYERS.md](docs/CPU-PLAYERS.md) | How the CPU players think, the three levels, and what has been measured |

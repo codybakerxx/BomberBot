@@ -14,7 +14,7 @@
  *
  * Run with: npx tsx experiments/stroke-reading.ts
  */
-import { SwipePad, DEFAULT_TILT } from '../src/swipe';
+import { SwipePad, DEFAULT_TILT, FIRST_TILT } from '../src/swipe';
 import { makeRng, Dir } from '../src/sim';
 import { PreviousPad } from './previous-build';
 
@@ -86,6 +86,7 @@ const columns: [string, () => Pad][] = [
   ['previous pad', () => new PreviousPad()],
   ['current, no lean', newPad(0)],
   [`current, lean ${DEFAULT_TILT}`, newPad(DEFAULT_TILT)],
+  [`current, lean ${FIRST_TILT}`, newPad(FIRST_TILT)],
 ];
 
 for (const fresh of [false, true]) {

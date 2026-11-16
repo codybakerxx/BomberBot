@@ -65,7 +65,7 @@ Stroke straight after touching down:
 **What it showed.**
 
 - If quick strokes lean, a pad that judges them against the screen's own axes misreads a lot of them. Leaning the pad fixes most of that.
-- The standard 15° lean costs a little when the thumb does not lean at all (0.6% and 2.7% wrong instead of almost none) and gains a great deal when it does. That is why 15° is the default and why Match my thumb exists to replace the guess with a measurement.
+- The standard 15° lean costs a little when the thumb does not lean at all (0.6% and 2.7% wrong instead of almost none) and gains a great deal when it does. That is why 15° was the default until November 2026, and why Match my thumb exists to replace the guess with a measurement. The default is now 2°, the owner's own measured lean; `stroke-reading.ts` prints both, and `docs/SWIPE-HISTORY.md` has the comparison.
 - Judging strokes without a bias toward the robot's current direction helps at every lean (the "no lean" column against the "previous" one).
 
 ## `model-player.ts`: the whole chain

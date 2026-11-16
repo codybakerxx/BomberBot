@@ -95,7 +95,7 @@ A result looks like this:
 
 | Setting | What it is |
 |---|---|
-| **Before** | Whatever the pad was using when you started: the standard 15° lean ("Before (Standard)"), or your match if it was switched on ("Before (your match)"). Listed so a new match has to prove it is better. |
+| **Before** | Whatever the pad was using when you started: the standard lean ("Before (Standard)"), or your match if it was switched on ("Before (your match)"). Listed so a new match has to prove it is better. |
 | **One lean** | One lean for all four directions, worked out from all twelve swipes. This is what version 1 always used. |
 | **A lean per direction** | Each direction gets its own lean, worked out from its own three swipes. Best when your directions lean differently. |
 
@@ -253,9 +253,9 @@ Local storage belongs to one browser on one device. Clearing the browser's site 
 
 ## The standard lean
 
-Until someone runs Match my thumb, the pad leans **15°** in all four directions: clockwise when the left thumb steers, anticlockwise when the right thumb does (`DEFAULT_TILT` and `standardAims` in `src/swipe.ts`).
+Until someone runs Match my thumb, the pad leans **2°** in all four directions: clockwise when the left thumb steers, anticlockwise when the right thumb does (`DEFAULT_TILT` and `standardAims` in `src/swipe.ts`).
 
-That figure is a middle course for a thumb on the pad. It costs almost nothing for a player whose swipes are straight, and it takes most of the errors away for one whose swipes lean.
+That is the owner's own match (November 2026). It was 15° before: a middle course that took most errors away for a thumb whose swipes lean, at a small cost for a straight one. 2° suits a straight thumb and is worse for one that leans 30° or more, which is what Match my thumb is for. [SWIPE-HISTORY.md](SWIPE-HISTORY.md) has every version and the numbers. The tables below were measured with the 15° lean.
 
 ## What it cannot do
 
