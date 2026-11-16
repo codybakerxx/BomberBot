@@ -172,6 +172,8 @@ export function toggle(o: {
   under?: Opt[];
   /** what the row says when it is off, in place of the settings under it (optional) */
   offText?: string | (() => string);
+  /** greyed out and cannot be switched while this says so (it depends on another switch) */
+  locked?: () => boolean;
 }): Opt {
   const wrap = el('div', 'opt-group');
   const row = el('div', 'opt opt-toggle');
@@ -186,7 +188,9 @@ export function toggle(o: {
   for (const u of o.under ?? []) under.append(u.el);
   const offLine = el('p', 'opt-off');
   wrap.append(row, under, offLine);
-  const flip = (): void => o.set(!o.get());
+  const flip = (): void => {
+    if (!o.locked?.()) o.set(!o.get());
+  };
   sw.addEventListener('click', (e) => {
     e.stopPropagation();
     flip();
@@ -197,8 +201,11 @@ export function toggle(o: {
     el: wrap,
     refresh(): void {
       const on = o.get();
+      const locked = !!o.locked?.();
       sw.setAttribute('aria-checked', String(on));
+      sw.disabled = locked;
       row.classList.toggle('on', on);
+      row.classList.toggle('locked', locked);
       under.hidden = !on || !(o.under ?? []).length;
       for (const u of o.under ?? []) u.refresh();
       const off = hintText(o.offText);

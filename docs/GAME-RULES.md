@@ -209,7 +209,7 @@ The blocks were made 20% faster on 11 November 2026, after play-testing: they to
 - While it is on its way back it is still in the round: the round is not decided until only one robot is left that is standing or coming back, and if that last one is on its way back, the round waits for it to be standing.
 - The scoreboard shows a dot under each head for each life left, when the lobby gives more than one.
 
-**Out of lives** (the lobby's choice: Watch, the default; Angel; Zombie) says what a robot out of lives does for the rest of the round.
+**Post-Mortem Behavior** (a switch in the lobby's rules, off by default) says what a robot out of lives does for the rest of the round. Off, it watches. On, it shows three switches, exactly one of them on: **Watcher** (always the default; switching off the one that is on goes back to it), **Angel** and **Zombie**, with **Angels come back** under Angel, which can only be switched while Angel is on.
 
 **Angels**: a robot out of lives becomes an angel once its knocked-out animation has played (`ANGEL_DELAY`), on the outer wall at the point nearest where it fell.
 
@@ -320,7 +320,7 @@ The host can change these before a match. Left alone, every one is the usual rul
 | Custom start | Bombs 1 to 8, blast 1 to 8 tiles, speed +0 to +6 | What everyone starts each round with (`startBombs`, `startFire`, `startSpeed`) |
 | Custom power-ups | For each kind: Off, Rare (half), Normal, Lots (double) | Its chance under a brick (`itemChance`). A boot and a glove are only made sure of when they are not Off |
 | Lives | 1 to 5 | Lives each robot has in a round (`lives`); see Lives and angels |
-| Out of lives | Watch (the default), Angel, Zombie; with Angel, Angels come back | What a robot out of lives does: watches, haunts the wall throwing bombs in (`angels`: 'on'; 'revive' with Angels come back), or gets up as a zombie (`zombies`) |
+| Post-Mortem Behavior | Off (the default) or on: Watcher (the default), Angel (with Angels come back) or Zombie | What a robot out of lives does: watches, haunts the wall throwing bombs in (`angels`: 'on'; 'revive' with Angels come back), or gets up as a zombie (`zombies`) |
 
 ## Not in the game yet
 

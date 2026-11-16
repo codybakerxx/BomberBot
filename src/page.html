@@ -573,6 +573,12 @@
   .opt-range input::-moz-range-thumb { width: 20px; height: 20px; border-radius: 50%; background: #fff; border: 3px solid var(--accent); }
   .opt-under { border-top: 1px solid #1d2338; }
   .opt-under[hidden] { display: none; }
+  /* a switch that depends on another (Angels come back, under Angel): greyed out until that one is on */
+  .opt-toggle.locked { opacity: 0.4; }
+  .opt-toggle.locked .opt-name, .opt-toggle.locked .switch-btn { cursor: not-allowed; }
+  /* a group under a switch inside another switch's group (Post-Mortem Behavior's choices): set in a little */
+  .opt-under .opt-under { padding-left: 10px; }
+  .opt-group.sub-of { padding-left: 18px; }
   .opt-under > .opt + .opt, .opt-under > .opt-group + .opt, .opt-under > .opt + .opt-group { border-top: 1px solid #1d2338; }
   .opt-under .opt-group { border: 0; border-radius: 0; background: transparent; }
   .opt-off { margin: 0; padding: 0 14px 12px; font: 500 12px/1.35 var(--font-body); color: var(--ink-dim); }
@@ -825,7 +831,7 @@
         </div>
         <div class="sec-head"><span>Rules</span><span class="host-tag">Host</span></div>
         <div class="opts" id="rules"></div>
-        <button class="mini wide" id="rulesReset" type="button">Put the rules back to normal</button>
+        <button class="mini wide" id="rulesReset" type="button">Reset to Default</button>
         <!-- Start again at the end of the page, not always on screen (the owner's ask) -->
         <p class="foot-note" id="startNote" role="status"></p>
         <button id="lobbyStart" class="go page-end" type="button" data-pad="≡">Start</button>

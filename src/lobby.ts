@@ -27,6 +27,7 @@ import {
   CpuSlot,
   Guest,
   AFTERLIVES,
+  type Afterlife,
   ARENAS,
   BRICKS,
   CLOSE_IN,
@@ -649,23 +650,41 @@ export function createLobby(host: LobbyHost): {
     drawDynamic(g, w, T, 0, 0);
   }
 
-  // with angels only: whether an angel whose bomb knocks a robot out comes back in its place
+  // Post-Mortem Behavior (the owner's design): a switch; on, one switch each for Watcher, Angel and Zombie,
+  // exactly one of them on (Watcher by default; switching the one that is on off goes back to Watcher), and
+  // Angels come back under Angel, which can only be switched while Angel is on
+  const lifeAfter = (id: Afterlife) =>
+    toggle({
+      label: AFTERLIVES.find((x) => x.id === id)!.name,
+      hint: AFTERLIVES.find((x) => x.id === id)!.blurb,
+      get: () => s().afterlife === id,
+      set: (on) => {
+        s().afterlife = on ? id : 'watch';
+        changed();
+      },
+    });
   const angelsBack = toggle({
     label: 'Angels come back',
-    hint: 'An angel whose bomb knocks a robot out takes its place',
-    get: () => s().angelsBack,
+    hint: () => (s().afterlife === 'angel' ? 'An angel whose bomb knocks a robot out takes its place' : 'Turn Angel on first'),
+    get: () => s().afterlife === 'angel' && s().angelsBack,
     set: (v) => {
       s().angelsBack = v;
       changed();
     },
+    locked: () => s().afterlife !== 'angel',
   });
-  {
-    const shown = angelsBack.refresh;
-    angelsBack.refresh = () => {
-      shown();
-      angelsBack.el.hidden = s().afterlife !== 'angel';
-    };
-  }
+  angelsBack.el.classList.add('sub-of'); // set in under Angel, which it belongs to
+  const postMortem = toggle({
+    label: 'Post-Mortem Behavior',
+    hint: 'What a robot out of lives does for the rest of the round',
+    get: () => s().postMortem,
+    set: (v) => {
+      s().postMortem = v;
+      changed();
+    },
+    offText: 'Out of lives, you watch the rest of the round.',
+    under: [lifeAfter('watch'), lifeAfter('angel'), angelsBack, lifeAfter('zombie')],
+  });
   const rules: Opt[] = [
     toggle({
       label: 'Round timer',
@@ -727,17 +746,7 @@ export function createLobby(host: LobbyHost): {
       },
       text: (v) => (v === 1 ? 'One life' : `${v} lives`),
     }),
-    choice({
-      label: 'Out of lives',
-      hint: () => AFTERLIVES.find((x) => x.id === s().afterlife)!.blurb,
-      values: () => AFTERLIVES.map((x) => x.name),
-      get: () => AFTERLIVES.findIndex((x) => x.id === s().afterlife),
-      set: (i) => {
-        s().afterlife = AFTERLIVES[i].id;
-        changed();
-      },
-    }),
-    angelsBack,
+    postMortem,
     slider({
       label: 'Bricks',
       hint: 'How much of the arena starts filled. The picture above shows it.',
@@ -792,7 +801,7 @@ export function createLobby(host: LobbyHost): {
   ];
   const refreshRules = mount($('rules'), rules);
   $('rulesReset').addEventListener('click', () =>
-    confirmFirst('Put the rules back to normal?', 'The arena, timer, rounds, lives, out of lives, bricks, start and power-ups go back to the usual ones. Your players stay as they are.', 'Reset rules', (yes) => {
+    confirmFirst('Reset to default?', 'The arena, timer, rounds, lives, post-mortem behavior, bricks, start and power-ups go back to their defaults. Your players stay as they are.', 'Reset to Default', (yes) => {
       if (!yes) return;
       host.setup = defaultRules(s(), host.myColor);
       changed();

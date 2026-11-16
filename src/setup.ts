@@ -107,14 +107,19 @@ export const MAX_FIRST_TO = 9;
  * call; it was 3), so a setup saved before then has its Rounds to win put back to 1. 3: Closing in has five
  * steps in place of three (Slow, Normal, Fast became Very slow, Normal, Fast).
  */
-export const SETUP_VERSION = 6;
+export const SETUP_VERSION = 7;
+
+/** What a robot out of lives does, taking the Post-Mortem Behavior switch into account. */
+export function afterlifeOf(s: MatchSetup): Afterlife {
+  return s.postMortem ? s.afterlife : 'watch';
+}
 
 /** What a robot out of lives does for the rest of the round (MatchSetup.afterlife), in the lobby's order. */
 export type Afterlife = 'watch' | 'angel' | 'zombie';
 export const AFTERLIVES: { id: Afterlife; name: string; blurb: string }[] = [
-  { id: 'watch', name: 'Watch', blurb: 'Out of lives, you watch the rest of the round.' },
-  { id: 'angel', name: 'Angel', blurb: 'Haunt the wall and throw bombs in: hold A to throw further.' },
-  { id: 'zombie', name: 'Zombie', blurb: 'Get up again where you fell, slow, with one small bomb to get in the others\' way.' },
+  { id: 'watch', name: 'Watcher', blurb: 'Watch the rest of the round' },
+  { id: 'angel', name: 'Angel', blurb: 'Haunt the wall and throw bombs in: hold A to throw further' },
+  { id: 'zombie', name: 'Zombie', blurb: 'Get up where you fell, slow, with one small bomb' },
 ];
 
 export interface MatchSetup {
@@ -147,6 +152,8 @@ export interface MatchSetup {
    * in, or get up again in the arena as a zombie with one small bomb (AFTERLIFE)
    */
   afterlife: Afterlife;
+  /** the lobby's Post-Mortem Behavior switch: off, everyone out of lives watches, whatever `afterlife` says */
+  postMortem: boolean;
   /** with angels: an angel whose bomb knocks a robot out comes back in its place */
   angelsBack: boolean;
 }
@@ -169,7 +176,8 @@ export function defaultSetup(myColor: string): MatchSetup {
     itemsOn: false,
     items: { bomb: 2, fire: 2, speed: 2, kick: 2, grab: 2, shield: 2, curse: 2 },
     lives: 1,
-    afterlife: 'watch', // angels and zombies are off by default (the owner's call)
+    afterlife: 'watch', // Watcher is always the default (the owner's call)
+    postMortem: false,
     angelsBack: false,
   };
 }
@@ -220,8 +228,8 @@ export function worldConfig(s: MatchSetup, myColor: string, seed: number, guests
     startFire: s.startOn ? s.startFire : START_FIRE,
     startSpeed: s.startOn ? s.startSpeed : 0,
     lives: s.lives,
-    angels: s.afterlife !== 'angel' ? 'off' : s.angelsBack ? 'revive' : 'on',
-    zombies: s.afterlife === 'zombie',
+    angels: afterlifeOf(s) !== 'angel' ? 'off' : s.angelsBack ? 'revive' : 'on',
+    zombies: afterlifeOf(s) === 'zombie',
   };
 }
 
@@ -239,8 +247,8 @@ export function summary(s: MatchSetup, guests = 0): string {
     `First to ${s.firstTo}`,
   ];
   if (s.lives > 1) parts.push(`${s.lives} lives`);
-  if (s.afterlife === 'angel') parts.push(s.angelsBack ? 'Angels come back' : 'Angels');
-  if (s.afterlife === 'zombie') parts.push('Zombies');
+  if (afterlifeOf(s) === 'angel') parts.push(s.angelsBack ? 'Angels come back' : 'Angels');
+  if (afterlifeOf(s) === 'zombie') parts.push('Zombies');
   if (s.startOn) parts.push('Custom start');
   if (s.itemsOn) parts.push('Custom power-ups');
   return parts.join(' · ');
@@ -295,6 +303,9 @@ export function readSetup(raw: unknown, myColor: string, colorIds: string[]): Ma
   const was = r as Partial<MatchSetup> & { angels?: unknown };
   if (AFTERLIVES.some((a) => a.id === was.afterlife)) out.afterlife = was.afterlife as Afterlife;
   else if (was.angels === true && typeof r.v === 'number' && r.v === 5) out.afterlife = 'angel'; // version 5 had an Angels switch
+  // version 7 put the choice under a Post-Mortem Behavior switch: a choice made before it, it is on
+  if (typeof was.postMortem === 'boolean') out.postMortem = was.postMortem;
+  else out.postMortem = out.afterlife !== 'watch';
   if (typeof r.angelsBack === 'boolean') out.angelsBack = r.angelsBack;
   return out;
 }
