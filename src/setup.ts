@@ -406,3 +406,19 @@ export function save(key: string, value: unknown): void {
     /* storage is optional */
   }
 }
+
+/**
+ * The tile size (in screen pixels) to draw the arena at: the biggest up to `T` that makes the arena a whole
+ * number of page pixels wide and high. Browsers place and size things in fractions of a page pixel (Safari in
+ * 64ths), and an arena 1172 screen pixels wide at density 3 is 390.67 page pixels, which Safari rounds to
+ * 390.67 less a hair: the canvas is then stretched by that hair and every pixel of it is smoothed, the whole
+ * arena soft while the text round it stays sharp. That was the blur that kept coming back on the owner's
+ * iPhone and could not be seen on a computer, where the density is 2 and halves fit 64ths exactly. At most a
+ * few screen pixels a tile are given up (a tile is about 80). On a fractional density (a zoomed page) a whole
+ * page pixel is rarely a whole screen pixel, so the nearest it can find is taken, or `T` as it is.
+ */
+export function wholeTile(T: number, cols: number, rows: number, dpr: number): number {
+  const whole = (n: number): boolean => Math.abs(n - Math.round(n)) < 1e-6;
+  for (let t = T; t >= Math.max(8, T - 12); t--) if (whole((t * cols) / dpr) && whole((t * rows) / dpr)) return t;
+  return T;
+}

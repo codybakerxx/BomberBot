@@ -23,7 +23,7 @@ import {
   type ServerMsg,
 } from '../src/net';
 import { makeRng } from '../src/sim';
-import { ARENAS, defaultRules, defaultSetup } from '../src/setup';
+import { ARENAS, defaultRules, defaultSetup, wholeTile } from '../src/setup';
 import type { World } from '../src/sim';
 
 assert.deepStrictEqual(COLOR_IDS, COLORS.map((c) => c.id), 'the server knows the same robots as the page');
@@ -36,6 +36,16 @@ for (const a of ARENAS) {
   assert.ok(r.roundSecs === a.roundSecs && r.closeIn === a.closeIn, `and uses ${a.name}'s timer and closing in`);
   assert.ok(r.firstTo === 1 && r.lives === 1, 'the other rules go back to their defaults');
 }
+
+// the arena is a whole number of page pixels on a screen of density 3 (an iPhone), so it is never stretched
+for (const [cols, rows] of [[11, 9], [13, 11], [15, 13], [17, 15]]) {
+  for (let T = 30; T <= 120; T++) {
+    const t = wholeTile(T, cols, rows, 3);
+    assert.ok(t <= T && T - t <= 2, `a tile gives up at most 2 screen pixels (${T} → ${t})`);
+    assert.ok(Number.isInteger((t * cols) / 3) && Number.isInteger((t * rows) / 3), `${cols}×${rows} at ${t}: whole page pixels`);
+  }
+}
+assert.strictEqual(wholeTile(80, 13, 11, 2), 80, 'at density 2 any even tile already fits');
 
 // room codes
 const rng = makeRng(7);

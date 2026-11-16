@@ -21,7 +21,7 @@ import { readDance, type DanceId } from './dances';
 import { createPadNav } from './padnav';
 import { PAD } from './bindings';
 import { createRemap } from './remap';
-import { Guest, MatchSetup, Prefs, SHARPNESS, SOUND_NAMES, arenaOf, clockText, defaultSetup, load, readPrefs, readSetup, save, summary, worldConfig } from './setup';
+import { Guest, MatchSetup, Prefs, SHARPNESS, SOUND_NAMES, arenaOf, clockText, defaultSetup, load, readPrefs, readSetup, save, summary, wholeTile, worldConfig } from './setup';
 import { Opt, answerConfirm, choice, confirmFirst, confirmOpen, heading, mount, note, slider, toggle, wireConfirm, wireFlash } from './ui';
 import { Hand, STRAIGHT, standardAims, uniformAims } from './swipe';
 import { Online } from './online';
@@ -332,7 +332,10 @@ const HEAD_R = 13;
  * of its head is, in screen pixels from the scoreboard's own top left. Four places, or one per player when
  * more than four are playing.
  */
-let scoreCells: { x: number; w: number; y: number }[] = [];
+/** Where each place on the scoreboard goes: its cell, the middle of its head, and the middle of its name under it. */
+let scoreCells: { x: number; w: number; y: number; ny: number }[] = [];
+/** the size of the names under the heads, in page pixels */
+let scoreNameSize = 10;
 /** The most a head on the scoreboard may be, centre to edge, so it fits the height it has. */
 let scoreHeadMax = 13;
 
@@ -372,7 +375,7 @@ function layout(): void {
   const minControls = stacked ? Math.min(230, H * 0.3) : 0;
   const availH = H - topBar - minControls;
   // the free line is as tall as one block, so the height has to hold one row more than the arena has
-  T = Math.max(8, Math.floor(Math.min((W * dpr) / world.w, (availH * dpr) / (world.h + (stacked ? INFO_ROWS : 0)))));
+  T = wholeTile(Math.max(8, Math.floor(Math.min((W * dpr) / world.w, (availH * dpr) / (world.h + (stacked ? INFO_ROWS : 0))))), world.w, world.h, dpr);
   canvas.width = T * world.w;
   canvas.height = T * world.h;
   const cw = canvas.width / dpr;
@@ -383,7 +386,10 @@ function layout(): void {
   // fractional density (a zoomed page: 3.5, 2.625...), a whole page pixel can fall between two screen
   // pixels, and then every pixel of the arena is shared out between two of the screen's: the whole map goes
   // soft. Which arenas hit this depended on their size, so it came and went.
-  const onPixel = (v: number): number => Math.round(v * dpr) / dpr;
+  // On a screen of a whole density (an iPhone's 3) it goes on a whole page pixel too: Safari places things
+  // in 64ths of a page pixel, and a third of one is not a 64th, so an arena a third of a pixel off was
+  // smoothed over (the blur that came back in November 2026; see wholeTile).
+  const onPixel = (v: number): number => (Number.isInteger(dpr) ? Math.round(v) : Math.round(v * dpr) / dpr);
   const left = onPixel((W - cw) / 2);
   canvas.style.left = `${left}px`;
   const infoRow = stacked ? Math.round((T / dpr) * INFO_ROWS) : 0;
@@ -415,29 +421,36 @@ function layout(): void {
   const places = Math.max(4, world.players.length);
   const perRow = 5; // sideways, with more than four players: rows of up to five
   const rows = places > 4 ? Math.ceil(places / perRow) : 1;
+  // Each head has its player's name under it (the owner's ask). Upright with four, the names sit in the free
+  // line under the top bar; upright with more, heads and names share that line; sideways each row is taller.
+  const ROW = 58;
   const box =
     stacked && places > 4
       ? // more than four players, upright: the scoreboard takes the free line under the top bar, one place each across the screen
         { left: 0, top: topBar, width: W, height: Math.max(16, infoRow) }
       : stacked
-        ? { left: 0, top: 0, width: W, height: topBar }
-        : { left: 6, top: 40, width: Math.min(side - 12, places > 4 ? 300 : 260), height: 44 * rows };
+        ? { left: 0, top: 0, width: W, height: topBar + infoRow }
+        : { left: 6, top: 40, width: Math.min(side - 12, places > 4 ? 300 : 260), height: ROW * rows };
   scoreHeadMax = HEAD_R;
+  scoreNameSize = 10;
   if (stacked && places > 4) {
     const cell = (W - 12) / places;
-    scoreCells = Array.from({ length: places }, (_, i) => ({ x: 6 + i * cell, w: cell, y: box.height / 2 }));
-    scoreHeadMax = Math.max(6, Math.min(HEAD_R, box.height * 0.42));
+    const h = box.height;
+    scoreNameSize = Math.max(8, Math.min(10, Math.round(h * 0.3)));
+    scoreHeadMax = Math.max(5, Math.min(HEAD_R, (h - scoreNameSize - 4) / 2));
+    scoreCells = Array.from({ length: places }, (_, i) => ({ x: 6 + i * cell, w: cell, y: 1 + scoreHeadMax, ny: h - scoreNameSize / 2 - 1 }));
   } else if (stacked) {
     const half = (timer.offsetWidth || 80) / 2 + 5;
     const btn = $('menuBtn').getBoundingClientRect();
     const edge = (btn.width ? Math.min(W - btn.left, 60) : 48) + 4;
     const cell = Math.max(24, (W / 2 - half - edge) / 2);
-    scoreCells = [edge, edge + cell, W / 2 + half, W / 2 + half + cell].map((x) => ({ x, w: cell, y: topBar / 2 + 3 }));
+    scoreNameSize = 11;
+    scoreCells = [edge, edge + cell, W / 2 + half, W / 2 + half + cell].map((x) => ({ x, w: cell, y: topBar / 2 + 3, ny: topBar + Math.min(9, infoRow / 2) }));
   } else {
     box.left = Math.round((side - box.width) / 2);
     const across = places > 4 ? perRow : 4;
     const cell = box.width / across;
-    scoreCells = Array.from({ length: places }, (_, i) => ({ x: (i % across) * cell, w: cell, y: 44 * Math.floor(i / across) + 26 }));
+    scoreCells = Array.from({ length: places }, (_, i) => ({ x: (i % across) * cell, w: cell, y: ROW * Math.floor(i / across) + 22, ny: ROW * Math.floor(i / across) + 22 + HEAD_R + 11 }));
   }
   // sideways with more than four players the scoreboard has two rows: the swipe pad starts under them
   touch.style.setProperty('--pad-top', `${stacked ? 88 : Math.max(88, box.top + box.height + 6)}px`);
@@ -495,10 +508,26 @@ let scoreKey = '';
  * own colour. Where the four places go is worked out in layout().
  * Only redrawn when something it shows has changed.
  */
+/** The name under a head on the scoreboard: the one a person typed, or the robot's. */
+function scoreName(i: number): string {
+  const p = world.players[i];
+  if (!p) return '';
+  if (i === myIdx() && myName) return myName;
+  if (net && human(i) && seats[i]?.name) return seats[i].name;
+  return botName(colorById(p.colorId));
+}
+/** `text`, cut short with … if it is wider than `max` in the context's font. */
+function fitText(c: CanvasRenderingContext2D, text: string, max: number): string {
+  if (c.measureText(text).width <= max) return text;
+  let t = text;
+  while (t.length > 1 && c.measureText(`${t}…`).width > max) t = t.slice(0, -1);
+  return `${t}…`;
+}
+
 function drawScore(): void {
   const places = Array.from({ length: Math.max(4, world.players.length) }, (_, i) => world.players[i]);
   const winner = world.over ? world.over.winner : -1;
-  const key = places.map((p, i) => (p ? `${p.colorId}${p.alive ? '' : 'x'}${p.zombie ? 'z' : ''}${wins[i]}l${p.lives}` : '-')).join('|') + `|${winner}|${leader}|${score.width}x${score.height}`;
+  const key = places.map((p, i) => (p ? `${p.colorId}${p.alive ? '' : 'x'}${p.zombie ? 'z' : ''}${wins[i]}l${p.lives}${scoreName(i)}` : '-')).join('|') + `|${winner}|${leader}|${score.width}x${score.height}`;
   if (key === scoreKey) return;
   scoreKey = key;
   const k = score.width / (parseFloat(score.style.width) || score.width); // screen pixels to canvas pixels
@@ -526,6 +555,7 @@ function drawScore(): void {
     }
     const cx = cell.x + (cell.w - (2 * r + gap + numW)) / 2 + r;
     const cy = cell.y;
+    const numX = cx + r + gap; // where the number of wins starts
     const dim = !p ? 0.45 : p.alive && !p.zombie ? 1 : 0.45; // (a zombie is out of the round)
     // the helmet has a rim in the player's colour, which is what shows it against the dark screen
     // (the first robot's helmet was all black, and needed a disc behind it and a ring round it here)
@@ -536,18 +566,29 @@ function drawScore(): void {
     // the crown goes on last, and is not dimmed
     if (i === leader) drawHead(sctx, cx, cy, r, col, { crownOnly: true });
     sctx.fillStyle = i === winner ? col.glow : p.alive ? '#eef1fb' : '#8a90a3';
-    sctx.fillText(label, cx + r + gap, cy + 1);
-    // with more than one life a round, a little dot under the head for each life left
+    sctx.fillText(label, numX, cy + 1);
+    // with more than one life a round, a little dot for each life left, under the number (the name is under the head)
     if (setup.lives > 1 && p.lives > 0) {
-      const dr = Math.max(1.3, r * 0.14);
-      const step = dr * 3;
+      const dr = Math.max(1.2, r * 0.12);
+      const step = dr * 2.8;
       sctx.fillStyle = col.glow;
       for (let n = 0; n < p.lives; n++) {
         sctx.beginPath();
-        sctx.arc(cx + (n - (p.lives - 1) / 2) * step, cy + r + dr + 2, dr, 0, Math.PI * 2);
+        sctx.arc(numX + dr + n * step, cy + size * 0.42 + dr + 1, dr, 0, Math.PI * 2); // (just under the number)
         sctx.fill();
       }
     }
+    // the player's name under the head, as wide as the cell allows (a typed name is drawn as text, never markup);
+    // yours in your colour
+    const name = scoreName(i);
+    sctx.font = `600 ${scoreNameSize}px "Chakra Petch", system-ui, sans-serif`;
+    sctx.textAlign = 'center';
+    sctx.fillStyle = i === myIdx() ? col.glow : p.alive && !p.zombie ? '#c9cfdf' : '#6f7588';
+    const shown = fitText(sctx, name, cell.w - 4);
+    const half = sctx.measureText(shown).width / 2;
+    // centred under the head, kept inside its own place
+    sctx.fillText(shown, Math.max(cell.x + 2 + half, Math.min(cx, cell.x + cell.w - 2 - half)), cell.ny);
+    sctx.textAlign = 'left';
     said.push(`${nameOf(i)} ${wins[i]}${i === leader ? ' (in the lead)' : ''}`);
   });
   score.setAttribute('aria-label', `Rounds won: ${said.join(', ')}`);
@@ -898,6 +939,15 @@ function applySettings(save: boolean): void {
     : t.match
       ? `On now: Standard, made for a typical ${which} thumb. Your match is saved: tap My thumb to switch it back on.`
       : `On now: Standard, made for a typical ${which} thumb. Tap My thumb to measure yours in about 40 seconds.`;
+  // the numbers of the match in use: how far each direction is read leaning clockwise (+) or anticlockwise (−)
+  // from straight, so a setting that feels right can be noted down
+  if (on) {
+    const lean = (d: number): string => {
+      const v = Math.round(((((STRAIGHT[d] - on.aims[d] + 180) % 360) + 360) % 360) - 180);
+      return `${v > 0 ? '+' : v < 0 ? '−' : ''}${Math.abs(v)}°`;
+    };
+    $('matchState').textContent += ` Its lean: up ${lean(1)}, down ${lean(2)}, left ${lean(3)}, right ${lean(4)}.`;
+  }
   $('matchStart').hidden = !t.match;
   $('saveNote').hidden = canSave;
 
@@ -1988,7 +2038,10 @@ const remap = createRemap(input, {
 });
 
 document.addEventListener('contextmenu', (e) => e.preventDefault());
-document.addEventListener('gesturestart', (e) => e.preventDefault());
+// (two thumbs on the screen at once can read as a pinch, and a quick double tap as a zoom: a zoomed page
+// shows the arena's pixels stretched, so neither is allowed to zoom it)
+for (const g of ['gesturestart', 'gesturechange', 'gestureend']) document.addEventListener(g, (e) => e.preventDefault());
+document.addEventListener('dblclick', (e) => e.preventDefault());
 window.addEventListener('resize', layout);
 window.addEventListener('orientationchange', () => setTimeout(layout, 200));
 

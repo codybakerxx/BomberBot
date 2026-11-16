@@ -185,3 +185,6 @@ Built in November 2026; `docs/ONLINE.md` has the details.
 
 The rules were written with this in mind from the start: they use no browser features and no randomness of their own, and the same seed with the same inputs always gives the same match.
 - Reset to Default on the Match page (November 2026, the owner): resets to the defaults of the arena shown (Compact's 1:00 and Quick on Compact, and so on), keeping that arena, instead of going back to Classic.
+- The arena blur came back (November 2026). Cause found in the maths, not on a screen: at density 3 an arena sized in thirds of a page pixel is stretched a hair by Safari, which places things in 64ths, so every pixel is smoothed. The tile size is now picked so the arena is whole page pixels (`wholeTile`), at a cost of at most 2 screen pixels a tile. Pinch and double-tap zoom are also blocked.
+- Names under the scoreboard heads (the owner's ask, November 2026).
+- Settings › Controls shows the lean of the swipe match in use, so a setting that feels right can be noted.
