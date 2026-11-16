@@ -30,6 +30,22 @@ Agreed with the owner in November 2026, after he listed everything he wants the 
 
 **One at a time, each play-tested before the next:** new power-ups, more maps with map selection, more character styles and colours, choosable graphic styles, animals to ride.
 
+**The owner's list for later (16 November 2026), in his order.** Not started; each one to be talked through before it is built.
+
+1. **A fun website icon.** Not just the letter B: a small version of the title screen (the robot, the bomb, the name), so it stands out in a browser tab and on a phone's home screen.
+2. **Notifications.** Friends will add the game to their phone's home screen from the website and use it as an app (a web app, not in the App Store; the owner is on iOS). Something to tell them, for example, that a friend has made a room. On iPhone, a web site can only send notifications once it has been added to the home screen (iOS 16.4 and later) and the player has said yes; it needs the server to send them.
+3. **A guide to putting the game on your home screen**, in one of the menus: the steps on iPhone (Share › Add to Home Screen) and on Android. Goes with 1 (the icon it gets) and 2.
+4. **A small shake of the screen when a bomb goes off.** Should follow Settings › Graphics › Less movement (no shake when that is on).
+5. **Better sound effects.**
+6. **Music, maybe**, with an off switch.
+7. **A graphics update.**
+8. **More levels** (arenas).
+9. **More power-ups.**
+10. **Less delay online**, if it can go further (see `docs/ONLINE.md`; the ping in the menu during an online match is where to start).
+11. **More skins for the robots.**
+
+Several of these touch the rule that everything is drawn and made in code with no image or sound files (5, 6, 7, 11, and the icon in 1): the owner decides whether that changes.
+
 **A decision that is the owner's:** whether the game may use image and sound files (today everything is drawn and made in code, in one self-contained page). Where the server for online play is hosted was decided in November 2026: Cloudflare (Workers and Durable Objects), after comparing a VPS and Cloudflare Tunnel.
 
 ## What the finished game should have
