@@ -538,6 +538,11 @@
   .opt-slider { flex-direction: column; align-items: stretch; gap: 6px; padding: 10px 12px 10px 14px; }
   .opt-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
   .opt-range { display: flex; align-items: center; gap: 10px; }
+  .range-wrap { position: relative; flex: 1 1 auto; min-width: 0; display: flex; }
+  /* the value over the slider's circle (slider onThumb): small, centred on the circle wherever it is (26 px across) */
+  .opt-slider.on-thumb .opt-head .opt-value { display: none; }
+  .opt-slider.on-thumb .opt-range { margin-top: 12px; }
+  .thumb-value { position: absolute; bottom: calc(50% + 14px); left: calc(13px + (100% - 26px) * var(--at, 0)); transform: translateX(-50%); white-space: nowrap; pointer-events: none; font: 700 11px/1 var(--font-display); letter-spacing: 0.04em; color: var(--accent); }
   .opt-range input { flex: 1 1 auto; min-width: 0; height: 36px; margin: 0; background: transparent; -webkit-appearance: none; appearance: none; cursor: pointer; }
   .opt-range input::-webkit-slider-runnable-track { height: 8px; border-radius: 4px; background: linear-gradient(to right, var(--accent) var(--fill, 0%), var(--line) var(--fill, 0%)); }
   .opt-range input::-moz-range-track { height: 8px; border-radius: 4px; background: linear-gradient(to right, var(--accent) var(--fill, 0%), var(--line) var(--fill, 0%)); }

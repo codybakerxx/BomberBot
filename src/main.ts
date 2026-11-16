@@ -887,6 +887,7 @@ const sensOpts: Opt[] = [
       applySettings(true);
     },
     text: (v) => SENSITIVITY[v].name,
+    onThumb: true,
   }),
 ];
 let refreshSens = (): void => {};
@@ -1578,6 +1579,7 @@ const padOpts: Opt[] = [
       prefsChanged();
     },
     text: (v) => (v === 100 ? 'Usual' : v < 100 ? `Fainter (${v}%)` : `Stronger (${v}%)`),
+    onThumb: true,
   }),
 ];
 const gfxOpts: Opt[] = [

@@ -122,8 +122,11 @@ export function slider(o: {
   get: () => number;
   set: (v: number) => void;
   text: (v: number) => string;
+  /** the value in small type over the slider's circle, following it, in place of beside the name (the owner's ask for Settings › Controls) */
+  onThumb?: boolean;
 }): Opt {
   const row = el('div', 'opt opt-slider');
+  if (o.onThumb) row.classList.add('on-thumb');
   const head = el('div', 'opt-head');
   const { box, hintEl } = nameBlock(o.label, o.hint);
   const val = el('span', 'opt-value');
@@ -139,7 +142,12 @@ export function slider(o: {
   const minus = iconButton(MINUS, `Less ${o.label.toLowerCase()}`, 'step small');
   const plus = iconButton(PLUS, `More ${o.label.toLowerCase()}`, 'step small');
   const line = el('div', 'opt-range');
-  line.append(minus, range, plus);
+  const track = el('div', 'range-wrap');
+  const tip = el('span', 'thumb-value');
+  tip.setAttribute('aria-hidden', 'true');
+  track.append(range);
+  if (o.onThumb) track.append(tip);
+  line.append(minus, track, plus);
   row.append(head, line);
   const put = (v: number): void => {
     const c = Math.max(o.min, Math.min(o.max, Math.round(v / step) * step));
@@ -156,6 +164,8 @@ export function slider(o: {
       range.setAttribute('aria-valuetext', o.text(v));
       range.style.setProperty('--fill', `${((v - o.min) / (o.max - o.min || 1)) * 100}%`);
       val.textContent = o.text(v);
+      tip.textContent = o.text(v);
+      track.style.setProperty('--at', String((v - o.min) / (o.max - o.min || 1)));
       minus.disabled = v <= o.min;
       plus.disabled = v >= o.max;
       if (hintEl) hintEl.textContent = hintText(o.hint);

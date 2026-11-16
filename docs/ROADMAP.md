@@ -192,3 +192,4 @@ The rules were written with this in mind from the start: they use no browser fea
 - The standard swipe lean is 8° (16 November 2026, version 3): the owner asked for the best default and told Claude to set it. 8° was the best all-round lean on simulated thumbs (`docs/SWIPE-HISTORY.md`). The owner keeps his own 2° match.
 - The standard swipe lean is 5° (16 November 2026, version 4): the owner's pick, between his own 2° and 8°. The Standard / My thumb switch stays.
 - Movement sensitivity (16 November 2026, the owner's design): one slider in Settings › Controls, Low 2°, Medium 5° (default), High 8°, in place of the standard lean, the Standard / My thumb switch and Match my thumb, which were taken out. History in `docs/SWIPE-HISTORY.md`; Match my thumb's code stays on its branches.
+- Settings › Controls sliders show their value in small type over the slider's circle, following it (the owner's ask, November 2026: beside the name it ran out of the box).
