@@ -190,43 +190,16 @@ export function createLobby(host: LobbyHost): {
   $('colNext').addEventListener('click', () => stepMine(1));
   swipeable($('youBot').closest<HTMLElement>('.panel')!, stepMine); // the whole robot panel
 
-  // ------------------------------------------------------------ your victory dance (the owner's ask)
-  // ‹ ›, a dot each, or a swipe anywhere on its panel; it plays over and over in the panel as you look
-  $('dancePrev').addEventListener('click', () => stepMyDance(-1));
-  $('danceNext').addEventListener('click', () => stepMyDance(1));
-  swipeable($('danceBot').closest<HTMLElement>('.panel')!, stepMyDance);
-  for (const d of DANCES) {
-    const b = document.createElement('button');
-    b.type = 'button';
-    b.className = 'dot';
-    b.id = `dance-${d.id}`;
-    b.setAttribute('aria-label', `${d.name} dance`);
-    b.addEventListener('click', () => setMyDance(d.id));
-    $('danceDots').append(b);
+  // ------------------------------------------------------------ victory dances (the owner's design)
+  // Each card has a small ‹ dance › along its foot; arrows, a tap on the name, or a swipe across the card
+  // pick it, and the card's robot then does it once through. Another player here also uses up and down on
+  // their controller. A CPU player's dance is on its panel too, where its robot dances while it is open.
+  /** the cards doing their dance just now, by who (`me`, `g<pad>`, `c<i>`), and since when */
+  const previews = new Map<string, number>();
+  function preview(who: string): void {
+    previews.set(who, performance.now());
+    startDancing();
   }
-  function stepMyDance(d: number): void {
-    setMyDance(stepDance(host.myDance, d));
-  }
-  function setMyDance(id: DanceId): void {
-    if (id === host.myDance) return;
-    host.myDance = id;
-    host.save();
-    danceFrom = performance.now(); // play the new one from its start
-    refreshDance();
-  }
-  function refreshDance(): void {
-    const d = danceOf(host.myDance);
-    $('danceName').textContent = d.name;
-    $('danceBlurb').textContent = d.blurb;
-    $('danceCount').textContent = `${DANCES.indexOf(d) + 1} of ${DANCES.length}`;
-    $('danceBot').setAttribute('aria-label', `Your robot doing the ${d.name} dance`);
-    for (const d2 of DANCES) $(`dance-${d2.id}`).setAttribute('aria-pressed', String(d2.id === d.id));
-  }
-
-  /**
-   * The dances, playing: yours in its panel, each other player's here on their card, and a CPU player's in its
-   * panel while that is open. One loop, while the lobby is showing; a canvas not on screen is skipped.
-   */
   let danceFrom = performance.now();
   let looping = false;
   function danceLoop(now: number): void {
@@ -234,15 +207,83 @@ export function createLobby(host: LobbyHost): {
       looping = false;
       return;
     }
-    const t = (now - danceFrom) / 1000;
-    drawDancer($<HTMLCanvasElement>('danceBot'), pick, host.myDance, t, 0.62);
-    for (const g of guests()) {
-      const cv = document.querySelector<HTMLCanvasElement>(`#guest-${g.pad} canvas`);
-      if (cv) drawDancer(cv, g.pick, g.dance, t, 0.8);
+    for (const [who, from] of previews) {
+      const cv = document.querySelector<HTMLCanvasElement>(`canvas[data-who="${who}"]`);
+      const colour = cardColour(who);
+      if (!cv || !colour) {
+        previews.delete(who);
+        continue;
+      }
+      const t = (now - from) / 1000;
+      const d = cardDance(who);
+      if (t >= PREVIEW[d]) {
+        previews.delete(who);
+        drawBotOn(cv, colour); // done: standing again
+      } else drawDancer(cv, colour, d, t, 0.8);
     }
     const c = s().cpus[editing];
-    if (!sheet.hidden && c) drawDancer($<HTMLCanvasElement>('cpuBot'), c.colorId, c.dance ?? 'party', t, 0.78);
-    requestAnimationFrame(danceLoop);
+    if (!sheet.hidden && c) drawDancer($<HTMLCanvasElement>('cpuBot'), c.colorId, c.dance ?? 'party', (now - danceFrom) / 1000, 0.78);
+    if (previews.size || !sheet.hidden) requestAnimationFrame(danceLoop);
+    else looping = false;
+  }
+  /** whose card: its robot's colour now, and its dance */
+  function cardColour(who: string): string | null {
+    if (who === 'me') return host.myColor;
+    if (who[0] === 'g') return guestOf(Number(who.slice(1)))?.pick ?? null;
+    return s().cpus[Number(who.slice(1))]?.colorId ?? null;
+  }
+  function cardDance(who: string): DanceId {
+    if (who === 'me') return host.myDance;
+    if (who[0] === 'g') return guestOf(Number(who.slice(1)))?.dance ?? 'party';
+    return s().cpus[Number(who.slice(1))]?.dance ?? 'party';
+  }
+  function setCardDance(who: string, id: DanceId): void {
+    if (who === 'me') {
+      host.myDance = id;
+      host.save();
+    } else if (who[0] === 'g') {
+      const g = guestOf(Number(who.slice(1)));
+      if (g) g.dance = id;
+    } else {
+      const c = s().cpus[Number(who.slice(1))];
+      if (!c) return;
+      c.dance = id;
+      host.save();
+      refreshCpu();
+    }
+    const name = document.getElementById(`dp-name-${who}`);
+    if (name) {
+      name.textContent = danceOf(id).name;
+      name.setAttribute('aria-label', `Victory dance: ${danceOf(id).name}. Tap to see it.`);
+    }
+    preview(who);
+  }
+  /** The small ‹ dance › along the foot of a card, and a swipe across the whole card. */
+  function dancePick(wrap: HTMLElement, who: string): void {
+    const row = document.createElement('div');
+    row.className = 'dance-pick';
+    row.setAttribute('role', 'group');
+    row.setAttribute('aria-label', 'Victory dance');
+    const mk = (id: string, html: string, label: string, act: () => void): HTMLButtonElement => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.id = id;
+      b.innerHTML = html;
+      b.setAttribute('aria-label', label);
+      b.addEventListener('click', act);
+      return b;
+    };
+    const step = (d: number): void => setCardDance(who, stepDance(cardDance(who), d));
+    const name = mk(`dp-name-${who}`, '', `Victory dance: ${danceOf(cardDance(who)).name}. Tap to see it.`, () => preview(who));
+    name.className = 'dp-name';
+    name.textContent = danceOf(cardDance(who)).name;
+    row.append(
+      mk(`dp-prev-${who}`, '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>', 'Previous dance', () => step(-1)),
+      name,
+      mk(`dp-next-${who}`, '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg>', 'Next dance', () => step(1)),
+    );
+    wrap.append(row);
+    swipeable(wrap, step);
   }
   function startDancing(): void {
     if (looping) return;
@@ -251,8 +292,11 @@ export function createLobby(host: LobbyHost): {
   }
   /** How long each dance plays before it starts again, in the lobby: a whole go, start included. */
   const PREVIEW: Record<DanceId, number> = { party: 3.4, spin: 4.2, griddy: 5.24 };
-  /** A robot doing a dance on a canvas, small enough for its jumps and slides to stay inside. */
-  function drawDancer(cv: HTMLCanvasElement, colorId: string, dance: DanceId, t: number, fill: number): void {
+  /**
+   * A robot doing a dance on a card's canvas: a little smaller than it stands there, and with its jumps
+   * halved, so the jumps and slides stay inside the card.
+   */
+  function drawDancer(cv: HTMLCanvasElement, colorId: string, dance: DanceId, t: number, _fill = 0): void {
     const r = cv.getBoundingClientRect();
     if (r.width < 2 || r.height < 2) return;
     const dpr = host.density();
@@ -265,9 +309,10 @@ export function createLobby(host: LobbyHost): {
     const g = cv.getContext('2d')!;
     g.setTransform(1, 0, 0, 1, 0, 0);
     g.clearRect(0, 0, w, h);
-    const size = Math.min((h * fill) / -ROBOT.top, (w * 0.7) / 0.78);
+    const size = 0.8 * Math.min((h * 0.92) / -ROBOT.top, (w * 0.95) / 0.78); // drawBotOn's size, 80%
     const f = danceFrame(dance, t % PREVIEW[dance]);
-    drawRobot(g, w / 2 + f.dx * size, h * 0.97, size, colorById(colorId), f.facing, f.walk, f.moving, { ...f.pose, fine: false });
+    const pose = { ...f.pose, jump: (f.pose.jump ?? 0) * 0.5, fine: false };
+    drawRobot(g, w / 2 + f.dx * size, h * 0.96, size, colorById(colorId), f.facing, f.walk, f.moving, pose);
   }
   const dots = $('youDots');
   for (const c of COLORS) {
@@ -372,7 +417,12 @@ export function createLobby(host: LobbyHost): {
     mt.innerHTML = `<b></b><small>P1 · you</small><span class="rdy${ready ? ' on' : ''}">${ready ? '✓ Ready' : 'Not ready'}</span>`;
     mt.querySelector('b')!.textContent = host.myName || 'You'; // typed by the player: set as text, never as markup
     me.append(mc, mt);
-    box.append(me);
+    mc.dataset.who = 'me';
+    const meWrap = document.createElement('div');
+    meWrap.className = 'slot-wrap';
+    meWrap.append(me);
+    dancePick(meWrap, 'me');
+    box.append(meWrap);
     const cvs: [HTMLCanvasElement, string][] = [[mc, host.myColor]];
     const lastOne = s().cpus.length + guests().length <= 1;
     guests().forEach((g, gi) => {
@@ -388,8 +438,9 @@ export function createLobby(host: LobbyHost): {
       const on = g.ready && g.pick === g.colorId;
       t.innerHTML = `<b></b><small></small><span class="rdy${on ? ' on' : ''}">${on ? '✓ Ready' : 'Not ready: A'}</span>`;
       t.querySelector('b')!.textContent = looking;
-      t.querySelector('small')!.textContent = `P${n} · ${danceOf(g.dance).name} ↕`; // up and down change it
+      t.querySelector('small')!.textContent = `P${n} · controller ${g.pad + 1}`;
       card.append(cv, t);
+      cv.dataset.who = `g${g.pad}`;
       const bin = document.createElement('button');
       bin.type = 'button';
       bin.className = 'bin';
@@ -401,8 +452,9 @@ export function createLobby(host: LobbyHost): {
       const wrap = document.createElement('div');
       wrap.className = 'slot-wrap';
       wrap.append(card, bin);
+      dancePick(wrap, `g${g.pad}`);
       box.append(wrap);
-      // (drawn by the dance loop: it does its dance)
+      cvs.push([cv, g.pick]);
     });
     s().cpus.forEach((c, i) => {
       const b = document.createElement('button');
@@ -414,6 +466,7 @@ export function createLobby(host: LobbyHost): {
       const t = document.createElement('div');
       t.innerHTML = `<b>${botName(colorById(c.colorId))}</b><small>P${cpuP(i)} · ${LEVELS[c.level].label}</small><span class="rdy on">✓ Ready</span>`;
       b.append(cv, t);
+      cv.dataset.who = `c${i}`;
       b.addEventListener('click', () => openSheet(i));
       // the bin: removes this CPU player at once (Undo brings it back)
       const bin = document.createElement('button');
@@ -427,6 +480,7 @@ export function createLobby(host: LobbyHost): {
       const wrap = document.createElement('div');
       wrap.className = 'slot-wrap';
       wrap.append(b, bin);
+      dancePick(wrap, `c${i}`);
       box.append(wrap);
       cvs.push([cv, c.colorId]);
     });
@@ -485,11 +539,14 @@ export function createLobby(host: LobbyHost): {
         s().cpus[editing].dance = DANCES[i].id;
         danceFrom = performance.now();
         changed();
+        startDancing();
       },
     }),
   ];
   const refreshCpu = mount($('cpuRows'), cpuOpts);
   function openSheet(i: number): void {
+    danceFrom = performance.now(); // its robot dances its dance while the panel is open
+    queueMicrotask(startDancing);
     editing = i;
     sheet.hidden = false;
     refresh();
@@ -796,10 +853,7 @@ export function createLobby(host: LobbyHost): {
   /** That player's up or down: the next dance, played on their card from its start. */
   function guestDance(pad: number, d: number): void {
     const g = guestOf(pad);
-    if (!g) return;
-    g.dance = stepDance(g.dance, d);
-    danceFrom = performance.now();
-    buildSlots();
+    if (g) setCardDance(`g${pad}`, stepDance(g.dance, d));
   }
   /** Ready: the robot that player is showing becomes theirs. A CPU player wearing it takes the one they had. */
   function guestReady(pad: number): void {
@@ -921,9 +975,7 @@ export function createLobby(host: LobbyHost): {
       }
       $('lobby').hidden = false;
       nameBox.hidden = true;
-      refreshDance();
-      danceFrom = performance.now();
-      startDancing();
+      previews.clear();
       $('youName').hidden = false;
       setPage(p ?? page);
       $(page === 'players' && !wide() ? 'colOk' : 'arenaStart').focus({ preventScroll: true });

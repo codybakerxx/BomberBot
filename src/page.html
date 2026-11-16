@@ -20,8 +20,8 @@
     touch     on-screen controls: dzone (swipe pad, with the dpad cross and the padTag caption inside it), btnA, btnB
     lobby     setting up a match (lobby.ts): the bar (lobbyBack, lobbyMode, lobbySound, lobbySettings), the summary,
               lobbyPrev (‹ beside the page names) and two pages (pgPlayers, pgMatch): lobbyPlayers (your robot youBot with colPrev, colNext and the colour
-              dots youDots; the name over them, youName, with editName, the pencil that swaps it for a box (myName) to type your own; your victory
-              dance: danceBot playing it, dancePrev, danceNext, danceName, danceBlurb, danceDots; the player cards in slots; allCpus) and lobbyMatch (the arena picture arenaPic with
+              dots youDots; the name over them, youName, with editName, the pencil that swaps it for a box (myName) to type your own; the player
+              cards in slots, each with its victory dance along its foot (dp-prev-, dp-name-, dp-next-); allCpus) and lobbyMatch (the arena picture arenaPic with
               arenaPrev, arenaNext, arenaDots, and a Start under it, arenaStart; the rules; rulesReset; startNote and lobbyStart, Start again at the end); playersNext ends lobbyPlayers
     cpuSheet  a CPU player's panel, over the lobby: colour and level (cpuRows), cpuRemove, cpuDone
     settings  your own settings, four pages: setControls (Steering thumb: handLeft, handRight; Swipe
@@ -450,9 +450,6 @@
   .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 12px; display: flex; flex-direction: column; align-items: center; gap: 8px; }
   .you-row { width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 6px; }
   #youBot { width: 150px; height: 150px; }
-  /* the victory dance playing: room for its jumps and slides */
-  #danceBot { flex: 1 1 auto; min-width: 0; max-width: 220px; height: 150px; }
-  #danceBlurb { min-height: 2.7em; }
   /* the arena picture fills the row between its arrows (bigger, the owner's ask) */
   #arenaPic { flex: 1 1 auto; min-width: 0; width: 100%; max-width: 340px; aspect-ratio: 15 / 13; border-radius: 8px; }
   .panel.arena .you-row { gap: 4px; }
@@ -523,6 +520,13 @@
   .slot-wrap .slot { padding-right: 8px; }
   .slot-wrap .slot b { padding-right: 32px; }
   .slot small { white-space: nowrap; }
+  /* each card's victory dance, a small ‹ name › along its foot (the owner's design); the card above makes room */
+  .slot-wrap .slot { padding-bottom: 40px; }
+  .dance-pick { position: absolute; left: 1px; right: 1px; bottom: 1px; height: 32px; display: grid; grid-template-columns: 34px minmax(0, 1fr) 34px; align-items: stretch; border-top: 1px solid var(--line); border-radius: 0 0 13px 13px; background: #121726; touch-action: pan-y; }
+  .dance-pick button { display: grid; place-items: center; padding: 0; cursor: pointer; color: var(--ink-dim); background: transparent; border: 0; }
+  .dance-pick button svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 2.6; stroke-linecap: round; stroke-linejoin: round; }
+  .dance-pick .dp-name { display: block; line-height: 32px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font: 700 12px/1 var(--font-display); letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink); }
+  .dance-pick .dp-name::before { content: '♪ '; color: var(--accent); }
   .bin { position: absolute; top: 6px; right: 6px; width: 36px; height: 36px; display: grid; place-items: center; padding: 0; cursor: pointer; color: #ff9a9a; background: #151a28; border: 1px solid #3a2530; border-radius: 10px; }
   .bin svg { width: 19px; height: 19px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
   .bin:disabled { opacity: 0.25; cursor: default; }
@@ -633,7 +637,6 @@
     .go.big { padding: 9px 10px; font-size: 15px; }
     .side-btn { height: 36px; }
     #youBot { width: 110px; height: 110px; }
-    #danceBot { height: 120px; }
     #arenaPic { max-width: 62vh; } /* sideways: as big as the short screen allows */
     .standings { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .pause-card { width: min(100%, 620px); gap: 8px; padding: 12px 14px; }
@@ -787,17 +790,6 @@
           <p class="hint center" id="youState" aria-live="polite"></p>
           <div class="dots" id="youDots" role="group" aria-label="Colours: under each, the player who wears it"></div>
           <button class="go ok" id="colOk" type="button" data-pad="Y">Ready</button>
-        </div>
-        <div class="sec-head"><span>Victory dance</span><span id="danceCount"></span></div>
-        <div class="panel dance">
-          <div class="you-row">
-            <button class="round-btn" id="dancePrev" type="button" aria-label="Previous dance"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></button>
-            <canvas id="danceBot" role="img" aria-label="Your robot dancing"></canvas>
-            <button class="round-btn" id="danceNext" type="button" aria-label="Next dance"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg></button>
-          </div>
-          <div class="big-name" id="danceName"></div>
-          <p class="hint center" id="danceBlurb"></p>
-          <div class="dots small" id="danceDots" role="group" aria-label="Dances"></div>
         </div>
         <div class="sec-head"><span>Players</span><span id="playerCount"></span></div>
         <div class="slots" id="slots"></div>
