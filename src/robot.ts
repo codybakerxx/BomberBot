@@ -35,11 +35,6 @@ export interface Pose {
   jump?: number;
   /** how far each arm is raised, 0 hanging to 1 right up: [the arm on the left of the picture, the one on the right]. Front and back views only. */
   arms?: [number, number];
-  /**
-   * The knees, front and back views only: 1 pulled in together (heels out), -1 pushed apart (toes out), 0
-   * straight. A dance's (the Percolator's). Drawn in steps of a half, part of the sprite's key.
-   */
-  knees?: number;
   /** lean of the whole body, in radians, pivoting at the feet */
   lean?: number;
   /** two crosses on the visor where eyes would be: knocked out */
@@ -503,8 +498,6 @@ interface Stance {
   bob: number;
   /** how far each arm is raised, 0 to 1: [left of the picture, right] */
   arms: [number, number];
-  /** front and back views: knees pulled in together (1, heels out) or pushed apart (-1, toes out); 0 straight */
-  knees?: number;
 }
 
 /**
@@ -798,43 +791,20 @@ function frontBack(k: Kit, back: boolean, a: Stance): void {
   const socketShape = (sg: number): Shape => () => dot(ctx, sg * 0.196, -0.556, 0.04);
 
   // ---- legs. A leg that steps lifts its shin and boot; the thigh stays.
-  // Knees in or out (a dance: `Stance.knees`): the thigh tips about the hip so the knee moves in or out, and
-  // the shin and boot tip the other way about the knee, so the boot stays near where it stood, heel turned out
-  // (knees in) or in (knees out). Straight legs (0) are drawn exactly as always.
-  const kn = a.knees ?? 0;
   for (const sg of [-1, 1]) {
     const lift = Math.max(0, sg * a.sw) * 0.05;
-    const tilt = sg * kn * 0.42; // the thigh, about the hip
-    const hipX = sg * 0.11;
-    const kneeX = sg * 0.124;
-    const kneeDX = -Math.sin(tilt) * 0.13; // where that takes the knee
     const kneeBack = flip([[0.075, -0.285], [0.172, -0.285], [0.172, -0.225], [0.075, -0.225]], sg);
-    ctx.save();
-    if (kn) ctx.translate(kneeDX, 0);
     glossy(ctx, () => poly(ctx, kneeBack, 0.012), black, DARK, boxOf(...kneeBack), JOINT);
-    ctx.restore();
 
     const thigh = flip([[0.045, -0.4], [0.168, -0.4], [0.181, -0.258], [0.07, -0.258]], sg);
     const tb = boxOf(...thigh);
     const thighShape: Shape = () => poly(ctx, thigh, 0.026);
-    ctx.save();
-    if (kn) {
-      ctx.translate(hipX, -0.4);
-      ctx.rotate(tilt);
-      ctx.translate(-hipX, 0.4);
-    }
     glossy(ctx, thighShape, suit, edge, [tb[0], -0.37, tb[2], tb[3]], { spots: [[tb[0] + 0.04, -0.31, 0.034, 0.008, Math.PI / 2 + sg * 0.1, 0.85]] });
     cast(ctx, thighShape, pelvisShape, 0.008, 0.026, 0.012, 0.6);
     ink(ctx, thighShape, edge);
-    ctx.restore();
 
     ctx.save();
     ctx.translate(0, -lift);
-    if (kn) {
-      ctx.translate(kneeX + kneeDX, -0.27);
-      ctx.rotate(-sg * kn * 0.32);
-      ctx.translate(-kneeX, 0.27);
-    }
     // the shin: from the front it has a knee plate that comes to a point at the top
     const shin = flip(back ? [[0.06, -0.272], [0.176, -0.272], [0.186, -0.12], [0.06, -0.12]] : [[0.06, -0.268], [0.118, -0.292], [0.176, -0.268], [0.186, -0.12], [0.06, -0.12]], sg);
     const sb = boxOf(...shin);
@@ -1586,8 +1556,6 @@ export function drawRobotTurned(ctx: Ctx, x: number, y: number, s: number, c: Bo
 const WALK_FRAMES = 8;
 /** A raised arm is drawn at this many heights between hanging and right up. */
 const ARM_STEPS = 8;
-/** Knees pulled in (or pushed apart) are drawn at this many steps each way from straight. */
-const KNEE_STEPS = 2;
 // how big a sprite is, in tiles, and where on it the robot's feet are
 const SPRITE_W = 1.3 * K;
 const SPRITE_H = 1.5 * K;
@@ -1596,8 +1564,8 @@ const SPRITE_Y = 1.361 * K;
 /** More sprites than this and they are all thrown away and made again as needed (a change of screen size leaves the old ones unused). */
 const SPRITE_LIMIT = 700;
 
-function spriteKey(c: BotColor, facing: Dir, frame: number, armL: number, armR: number, pale: boolean, xEyes: boolean, px: number, fine = true, knees = 0): string {
-  return `${c.id}|${c.body}|${facing}|${frame}|${armL}|${armR}${knees ? `k${knees}` : ''}|${pale ? 1 : 0}${xEyes ? 1 : 0}${fine ? '' : 'p'}|${px}`;
+function spriteKey(c: BotColor, facing: Dir, frame: number, armL: number, armR: number, pale: boolean, xEyes: boolean, px: number, fine = true): string {
+  return `${c.id}|${c.body}|${facing}|${frame}|${armL}|${armR}|${pale ? 1 : 0}${xEyes ? 1 : 0}${fine ? '' : 'p'}|${px}`;
 }
 
 interface Sprite {
@@ -1612,8 +1580,8 @@ const sprites = new Map<string, Sprite>();
  * The picture of one robot in one stance, `px` pixels to the tile: made the
  * first time it is asked for and kept.
  */
-function sprite(c: BotColor, facing: Dir, frame: number, armL: number, armR: number, pale: boolean, xEyes: boolean, px: number, fine = true, knees = 0): Sprite {
-  const key = spriteKey(c, facing, frame, armL, armR, pale, xEyes, px, fine, knees);
+function sprite(c: BotColor, facing: Dir, frame: number, armL: number, armR: number, pale: boolean, xEyes: boolean, px: number, fine = true): Sprite {
+  const key = spriteKey(c, facing, frame, armL, armR, pale, xEyes, px, fine);
   let sp = sprites.get(key);
   if (sp) return sp;
   if (sprites.size >= SPRITE_LIMIT) sprites.clear();
@@ -1629,7 +1597,6 @@ function sprite(c: BotColor, facing: Dir, frame: number, armL: number, armR: num
     sw: frame < 0 ? 0 : Math.sin(phase),
     bob: frame < 0 ? 0 : -Math.abs(Math.cos(phase)) * 0.018,
     arms: [armL / ARM_STEPS, armR / ARM_STEPS],
-    knees: knees / KNEE_STEPS,
   };
   const k = kitFor(g, c, pale, xEyes, fine);
   if (facing === 3) sideView(k, -1, stance);
@@ -1669,9 +1636,9 @@ export function warmRobots(ctx: Ctx, s: number, wanted: Wanted[], ms: number): v
   const sig = `${px}|${wanted.map((w) => w.c.id + w.c.body + w.kind + (w.moves?.length ?? '')).join('|')}`;
   if (sig === warmed) return;
   const t0 = performance.now();
-  const need = (c: BotColor, facing: Dir, frame: number, armL: number, armR: number, pale: boolean, xEyes: boolean, fine = true, knees = 0): boolean => {
-    if (sprites.has(spriteKey(c, facing, frame, armL, armR, pale, xEyes, px, fine, knees))) return true;
-    sprite(c, facing, frame, armL, armR, pale, xEyes, px, fine, knees);
+  const need = (c: BotColor, facing: Dir, frame: number, armL: number, armR: number, pale: boolean, xEyes: boolean, fine = true): boolean => {
+    if (sprites.has(spriteKey(c, facing, frame, armL, armR, pale, xEyes, px, fine))) return true;
+    sprite(c, facing, frame, armL, armR, pale, xEyes, px, fine);
     return performance.now() - t0 < ms;
   };
   const ways: Dir[] = [2, 1, 4, 3];
@@ -1694,7 +1661,7 @@ export function warmRobots(ctx: Ctx, s: number, wanted: Wanted[], ms: number): v
       // a victory dance: every picture its moments use
       for (const m of w.moves) {
         const p = pictureOf(m.facing, m.walk, m.moving, m.pose);
-        if (!need(w.c, m.facing === 0 ? 2 : m.facing, p.frame, p.armL, p.armR, false, false, m.pose.fine !== false, p.knees)) return;
+        if (!need(w.c, m.facing === 0 ? 2 : m.facing, p.frame, p.armL, p.armR, false, false, m.pose.fine !== false)) return;
       }
     } else {
       // the winner's jump (one arm up), then each step of the dance (one arm rising as the other falls)
@@ -1781,20 +1748,19 @@ const CROWN_TILT = 0.36;
  * while `moving`.
  */
 /** Which of a robot's pictures a stance needs: the step of its walk (-1 standing) and how high each arm is, in steps. */
-function pictureOf(facing: Dir, walk: number, moving: boolean, pose: Pose): { frame: number; armL: number; armR: number; knees: number } {
+function pictureOf(facing: Dir, walk: number, moving: boolean, pose: Pose): { frame: number; armL: number; armR: number } {
   const frame = moving ? ((Math.round((walk / (Math.PI * 2)) * WALK_FRAMES) % WALK_FRAMES) + WALK_FRAMES) % WALK_FRAMES : -1;
   const steps = (v: number): number => Math.round(Math.max(0, Math.min(1, v)) * ARM_STEPS);
   const front = facing !== 3 && facing !== 4;
-  const knees = pose.knees && front ? Math.round(Math.max(-1, Math.min(1, pose.knees)) * KNEE_STEPS) : 0;
-  return { frame, armL: pose.arms && front ? steps(pose.arms[0]) : 0, armR: pose.arms && front ? steps(pose.arms[1]) : 0, knees };
+  return { frame, armL: pose.arms && front ? steps(pose.arms[0]) : 0, armR: pose.arms && front ? steps(pose.arms[1]) : 0 };
 }
 
 export function drawRobot(ctx: Ctx, x: number, y: number, s: number, c: BotColor, facing: Dir, walk: number, moving: boolean, pose: Pose = {}): void {
   const m = ctx.getTransform();
   const scale = Math.hypot(m.a, m.b);
   const px = Math.max(4, Math.round(s * scale)); // pixels to the tile in the sprite
-  const { frame, armL, armR, knees } = pictureOf(facing, walk, moving, pose);
-  const sp = sprite(c, facing === 0 ? 2 : facing, frame, armL, armR, !!pose.pale, !!pose.xEyes, px, pose.fine !== false, knees);
+  const { frame, armL, armR } = pictureOf(facing, walk, moving, pose);
+  const sp = sprite(c, facing === 0 ? 2 : facing, frame, armL, armR, !!pose.pale, !!pose.xEyes, px, pose.fine !== false);
   const jump = pose.jump ?? 0;
   const still = !pose.lean && !jump && pose.shrink === undefined && m.b === 0 && m.c === 0;
   ctx.save();

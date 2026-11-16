@@ -14,7 +14,7 @@
 import type { Pose } from './robot';
 import type { Dir } from './sim';
 
-export type DanceId = 'party' | 'spin' | 'griddy' | 'percolator' | 'gangnam';
+export type DanceId = 'party' | 'spin' | 'wave';
 
 export interface Dance {
   id: DanceId;
@@ -27,14 +27,21 @@ export interface Dance {
 export const DANCES: Dance[] = [
   { id: 'party', name: 'Party', blurb: 'A jump, then a bounce side to side, pumping each arm' },
   { id: 'spin', name: 'Spin', blurb: 'Two spins in the air, then both arms up: ta-da' },
-  { id: 'griddy', name: 'Griddy', blurb: 'The touchdown dance: quick steps, arms swinging, sliding side to side' },
-  { id: 'percolator', name: 'Percolator', blurb: 'The house dance: knees snapping in and out on the beat, a bubbly bounce, hands rolling low' },
-  { id: 'gangnam', name: 'Gangnam', blurb: 'Gangnam Style, the horse-riding dance: a galloping hop holding the reins, then one arm up swinging the lasso' },
+  { id: 'wave', name: 'Wave', blurb: 'Arms out, a ripple runs from one hand across the shoulders to the other, and back' },
 ];
 export const DANCE_IDS: DanceId[] = DANCES.map((d) => d.id);
 
 export function isDance(v: unknown): v is DanceId {
   return typeof v === 'string' && (DANCE_IDS as string[]).includes(v);
+}
+/**
+ * A dance read back from where it was saved: the third dance was the Griddy until the owner had it turned
+ * into the Wave, so a saved Griddy is the Wave now. Anything else unknown (the Percolator and Gangnam, which
+ * were tried and taken out) is undefined.
+ */
+export function readDance(v: unknown): DanceId | undefined {
+  if (v === 'griddy') return 'wave';
+  return isDance(v) ? v : undefined;
 }
 export function danceOf(id: DanceId): Dance {
   return DANCES.find((d) => d.id === id) ?? DANCES[0];
@@ -65,9 +72,7 @@ const STEP_PICS = 8;
 /** Dance `id`, `t` seconds after the round was decided. */
 export function danceFrame(id: DanceId, t: number): DanceFrame {
   if (id === 'spin') return spin(t);
-  if (id === 'griddy') return griddy(t);
-  if (id === 'percolator') return percolator(t);
-  if (id === 'gangnam') return gangnam(t);
+  if (id === 'wave') return wave(t);
   return party(t);
 }
 
@@ -102,73 +107,31 @@ function spin(t: number): DanceFrame {
 }
 
 /**
- * Griddy (the touchdown dance): quick steps on the spot, the arms swinging in time with the steps, and the
- * whole robot sliding from side to side as it goes, leaning into the slide.
+ * Wave (the arm wave): arms held straight out to the sides, then a ripple runs along them, from the hand on
+ * the left of the picture, through its shoulder (which lifts, tipping the body), across the chest (a little
+ * pop up), through the other shoulder, out to the other hand; then back the other way. At the start the arms
+ * come up from the sides to straight out. Arm heights stay on three steps (out, a little up, up), so it needs
+ * only a few pictures.
  */
-function griddy(t: number): DanceFrame {
-  const walk = t * 17; // a step about every 0.18 s
-  const pic = Math.round((walk / TAU) * STEP_PICS); // the arms follow the step picture, so there are only eight of them
-  const s = Math.sin((pic / STEP_PICS) * TAU);
-  const slide = Math.sin(t * 2.4);
+function wave(t: number): DanceFrame {
+  const RISE = 0.35; // the arms coming up to straight out
+  const ACROSS = 1.25; // the ripple going one way
+  const still = { facing: 2 as Dir, moving: false, walk: 0, dx: 0 };
+  if (t < RISE) {
+    const up = (t / RISE) * 0.5;
+    return { ...still, pose: { arms: [up, up] } };
+  }
+  const u = (t - RISE) % (ACROSS * 2);
+  // where the ripple is: 0 the hand on the left of the picture, 1 the other hand; there and back
+  const w = u < ACROSS ? u / ACROSS : 2 - u / ACROSS;
+  const bump = (at: number, width = 0.22): number => Math.max(0, 1 - Math.abs(w - at) / width);
   return {
-    facing: 2,
-    moving: true,
-    walk,
-    dx: slide * 0.2,
-    pose: { jump: Math.abs(Math.sin(walk)) * 0.035, lean: Math.cos(t * 2.4) * 0.09, arms: [0.35 + 0.35 * s, 0.35 - 0.35 * s] },
-  };
-}
-
-/**
- * Percolator (the Chicago house dance, to the 1992 track of that name), from how dancers teach it: weight on
- * the balls of the feet, knees soft and bent; then the knees snap in together (heels turn out) and back apart
- * (toes turn out), over and over on the beat, Charleston-like, with a small bounce on the off-beat that gives
- * it its "bubbling" look. The upper body stays fairly still; the hands roll in front, "wax on, wax off".
- *
- * Here: a little crouch the whole time; knees in on the beat and out on the "and" (`Pose.knees`); a hop as the
- * knees open; a slight sway of the shoulders; the arms low in front, one up as the other comes down, rolling
- * with the knees. The tempo is the track's, about 126 beats a minute. Knees and arms are worked out from one
- * step of eight per beat, so it needs only eight pictures.
- */
-function percolator(t: number): DanceFrame {
-  const BEATS_PER_S = 126 / 60;
-  const beat = t * BEATS_PER_S;
-  const step = Math.floor(beat * STEP_PICS) % STEP_PICS; // eight steps a beat
-  const a = (step / STEP_PICS) * TAU;
-  const knees = Math.cos(a); // in together on the beat, apart on the "and"
-  const roll = Math.sin(a); // the hands roll a quarter beat behind the knees
-  return {
-    facing: 2,
-    moving: false,
-    walk: 0,
-    dx: 0,
+    ...still,
     pose: {
-      knees,
-      shrink: 0.95 - 0.02 * Math.max(0, knees), // a little lower as the knees come in
-      jump: 0.045 * Math.max(0, -knees), // the bubble: up off the floor as they open
-      lean: Math.sin((beat / 2) * TAU) * 0.035, // a slight sway, side to side every two beats
-      arms: [0.22 + 0.14 * roll, 0.22 - 0.14 * roll],
+      arms: [0.5 + 0.25 * Math.max(bump(0.08), 0.6 * bump(0.3)), 0.5 + 0.25 * Math.max(bump(0.92), 0.6 * bump(0.7))],
+      lean: 0.1 * bump(0.32) - 0.1 * bump(0.68), // the shoulder the ripple is in lifts, tipping the body
+      jump: 0.04 * bump(0.5, 0.15), // the chest pops up as it crosses
     },
-  };
-}
-
-/**
- * Gangnam Style (the horse-riding dance): a galloping hop on the spot with both hands low, holding the
- * reins; then one arm goes up, swinging the lasso, and it steps from side to side, and back to the reins.
- */
-function gangnam(t: number): DanceFrame {
-  const REINS = 2.2;
-  const u = t % (REINS * 2);
-  const walk = t * 14;
-  // a gallop: two quick hops, a short rest
-  const hop = Math.max(0, Math.sin(t * 14)) * 0.08;
-  const lasso = u >= REINS;
-  return {
-    facing: 2,
-    moving: true,
-    walk,
-    dx: lasso ? Math.sin((u - REINS) * 2.86) * 0.16 : 0,
-    pose: { jump: hop, lean: lasso ? Math.sin(t * 7) * 0.07 : 0, arms: lasso ? [0.12, 1] : [0.12, 0.12] },
   };
 }
 

@@ -17,7 +17,7 @@ import { Input, PadReader, typing } from './input';
 import { drawTitle, closeTitle } from './title';
 import { initAudio, preview, setSound, sfx } from './audio';
 import { createLobby, LobbyHost } from './lobby';
-import { isDance, type DanceId } from './dances';
+import { readDance, type DanceId } from './dances';
 import { createPadNav } from './padnav';
 import { PAD } from './bindings';
 import { createRemap } from './remap';
@@ -87,7 +87,7 @@ try {
 let myDance: DanceId = 'party';
 try {
   const saved = localStorage.getItem('myDance');
-  if (isDance(saved)) myDance = saved;
+  myDance = readDance(saved) ?? 'party';
 } catch {
   /* storage is optional */
 }

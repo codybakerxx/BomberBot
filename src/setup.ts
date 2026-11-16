@@ -9,7 +9,7 @@
  * Both are saved on this device. Anything saved that does not look right is ignored and the default used.
  * Every option here is used by the game: nothing is shown in a menu that does not do something.
  */
-import { isDance, type DanceId } from './dances';
+import { readDance, type DanceId } from './dances';
 import { BotLevel, BOT_LEVELS } from './bot';
 import { KeyMap, PadMap, defaultKeys, defaultPad, readKeys, readPad } from './bindings';
 import { ItemKind, ITEM_CHANCE, MAX_BOMBS, MAX_FIRE, MAX_SPEED_ITEMS, START_FIRE, TICK_HZ, WorldConfig } from './sim';
@@ -241,7 +241,7 @@ export function readSetup(raw: unknown, myColor: string, colorIds: string[]): Ma
     for (const c of r.cpus.slice(0, MAX_CPUS)) {
       if (!c || !colorIds.includes(c.colorId) || used.has(c.colorId)) continue;
       used.add(c.colorId);
-      out.cpus.push({ colorId: c.colorId, level: BOT_LEVELS.includes(c.level) ? c.level : 'normal', ...(isDance(c.dance) ? { dance: c.dance } : {}) });
+      out.cpus.push({ colorId: c.colorId, level: BOT_LEVELS.includes(c.level) ? c.level : 'normal', ...(readDance(c.dance) ? { dance: readDance(c.dance) } : {}) });
     }
     if (out.cpus.length === 0) out.cpus = d.cpus;
   }

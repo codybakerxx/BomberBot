@@ -5,12 +5,11 @@
  * Run with: npm test
  */
 import assert from 'node:assert';
-import { DANCES, DANCE_IDS, danceFrame, danceSamples, isDance, stepDance } from '../src/dances';
+import { DANCES, DANCE_IDS, danceFrame, danceSamples, isDance, readDance, stepDance } from '../src/dances';
 
-assert.deepStrictEqual(DANCE_IDS, ['party', 'spin', 'griddy', 'percolator', 'gangnam'], 'five dances, Party first (the one before there was a choice)');
-assert.ok(isDance('griddy') && !isDance('floss') && !isDance(3), 'isDance knows the dances and nothing else');
-assert.strictEqual(stepDance('party', -1), 'gangnam', '‹ from the first goes round to the last');
-assert.strictEqual(stepDance('gangnam', 1), 'party', '› from the last goes round to the first');
+assert.deepStrictEqual(DANCE_IDS, ['party', 'spin', 'wave'], 'three dances, Party first (the one before there was a choice)');
+assert.strictEqual(stepDance('party', -1), 'wave', '‹ from the first goes round to the last');
+assert.strictEqual(stepDance('wave', 1), 'party', '› from the last goes round to the first');
 
 for (const d of DANCES) {
   const pictures = new Set<string>();
@@ -22,15 +21,10 @@ for (const d of DANCES) {
     assert.ok(Math.abs(f.dx) <= 0.25, `${d.name}: stays on its tile, near enough`);
     const front = f.facing === 2 || f.facing === 1;
     const step = f.moving ? Math.round((f.walk / (Math.PI * 2)) * 8) % 8 : -1;
-    const knees = front ? Math.round((f.pose.knees ?? 0) * 2) : 0;
-    pictures.add(`${f.facing}|${step}|${front ? arms.map((a) => Math.round(a * 8)).join(',') : ''}|${knees}`);
+    pictures.add(`${f.facing}|${step}|${front ? arms.map((a) => Math.round(a * 8)).join(',') : ''}`);
   }
-  assert.ok(pictures.size <= 16, `${d.name}: ${pictures.size} pictures, few enough to make ahead of time`);
+  assert.ok(pictures.size <= 12, `${d.name}: ${pictures.size} pictures, few enough to make ahead of time`);
   for (const t of [0, 0.37, 1.5, 2.9]) assert.deepStrictEqual(danceFrame(d.id, t), danceFrame(d.id, t), `${d.name}: the same time, the same moment`);
 }
 assert.ok(danceSamples('spin').some((f) => f.facing === 1) && danceSamples('spin').some((f) => f.facing === 3), 'Spin turns all the way round');
-assert.ok(danceSamples('griddy').every((f) => f.moving), 'the Griddy keeps stepping');
-assert.ok(danceSamples('percolator').every((f) => (f.pose.shrink ?? 1) < 1), 'the Percolator stays low, knees bent');
-assert.ok(danceSamples('percolator').some((f) => (f.pose.knees ?? 0) > 0.9) && danceSamples('percolator').some((f) => (f.pose.knees ?? 0) < -0.9), 'the Percolator snaps its knees in and out');
-assert.ok(danceSamples('percolator').every((f) => !f.moving && f.dx === 0), 'the Percolator stays on the spot (the knees do the work)');
-assert.ok(danceSamples('gangnam').some((f) => f.pose.arms?.[1] === 1) && danceSamples('gangnam').some((f) => f.pose.arms?.[1] === 0.12), 'Gangnam holds the reins, then swings the lasso');
+assert.ok(danceSamples('wave').some((f) => (f.pose.arms?.[0] ?? 0) > 0.7) && danceSamples('wave').some((f) => (f.pose.arms?.[1] ?? 0) > 0.7), 'the Wave runs out to each hand');

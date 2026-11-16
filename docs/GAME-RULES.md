@@ -219,9 +219,7 @@ The blocks were made 20% faster on 11 November 2026, after play-testing: they to
 - **The winner** does the victory dance they picked in the lobby, for as long as the result is showing:
   - **Party**: a jump with one arm in the air, then bouncing from side to side, pumping each arm in turn.
   - **Spin**: a big jump, turning round twice in the air, a landing with knees bent, then both arms flung up (ta-da), and again.
-  - **Griddy** (the touchdown dance): quick steps on the spot with the arms swinging in time, sliding from side to side and leaning into it.
-  - **Percolator** (the Chicago house dance): on the spot, knees soft and bent, the knees snapping in together (heels out) and back apart (toes out) on every beat, with a small bounce as they open, the shoulders swaying a little and the hands rolling low in front.
-  - **Gangnam** (Gangnam Style's horse-riding dance): a galloping hop on the spot holding the reins, then one arm up swinging the lasso while stepping side to side, and back to the reins.
+  - **Wave** (the arm wave): arms straight out to the sides, then a ripple runs from one hand, through that shoulder (the body tips), across the chest (a little pop up), through the other shoulder and out to the other hand, and back.
 
 <img src="screenshots/knocked-out.png" width="300" alt="Three robots knocked out a third of a second apart. The latest is burnt black with crosses for eyes; the next has a pale ghost with wings and a halo rising out of it; the earliest has crumbled to a few specks, its ghost higher up. On the scoreboard in the top bar, their three heads are dimmed with crosses for eyes"> <img src="screenshots/round-won.png" width="300" alt="The end of a round. The gold robot is in the air with one arm raised, wearing the crown. Its number on the scoreboard has gone to 1, in gold, and its head there has the crown too. Below the arena a panel reads You win, Last bot standing, with the buttons Next round and Menu">
 - CPU players follow every rule on this page and have nothing a player lacks. How they play is in [CPU-PLAYERS.md](CPU-PLAYERS.md).
