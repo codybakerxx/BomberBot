@@ -650,8 +650,8 @@ export function createLobby(host: LobbyHost): {
     drawDynamic(g, w, T, 0, 0);
   }
 
-  // Post-Mortem Behavior (the owner's design): a switch; on, one switch each for Watcher, Angel and Zombie,
-  // exactly one of them on (Watcher by default; switching the one that is on off goes back to Watcher), and
+  // Post-Mortem Behavior (the owner's design): a switch, off by default (everyone out of lives watches, the
+  // standard); on, a switch each for Angel and Zombie, at most one of them on (neither: still watching), and
   // Angels come back under Angel, which can only be switched while Angel is on
   const lifeAfter = (id: Afterlife) =>
     toggle({
@@ -683,7 +683,7 @@ export function createLobby(host: LobbyHost): {
       changed();
     },
     offText: 'Out of lives, you watch the rest of the round.',
-    under: [lifeAfter('watch'), lifeAfter('angel'), angelsBack, lifeAfter('zombie')],
+    under: [lifeAfter('angel'), angelsBack, lifeAfter('zombie')],
   });
   const rules: Opt[] = [
     toggle({

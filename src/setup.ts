@@ -117,7 +117,7 @@ export function afterlifeOf(s: MatchSetup): Afterlife {
 /** What a robot out of lives does for the rest of the round (MatchSetup.afterlife), in the lobby's order. */
 export type Afterlife = 'watch' | 'angel' | 'zombie';
 export const AFTERLIVES: { id: Afterlife; name: string; blurb: string }[] = [
-  { id: 'watch', name: 'Watcher', blurb: 'Watch the rest of the round' },
+  { id: 'watch', name: 'Watch', blurb: 'Watch the rest of the round' },
   { id: 'angel', name: 'Angel', blurb: 'Haunt the wall and throw bombs in: hold A to throw further' },
   { id: 'zombie', name: 'Zombie', blurb: 'Get up where you fell, slow, with one small bomb' },
 ];
@@ -176,7 +176,7 @@ export function defaultSetup(myColor: string): MatchSetup {
     itemsOn: false,
     items: { bomb: 2, fire: 2, speed: 2, kick: 2, grab: 2, shield: 2, curse: 2 },
     lives: 1,
-    afterlife: 'watch', // Watcher is always the default (the owner's call)
+    afterlife: 'watch', // watching is the standard: Post-Mortem Behavior off (the owner's call)
     postMortem: false,
     angelsBack: false,
   };
