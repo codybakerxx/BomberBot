@@ -1,0 +1,10 @@
+// Cloudflare: where BomberBot is put online (docs/ONLINE.md).
+// For now only the game page itself (dist/index.html, built by `npm run build`), served as a static file.
+// The online-play server (rooms, run with Durable Objects) will be added here when it is built.
+{
+  "name": "bomberbot",
+  "compatibility_date": "2026-11-01",
+  "assets": {
+    "directory": "./dist"
+  }
+}
