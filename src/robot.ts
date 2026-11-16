@@ -1615,6 +1615,8 @@ function sprite(c: BotColor, facing: Dir, frame: number, armL: number, armR: num
 export interface Wanted {
   c: BotColor;
   kind: 'walk' | 'burnt' | 'ghost' | 'dance' | 'stand' | 'wave';
+  /** for a dance: the moments of it to have pictures of (dances.ts `danceSamples`); without them, the Party dance */
+  moves?: { facing: Dir; walk: number; moving: boolean; pose: Pose }[];
 }
 /** The arms of the ghost: a little way out from its sides. */
 export const GHOST_ARMS: [number, number] = [0.25, 0.25];
@@ -1631,7 +1633,7 @@ let warmed = '';
 export function warmRobots(ctx: Ctx, s: number, wanted: Wanted[], ms: number): void {
   const m = ctx.getTransform();
   const px = Math.max(4, Math.round(s * Math.hypot(m.a, m.b)));
-  const sig = `${px}|${wanted.map((w) => w.c.id + w.c.body + w.kind).join('|')}`;
+  const sig = `${px}|${wanted.map((w) => w.c.id + w.c.body + w.kind + (w.moves?.length ?? '')).join('|')}`;
   if (sig === warmed) return;
   const t0 = performance.now();
   const need = (c: BotColor, facing: Dir, frame: number, armL: number, armR: number, pale: boolean, xEyes: boolean, fine = true): boolean => {
@@ -1655,6 +1657,12 @@ export function warmRobots(ctx: Ctx, s: number, wanted: Wanted[], ms: number): v
     } else if (w.kind === 'ghost') {
       const a = Math.round(GHOST_ARMS[0] * ARM_STEPS);
       if (!need(w.c, 2, -1, a, a, true, false)) return;
+    } else if (w.moves) {
+      // a victory dance: every picture its moments use
+      for (const m of w.moves) {
+        const p = pictureOf(m.facing, m.walk, m.moving, m.pose);
+        if (!need(w.c, m.facing === 0 ? 2 : m.facing, p.frame, p.armL, p.armR, false, false, m.pose.fine !== false)) return;
+      }
     } else {
       // the winner's jump (one arm up), then each step of the dance (one arm rising as the other falls)
       if (!need(w.c, 2, -1, 0, ARM_STEPS, false, false)) return;
@@ -1739,15 +1747,19 @@ const CROWN_TILT = 0.36;
  * `walk` is the phase of its walk (it steps once every 2π) and only counts
  * while `moving`.
  */
+/** Which of a robot's pictures a stance needs: the step of its walk (-1 standing) and how high each arm is, in steps. */
+function pictureOf(facing: Dir, walk: number, moving: boolean, pose: Pose): { frame: number; armL: number; armR: number } {
+  const frame = moving ? ((Math.round((walk / (Math.PI * 2)) * WALK_FRAMES) % WALK_FRAMES) + WALK_FRAMES) % WALK_FRAMES : -1;
+  const steps = (v: number): number => Math.round(Math.max(0, Math.min(1, v)) * ARM_STEPS);
+  const front = facing !== 3 && facing !== 4;
+  return { frame, armL: pose.arms && front ? steps(pose.arms[0]) : 0, armR: pose.arms && front ? steps(pose.arms[1]) : 0 };
+}
+
 export function drawRobot(ctx: Ctx, x: number, y: number, s: number, c: BotColor, facing: Dir, walk: number, moving: boolean, pose: Pose = {}): void {
   const m = ctx.getTransform();
   const scale = Math.hypot(m.a, m.b);
   const px = Math.max(4, Math.round(s * scale)); // pixels to the tile in the sprite
-  const frame = moving ? ((Math.round((walk / (Math.PI * 2)) * WALK_FRAMES) % WALK_FRAMES) + WALK_FRAMES) % WALK_FRAMES : -1;
-  const steps = (v: number): number => Math.round(Math.max(0, Math.min(1, v)) * ARM_STEPS);
-  const front = facing !== 3 && facing !== 4;
-  const armL = pose.arms && front ? steps(pose.arms[0]) : 0;
-  const armR = pose.arms && front ? steps(pose.arms[1]) : 0;
+  const { frame, armL, armR } = pictureOf(facing, walk, moving, pose);
   const sp = sprite(c, facing === 0 ? 2 : facing, frame, armL, armR, !!pose.pale, !!pose.xEyes, px, pose.fine !== false);
   const jump = pose.jump ?? 0;
   const still = !pose.lean && !jump && pose.shrink === undefined && m.b === 0 && m.c === 0;

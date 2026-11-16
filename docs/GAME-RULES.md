@@ -212,11 +212,14 @@ The blocks were made 20% faster on 11 November 2026, after play-testing: they to
 
 ### Knocked out, and winning
 
-*`drawPlayer` and `winPose` in render.ts*
+*`drawPlayer` in render.ts, the dances in dances.ts*
 
 - **Knocked out by a blast:** the robot is burnt black, with two crosses for eyes. It crumbles into specks of ash that drift up and away. At the same time a pale ghost of it, in a faint version of its suit colour, with angel wings that flap slowly and a gold halo over its helmet, floats straight up, out of the arena, all the way to the top of the screen, and fades as it gets near the top. The burning takes a second and a half; the ghost takes up to three seconds more, depending on how far it has to go. (It rose a tile and a half at first, then three tiles.)
 - **Knocked out by a falling block:** there is nothing left to see under the block, so only the ghost rises.
-- **The winner** jumps with one arm in the air, then dances: bouncing from side to side and pumping each arm in turn, for as long as the result is showing.
+- **The winner** does the victory dance they picked in the lobby, for as long as the result is showing:
+  - **Party**: a jump with one arm in the air, then bouncing from side to side, pumping each arm in turn.
+  - **Spin**: a big jump, turning round twice in the air, a landing with knees bent, then both arms flung up (ta-da), and again.
+  - **Griddy** (the touchdown dance): quick steps on the spot with the arms swinging in time, sliding from side to side and leaning into it.
 
 <img src="screenshots/knocked-out.png" width="300" alt="Three robots knocked out a third of a second apart. The latest is burnt black with crosses for eyes; the next has a pale ghost with wings and a halo rising out of it; the earliest has crumbled to a few specks, its ghost higher up. On the scoreboard in the top bar, their three heads are dimmed with crosses for eyes"> <img src="screenshots/round-won.png" width="300" alt="The end of a round. The gold robot is in the air with one arm raised, wearing the crown. Its number on the scoreboard has gone to 1, in gold, and its head there has the crown too. Below the arena a panel reads You win, Last bot standing, with the buttons Next round and Menu">
 - CPU players follow every rule on this page and have nothing a player lacks. How they play is in [CPU-PLAYERS.md](CPU-PLAYERS.md).

@@ -17,6 +17,7 @@ import { Input, PadReader, typing } from './input';
 import { drawTitle, closeTitle } from './title';
 import { initAudio, preview, setSound, sfx } from './audio';
 import { createLobby, LobbyHost } from './lobby';
+import { isDance, type DanceId } from './dances';
 import { createPadNav } from './padnav';
 import { PAD } from './bindings';
 import { createRemap } from './remap';
@@ -79,6 +80,14 @@ try {
     setup = defaultSetup(myColor);
     for (const c of setup.cpus) c.level = old;
   }
+} catch {
+  /* storage is optional */
+}
+/** Your victory dance (dances.ts), picked on the lobby's Players page. Remembered on this device under the key "myDance". */
+let myDance: DanceId = 'party';
+try {
+  const saved = localStorage.getItem('myDance');
+  if (isDance(saved)) myDance = saved;
 } catch {
   /* storage is optional */
 }
@@ -234,6 +243,12 @@ const input = new Input();
 const guests: Guest[] = [];
 /** Is player i one of the people here (you or a guest), not a CPU player? */
 const human = (i: number): boolean => i <= guests.length;
+/** The victory dance player i picked in the lobby: yours, a guest's, or a CPU player's (Party if none). */
+function danceOf(i: number): DanceId {
+  if (i === 0) return myDance;
+  if (i <= guests.length) return guests[i - 1].dance;
+  return setup.cpus[i - 1 - guests.length]?.dance ?? 'party';
+}
 /** The controller playing player i (you or a guest), if there is one. */
 const padOf = (i: number): PadReader | null => (i === 0 ? input.mine() : guests[i - 1] ? input.reader(guests[i - 1].pad) : null);
 input.attachKeyboard(window);
@@ -499,8 +514,9 @@ function render(time: number): void {
   ctx.drawImage(staticLayer, 0, 0);
   clock = time;
   const winner = world.over ? world.over.winner : -1;
-  drawDynamic(ctx, world, T, time, 0, winner >= 0 && decidedAt >= 0 ? { player: winner, t: time - decidedAt } : undefined, leader);
-  warmSprites(ctx, world, T); // a few of the robots' pictures made ahead of need, so play does not stutter
+  drawDynamic(ctx, world, T, time, 0, winner >= 0 && decidedAt >= 0 ? { player: winner, t: time - decidedAt, dance: danceOf(winner) } : undefined, leader);
+  // a few of the robots' pictures made ahead of need, so play does not stutter (the winner's dance included)
+  warmSprites(ctx, world, T, 4, world.over && world.over.winner >= 0 ? danceOf(world.over.winner) : 'party');
   // the ghosts, on their own layer, which is only cleared when it has something on it
   gctx.setTransform(1, 0, 0, 1, 0, 0);
   if (ghostsShown) gctx.clearRect(0, 0, ghosts.width, ghosts.height);
@@ -992,10 +1008,17 @@ const lobbyHost: LobbyHost = {
   set myColor(v: string) {
     myColor = v;
   },
+  get myDance() {
+    return myDance;
+  },
+  set myDance(v: DanceId) {
+    myDance = v;
+  },
   save(): void {
     save('matchSetup', setup);
     try {
       localStorage.setItem('botColor', myColor);
+      localStorage.setItem('myDance', myDance);
     } catch {
       /* storage is optional */
     }
@@ -1410,6 +1433,7 @@ function guestPads(): void {
     if (input.capture || confirmOpen()) continue;
     if (mode === 'lobby') {
       if (d !== was && (d === 3 || d === 4)) lobby.guestStep(g.pad, d === 3 ? -1 : 1);
+      if (d !== was && (d === 1 || d === 2)) lobby.guestDance(g.pad, d === 1 ? -1 : 1); // up and down: the dance
       if (r.pressed(PAD.A) || r.pressed(PAD.Y)) lobby.guestReady(g.pad);
       if (r.pressed(PAD.B)) lobby.guestBack(g.pad);
     } else if ((mode === 'playing' || mode === 'over' || mode === 'pause') && input.pausePressed(r)) pauseKey();

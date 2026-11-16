@@ -9,6 +9,7 @@
  * Both are saved on this device. Anything saved that does not look right is ignored and the default used.
  * Every option here is used by the game: nothing is shown in a menu that does not do something.
  */
+import { isDance, type DanceId } from './dances';
 import { BotLevel, BOT_LEVELS } from './bot';
 import { KeyMap, PadMap, defaultKeys, defaultPad, readKeys, readPad } from './bindings';
 import { ItemKind, ITEM_CHANCE, MAX_BOMBS, MAX_FIRE, MAX_SPEED_ITEMS, START_FIRE, TICK_HZ, WorldConfig } from './sim';
@@ -19,6 +20,8 @@ import { ItemKind, ITEM_CHANCE, MAX_BOMBS, MAX_FIRE, MAX_SPEED_ITEMS, START_FIRE
 export interface CpuSlot {
   colorId: string;
   level: BotLevel;
+  /** its victory dance (dances.ts); Party if it has not been given one */
+  dance?: DanceId;
 }
 
 /**
@@ -33,6 +36,8 @@ export interface Guest {
   /** the robot they are looking at in the lobby; theirs once they press Ready */
   pick: string;
   ready: boolean;
+  /** their victory dance (dances.ts), changed with up and down on their controller */
+  dance: DanceId;
 }
 
 /**
@@ -236,7 +241,7 @@ export function readSetup(raw: unknown, myColor: string, colorIds: string[]): Ma
     for (const c of r.cpus.slice(0, MAX_CPUS)) {
       if (!c || !colorIds.includes(c.colorId) || used.has(c.colorId)) continue;
       used.add(c.colorId);
-      out.cpus.push({ colorId: c.colorId, level: BOT_LEVELS.includes(c.level) ? c.level : 'normal' });
+      out.cpus.push({ colorId: c.colorId, level: BOT_LEVELS.includes(c.level) ? c.level : 'normal', ...(isDance(c.dance) ? { dance: c.dance } : {}) });
     }
     if (out.cpus.length === 0) out.cpus = d.cpus;
   }

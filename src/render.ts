@@ -8,6 +8,7 @@
  * - drawItemIcon: the seven power-up icons, also used by the top bar
  */
 import { drawRobot, warmRobots, GHOST_ARMS, ROBOT, type Pose, type Wanted } from './robot';
+import { danceFrame, danceSamples, type DanceId } from './dances';
 export { warmRobots } from './robot';
 import { World, FLOOR, HARD, SOFT, FLAME_TICKS, DEATH_TICKS, GHOST_TICKS, SHIELD_GRACE_TICKS, FALL_TICKS, TICK_HZ, ItemKind, Player, Bomb, FLY_TICKS_PER_TILE, THROW_TILES, FUSE_TICKS, CARRY_FUSE_TICKS } from './sim';
 
@@ -96,19 +97,6 @@ function ghostOf(c: BotColor): BotColor {
 function scatter(n: number): number {
   const v = Math.sin(n * 12.9898) * 43758.5453;
   return v - Math.floor(v);
-}
-
-/**
- * The winner's celebration, `t` seconds after the round was decided: a jump
- * with one arm in the air, then a dance (bouncing from side to side, pumping
- * each arm in turn).
- */
-export function winPose(t: number): Pose {
-  const JUMP = 0.7;
-  if (t < JUMP) return { jump: Math.sin((Math.PI * t) / JUMP) * 0.5, arms: [0, 1] };
-  const beat = (t - JUMP) * 7.5;
-  const s = Math.sin(beat);
-  return { jump: Math.abs(s) * 0.1, lean: s * 0.14, arms: [0.5 + 0.5 * s, 0.5 - 0.5 * s] };
 }
 
 // ---------------------------------------------------------------- arena
@@ -712,21 +700,22 @@ function drawStatus(ctx: Ctx, p: Player, cx: number, cy: number, T: number): voi
 /**
  * Get the robots' pictures ready a little ahead of when they are needed (see
  * warmRobots in robot.ts): everyone's walk in all four directions, the burnt
- * robot, each ghost, and the winner's dance once there is a winner. Call it
- * once a frame; it works for at most `ms` thousandths of a second each time.
+ * robot, each ghost, and the winner's dance (`dance`, theirs) once there is a winner. Call it once a
+ * frame; it works for at most `ms` thousandths of a second each time.
  */
-export function warmSprites(ctx: Ctx, world: World, T: number, ms = 4): void {
+export function warmSprites(ctx: Ctx, world: World, T: number, ms = 4, dance: DanceId = 'party'): void {
   const wanted: Wanted[] = world.players.map((p) => ({ c: colorById(p.colorId), kind: 'walk' as const }));
   wanted.push({ c: CHARRED, kind: 'burnt' });
   for (const p of world.players) wanted.push({ c: ghostOf(colorById(p.colorId)), kind: 'ghost' });
-  if (world.over && world.over.winner >= 0) wanted.push({ c: colorById(world.players[world.over.winner].colorId), kind: 'dance' });
+  if (world.over && world.over.winner >= 0) wanted.push({ c: colorById(world.players[world.over.winner].colorId), kind: 'dance', moves: danceSamples(dance) });
   warmRobots(ctx, T, wanted, ms);
 }
 
-/** The winner of a round, and how many seconds ago it was decided. */
+/** The winner of a round, how many seconds ago it was decided, and the victory dance they picked (dances.ts). */
 export interface Celebration {
   player: number;
   t: number;
+  dance?: DanceId;
 }
 
 // the knocked-out animation, in ticks out of DEATH_TICKS
@@ -745,8 +734,9 @@ function drawPlayer(ctx: Ctx, world: World, p: Player, T: number, celebrate?: Ce
   const y = (p.y + 0.5) * T + T * 0.46;
   if (p.alive) {
     if (celebrate && celebrate.player === p.id) {
-      // the winner: facing the viewer, jumping and then dancing
-      drawRobot(ctx, x, y, T, col, 2, 0, false, { ...winPose(celebrate.t), crown: crowned === p.id });
+      // the winner: their victory dance
+      const f = danceFrame(celebrate.dance ?? 'party', celebrate.t);
+      drawRobot(ctx, x + f.dx * T, y, T, col, f.facing, f.walk, f.moving, { ...f.pose, crown: crowned === p.id });
     } else drawRobot(ctx, x, y, T, col, p.facing, p.walk, p.moving, crowned === p.id ? { crown: true } : undefined);
     drawStatus(ctx, p, x, (p.y + 0.5) * T, T);
     return;

@@ -157,7 +157,7 @@ Everything on the canvas is drawn with shapes in code. There are no image files.
 | `drawStatic` | Floor and solid blocks. Drawn once onto a hidden canvas and reused every frame. |
 | `drawDynamic` | Everything else, every frame: shadows, power-ups, bricks, the ring under your robot, bombs, blasts, robots, carried and flying bombs |
 | `drawItemIcon` | The seven power-up icons |
-| `winPose` | The winner's jump and dance, as a `Pose` |
+| `danceFrame` (in `dances.ts`) | The winner's victory dance at a moment: facing, steps, slide and `Pose` |
 | `warmSprites` | Gets the robots' pictures ready ahead of need: everyone's walk, the burnt robot, the ghosts, the winner's dance |
 | `drawGhosts` | The ghosts of knocked-out robots, with wings and a halo, floating up to the top of the screen. Drawn on a layer of its own, because they leave the arena |
 | `drawStatus` | What is drawn over a robot: the shield ring, the ring flying off when a shield is used up, the skull over a cursed robot |
