@@ -369,7 +369,7 @@ export const ANGEL_BOMBS = 1; // one of its bombs out at a time
 // zombies: out of lives, a robot gets up again where it fell, to get in the others' way
 export const ZOMBIE_RISE_TICKS = DEATH_TICKS + 30; // it rises 2 s after the knockout (once the knocked-out animation has played)
 export const ZOMBIE_DOWN_TICKS = 240; // a blast or a block knocks a zombie down for 4 s; then it gets up where it fell
-export const ZOMBIE_SPEED = 0.75; // it walks at 75% of the starting speed, whatever it had collected
+export const ZOMBIE_SPEED = 0.5; // it walks at half the starting speed, whatever it had collected (the owner's ask; it was 75%)
 export const ZOMBIE_FIRE = 1; // its bombs reach one tile each way
 export const ZOMBIE_BOMBS = 1; // one at a time
 export const ZOMBIE_SAFE_TICKS = 60; // blasts leave it be for 1 s after it gets up

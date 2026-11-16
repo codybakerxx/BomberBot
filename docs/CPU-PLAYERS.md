@@ -97,7 +97,7 @@ It applies only while the bot itself is inside the square after 0:00. A bot stil
 
 ## As zombies
 
-Out of lives with Zombie picked, a CPU player is a zombie in the arena, with one 1-tile bomb and three quarters of the starting speed. It plays as usual with that (the same safety rules for its bombs), goes after the robots still in the round and not other zombies, and leaves power-ups alone (`itemWorth` is 0). In 15 rounds of four Normal CPU players, the zombies dropped 75 bombs between them; they rarely catch anyone, which is what a 1-tile blast at that speed gives.
+Out of lives with Zombie picked, a CPU player is a zombie in the arena, with one 1-tile bomb and half the starting speed. It plays as usual with that (the same safety rules for its bombs), goes after the robots still in the round and not other zombies, and leaves power-ups alone (`itemWorth` is 0). In 15 rounds of four Normal CPU players, the zombies dropped 75 bombs between them; they rarely catch anyone, which is what a 1-tile blast at that speed gives.
 
 ## As angels
 

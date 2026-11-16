@@ -1061,10 +1061,14 @@ function sideView(k: Kit, d: number, a: Stance): void {
     ctx.restore();
   };
 
+  // Arms raised (a zombie's, `Stance.arms`): in the side view that is held out in front, the far arm a little
+  // higher than the near one, swinging only a little with the step
+  const reach = (n: number): number => -n * 1.62; // a little above level, so the arms read as reaching
+  const out = a.arms[0] > 0 || a.arms[1] > 0;
   // the far arm and the far leg, behind the body; then the near leg
   ctx.save();
   ctx.translate(0, a.bob);
-  arm(-swing, true);
+  arm(out ? reach(a.arms[0]) - 0.08 - swing * 0.12 : -swing, true);
   ctx.restore();
   leg(-0.065 - stride, Math.max(0, -a.sw) * 0.045, true);
   leg(0.065 + stride, Math.max(0, a.sw) * 0.045, false);
@@ -1118,7 +1122,7 @@ function sideView(k: Kit, d: number, a: Stance): void {
   // ---- the near arm and its shoulder pad, over the body. The shoulder is nearer the viewer than the
   // bottom of the helmet, so the pad sits in front of the helmet's lower edge. At rest the arm hangs a
   // little forward of straight down.
-  arm(swing + ARM_REST, false);
+  arm(out ? reach(a.arms[1]) + swing * 0.12 : swing + ARM_REST, false);
   const px = -0.005 * d;
   const pad: Shape = () => oval(ctx, px, -0.582, 0.072, 0.057);
   glossy(ctx, pad, suit, edge, [px - 0.072, -0.639, px + 0.072, -0.525], { depth: 0.016, spots: [[px - 0.02, -0.593, 0.023, 0.0095, -0.5, 0.9]] });
@@ -1602,9 +1606,76 @@ function sprite(c: BotColor, facing: Dir, frame: number, armL: number, armR: num
   if (facing === 3) sideView(k, -1, stance);
   else if (facing === 4) sideView(k, 1, stance);
   else frontBack(k, facing === 1, stance);
+  if (c.zombie) decay(g, facing, stance.bob);
   sprites.set(key, sp);
   return sp;
 }
+
+/**
+ * A zombie: the robot as drawn, then scorched black and rotted green in patches over it (only where the
+ * robot is: 'source-atop'), and a crack across its helmet's glass, bright along the break and dark beside it.
+ * The patches sit in the same places on the robot in every picture, mirrored for the side views.
+ */
+function decay(g: Ctx, facing: Dir, bob: number): void {
+  const d = facing === 3 ? -1 : 1;
+  const side = facing === 3 || facing === 4;
+  const back = facing === 1;
+  const hx = side ? 0.015 * d : 0;
+  g.save();
+  g.globalCompositeOperation = 'source-atop';
+  const blot = (x: number, y: number, r: number, rgb: string, a: number): void => {
+    const gr = g.createRadialGradient(x, y, 0, x, y, r);
+    gr.addColorStop(0, `rgba(${rgb},${a})`);
+    gr.addColorStop(0.6, `rgba(${rgb},${a * 0.7})`);
+    gr.addColorStop(1, `rgba(${rgb},0)`);
+    g.fillStyle = gr;
+    g.fillRect(x - r, y - r, r * 2, r * 2);
+  };
+  const ASH = '20,17,15';
+  const ROT = '78,190,52';
+  const m = (x: number): number => (back ? -x : x) * d; // mirrored for the back and the left side
+  // scorch: the chest, a hip, a shin, the helmet's crown, a shoulder, a forearm, a boot
+  blot(m(0.07), -0.5 + bob, 0.13, ASH, 0.9);
+  blot(m(-0.13), -0.36 + bob, 0.1, ASH, 0.85);
+  blot(m(0.1), -0.14, 0.09, ASH, 0.85);
+  blot(hx + m(-0.09), HY - R * 0.6 + bob, 0.12, ASH, 0.8);
+  blot(m(-0.25), -0.57 + bob, 0.09, ASH, 0.85);
+  blot(m(0.27), -0.4 + bob, 0.07, ASH, 0.75);
+  blot(m(-0.11), -0.03, 0.07, ASH, 0.7);
+  // rot: the belly, a thigh, the other shin, a forearm, a shoulder, beside the helmet's crack
+  blot(m(-0.05), -0.45 + bob, 0.09, ROT, 0.8);
+  blot(m(0.11), -0.29, 0.08, ROT, 0.75);
+  blot(m(-0.1), -0.1, 0.07, ROT, 0.8);
+  blot(m(-0.28), -0.44 + bob, 0.07, ROT, 0.75);
+  blot(m(0.24), -0.6 + bob, 0.07, ROT, 0.7);
+  blot(hx + m(0.11), HY + R * 0.1 + bob, 0.08, ROT, 0.6);
+  // the crack across the glass
+  const crack: Pt[] = [
+    [hx + m(0.1), HY - R * 0.8 + bob],
+    [hx + m(0.04), HY - R * 0.42 + bob],
+    [hx + m(0.09), HY - R * 0.16 + bob],
+    [hx + m(0.015), HY + R * 0.18 + bob],
+  ];
+  const branch: Pt[] = [crack[1], [hx + m(-0.05), HY - R * 0.3 + bob], [hx + m(-0.09), HY - R * 0.05 + bob]];
+  for (const [w, col] of [
+    [0.022, 'rgba(0,0,0,0.75)'],
+    [0.009, 'rgba(225,255,225,0.95)'],
+  ] as const) {
+    g.strokeStyle = col;
+    g.lineWidth = w;
+    g.lineJoin = 'miter';
+    for (const line of [crack, branch]) {
+      g.beginPath();
+      g.moveTo(...line[0]);
+      for (const p of line.slice(1)) g.lineTo(...p);
+      g.stroke();
+    }
+  }
+  g.restore();
+}
+
+/** Where a zombie's helmet crack is, as a share of the robot's size from its feet (render.ts sparks from it). */
+export const CRACK = { x: 0.06 * K, y: (HY - R * 0.4) * K };
 
 /**
  * A robot whose sprites are wanted soon, and for what: walking about, burnt (knocked out), as a ghost,
@@ -1751,8 +1822,8 @@ const CROWN_TILT = 0.36;
 function pictureOf(facing: Dir, walk: number, moving: boolean, pose: Pose): { frame: number; armL: number; armR: number } {
   const frame = moving ? ((Math.round((walk / (Math.PI * 2)) * WALK_FRAMES) % WALK_FRAMES) + WALK_FRAMES) % WALK_FRAMES : -1;
   const steps = (v: number): number => Math.round(Math.max(0, Math.min(1, v)) * ARM_STEPS);
-  const front = facing !== 3 && facing !== 4;
-  return { frame, armL: pose.arms && front ? steps(pose.arms[0]) : 0, armR: pose.arms && front ? steps(pose.arms[1]) : 0 };
+  // (the side view raises arms too, held out in front: a zombie's walk)
+  return { frame, armL: pose.arms ? steps(pose.arms[0]) : 0, armR: pose.arms ? steps(pose.arms[1]) : 0 };
 }
 
 export function drawRobot(ctx: Ctx, x: number, y: number, s: number, c: BotColor, facing: Dir, walk: number, moving: boolean, pose: Pose = {}): void {

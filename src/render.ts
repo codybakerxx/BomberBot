@@ -7,7 +7,7 @@
  * - drawDynamic: bricks, power-ups, bombs, blasts and robots (drawn every frame)
  * - drawItemIcon: the seven power-up icons, also used by the top bar
  */
-import { drawRobot, warmRobots, GHOST_ARMS, ROBOT, type Pose, type Wanted } from './robot';
+import { drawRobot, warmRobots, CRACK, GHOST_ARMS, ROBOT, type Pose, type Wanted } from './robot';
 import { danceFrame, danceSamples, type DanceId } from './dances';
 export { warmRobots } from './robot';
 import { World, FLOOR, HARD, SOFT, FLAME_TICKS, DEATH_TICKS, GHOST_TICKS, SHIELD_GRACE_TICKS, FALL_TICKS, TICK_HZ, ItemKind, Player, Bomb, FLY_TICKS_PER_TILE, THROW_TILES, FUSE_TICKS, CARRY_FUSE_TICKS, DX, DY, angelAim, angelReach, perimeterAt } from './sim';
@@ -28,6 +28,8 @@ export interface BotColor {
   dark: string;
   /** the glowing trim on the helmet and boots, and the colour of this bot's bombs and blasts */
   glow: string;
+  /** drawn as a zombie: scorched black and rotted green in patches, the helmet cracked (robot.ts `decay`) */
+  zombie?: boolean;
 }
 
 /** Only these parts change between bots. The black parts are shared by all nine. */
@@ -94,17 +96,61 @@ function ghostOf(c: BotColor): BotColor {
 }
 
 const zombies = new Map<string, BotColor>();
-/** A robot's colours gone a sickly green: what it is drawn in as a zombie, with green-glowing lights. */
+/**
+ * A robot as a zombie: its own colours, dulled and a little greener, with green-glowing lights; the sprite
+ * then scorches it black and rots it green in patches and cracks its helmet (`zombie`, robot.ts `decay`).
+ */
 function zombieOf(c: BotColor): BotColor {
   let z = zombies.get(c.id);
   if (!z) {
-    z = { ...c, body: mix(c.body, '#6b8f4e', 0.6), light: mix(c.light, '#b4d496', 0.55), dark: mix(c.dark, '#2c4022', 0.55), glow: '#a4ff63' };
+    z = { ...c, body: mix(c.body, '#5f7a45', 0.3), light: mix(c.light, '#a9c48c', 0.3), dark: mix(c.dark, '#22301a', 0.35), glow: '#a4ff63', zombie: true };
     zombies.set(c.id, z);
   }
   return z;
 }
-/** A zombie's arms: held out a little from its sides, as zombies do. */
+/** A zombie's arms: held out from its sides, facing the viewer or away; held out in front from the side. */
 const ZOMBIE_ARMS: [number, number] = [0.38, 0.38];
+const ZOMBIE_REACH: [number, number] = [1, 0.875];
+const zombieArms = (facing: number): [number, number] => (facing === 3 || facing === 4 ? ZOMBIE_REACH : ZOMBIE_ARMS);
+
+/**
+ * Now and then a spark jumps from a zombie's cracked helmet, like a bad circuit: a short jagged bolt, bright
+ * white-blue with a glow, for a frame or two. When is worked out from the time and the player, so each
+ * zombie sparks on its own rhythm.
+ */
+function drawSparks(ctx: Ctx, p: Player, x: number, y: number, T: number, time: number): void {
+  const beat = Math.floor(time * 14);
+  const r = scatter(beat * 7 + p.id * 131);
+  if (r > 0.3) return; // sparking about a third of the time, in bursts
+  const side = p.facing === 3 ? -1 : 1;
+  const cx = x + CRACK.x * T * (p.facing === 1 ? -1 : side) * (p.facing === 3 || p.facing === 4 ? 0.6 : 1);
+  const cy = y + CRACK.y * T;
+  ctx.save();
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  for (const [w, col, blur] of [
+    [T * 0.05, 'rgba(120,220,255,0.35)', T * 0.12],
+    [T * 0.018, 'rgba(235,250,255,0.95)', 0],
+  ] as const) {
+    ctx.strokeStyle = col;
+    ctx.lineWidth = Math.max(1, w);
+    ctx.shadowColor = 'rgba(120,220,255,0.9)';
+    ctx.shadowBlur = blur;
+    ctx.beginPath();
+    let px = cx;
+    let py = cy;
+    ctx.moveTo(px, py);
+    const dir = scatter(beat * 13 + p.id) * Math.PI * 2;
+    for (let i = 1; i <= 3; i++) {
+      const a = dir + (scatter(beat * 31 + i * 17 + p.id) - 0.5) * 1.8;
+      px += Math.cos(a) * T * 0.09;
+      py += Math.sin(a) * T * 0.09;
+      ctx.lineTo(px, py);
+    }
+    ctx.stroke();
+  }
+  ctx.restore();
+}
 /** A zombie on the move sways from side to side. */
 const zombieLean = (p: Player): number => (p.moving ? Math.sin(p.walk * 0.5) * 0.09 : Math.sin(p.walk * 0.5) * 0.03);
 
@@ -421,7 +467,7 @@ export function drawDynamic(ctx: Ctx, world: World, T: number, time: number, foc
 
   // robots, back to front
   const order = [...world.players].sort((a, b) => a.y - b.y);
-  for (const p of order) drawPlayer(ctx, world, p, T, celebrate, crowned);
+  for (const p of order) drawPlayer(ctx, world, p, T, time, celebrate, crowned);
 
   // carried and flying bombs go on top
   for (const b of world.bombs) {
@@ -730,7 +776,7 @@ export function warmSprites(ctx: Ctx, world: World, T: number, ms = 4, dance: Da
 
 /** Every picture a zombie walking about needs: standing and each step of the walk, each way, arms out. */
 const ZOMBIE_MOVES = ([1, 2, 3, 4] as const).flatMap((facing) =>
-  [-1, 0, 1, 2, 3, 4, 5, 6, 7].map((f) => ({ facing, walk: f < 0 ? 0 : (f / 8) * Math.PI * 2, moving: f >= 0, pose: { arms: ZOMBIE_ARMS } })),
+  [-1, 0, 1, 2, 3, 4, 5, 6, 7].map((f) => ({ facing, walk: f < 0 ? 0 : (f / 8) * Math.PI * 2, moving: f >= 0, pose: { arms: zombieArms(facing) } })),
 );
 
 /** The winner of a round, how many seconds ago it was decided, and the victory dance they picked (dances.ts). */
@@ -750,7 +796,7 @@ const GHOST_FADE = 2.5; // it fades over the last few tiles before its head reac
 const ASH = 18; // specks of ash
 
 /** A robot on its tile; the winner celebrating; or, for a moment after being knocked out, its remains and its ghost. */
-function drawPlayer(ctx: Ctx, world: World, p: Player, T: number, celebrate?: Celebration, crowned = -1): void {
+function drawPlayer(ctx: Ctx, world: World, p: Player, T: number, time: number, celebrate?: Celebration, crowned = -1): void {
   const col = colorById(p.colorId);
   const x = (p.x + 0.5) * T;
   const y = (p.y + 0.5) * T + T * 0.46;
@@ -766,7 +812,10 @@ function drawPlayer(ctx: Ctx, world: World, p: Player, T: number, celebrate?: Ce
         ctx.save();
         ctx.globalAlpha = 0.3;
       }
-      if (p.zombie) drawRobot(ctx, x, y, T, zombieOf(col), p.facing, p.walk, p.moving, { arms: ZOMBIE_ARMS, lean: zombieLean(p) });
+      if (p.zombie) {
+        drawRobot(ctx, x, y, T, zombieOf(col), p.facing, p.walk, p.moving, { arms: zombieArms(p.facing), lean: zombieLean(p) });
+        drawSparks(ctx, p, x, y, T, time);
+      }
       else drawRobot(ctx, x, y, T, col, p.facing, p.walk, p.moving, crowned === p.id ? { crown: true } : undefined);
       if (blink) ctx.restore();
     }
@@ -777,7 +826,9 @@ function drawPlayer(ctx: Ctx, world: World, p: Player, T: number, celebrate?: Ce
   // a zombie knocked down lies where it fell and gets up again; one just out of lives climbs out of the
   // floor once its knocked-out animation has played
   if (p.zombie && (p.zombieDown || t >= DEATH_TICKS)) {
-    const left = p.respawnAt - world.tick; // ticks until it is up
+    // ticks until it is up. Once the round is decided it never gets up (the rules stop there), so it stays
+    // where it is: down, or not yet out of the floor. (It once kept "rising" past full size, filling the screen.)
+    const left = world.over ? Infinity : Math.max(0, p.respawnAt - world.tick);
     const z = zombieOf(col);
     ctx.save();
     if (p.zombieDown) {

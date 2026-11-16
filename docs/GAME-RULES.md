@@ -221,10 +221,10 @@ The blocks were made 20% faster on 11 November 2026, after play-testing: they to
 
 **Zombies** (the owner's design: not an infection game, just something to do once out): a robot out of lives gets up again as a zombie where it fell, 2 seconds after the knockout (`ZOMBIE_RISE_TICKS`), once its knocked-out animation has played.
 
-- It walks at 75% of the starting speed (`ZOMBIE_SPEED`), whatever it had collected, and drops one bomb at a time (`ZOMBIE_BOMBS`) with a 1-tile blast (`ZOMBIE_FIRE`), to get in the others' way. It walks over power-ups without picking them up.
+- It walks at half the starting speed (`ZOMBIE_SPEED`; the owner's ask, it was 75%), whatever it had collected, and drops one bomb at a time (`ZOMBIE_BOMBS`) with a 1-tile blast (`ZOMBIE_FIRE`), to get in the others' way. It walks over power-ups without picking them up.
 - A blast or a falling block knocks it down for 4 seconds (`ZOMBIE_DOWN_TICKS`); it gets up again where it fell (beside it, if that tile is taken), and blasts leave it be for a second after (`ZOMBIE_SAFE_TICKS`).
 - A zombie is never in the round: it cannot win, and the round is decided as if it were not there.
-- It is drawn in its colours gone a sickly green, arms held out, swaying as it walks; knocked down, it lies on its side with crosses for eyes.
+- It is drawn as a robot zombie (the owner's design): its own colours dulled, scorched black and rotted green in patches, the helmet's glass cracked, green-glowing lights, and now and then a spark of electricity jumping from the crack like a bad circuit. Its arms are held out from its sides facing you, and out in front of it walking left or right; it sways as it walks. Knocked down, it lies on its side with crosses for eyes. Once the round is decided it stays as it is (a zombie that was down or still rising once grew past full size and filled the screen: fixed).
 - CPU players are zombies too: they play as usual with what a zombie has, go after the robots still in the round (not other zombies) and leave power-ups alone.
 
 ### The scoreboard and the end of a round
@@ -271,7 +271,7 @@ All of these are named constants near the top of `src/sim.ts`. Changing one chan
 | `ANGEL_BOMBS` | 1 | An angel's bombs out at once |
 | `ZOMBIE_RISE_TICKS` | 120 (2 s) | A robot out of lives gets up as a zombie this long after the knockout |
 | `ZOMBIE_DOWN_TICKS` | 240 (4 s) | A zombie knocked down gets up again this long after |
-| `ZOMBIE_SPEED` | 0.75 | A zombie's speed, as a share of the starting speed |
+| `ZOMBIE_SPEED` | 0.5 | A zombie's speed, as a share of the starting speed |
 | `ZOMBIE_FIRE`, `ZOMBIE_BOMBS` | 1, 1 | A zombie's blast, and its bombs out at once |
 | `ZOMBIE_SAFE_TICKS` | 60 (1 s) | Blasts leave a zombie be this long after it gets up |
 | `TICK_HZ` | 60 | Rule steps per second |
