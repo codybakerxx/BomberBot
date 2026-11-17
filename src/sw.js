@@ -13,6 +13,9 @@
  */
 const VERSION = '__VERSION__';
 const CACHE = `bomberbot-${VERSION}`;
+// The font is kept apart and outlives updates: it never changes with the game, and an update that threw it
+// away would leave the next visit without it until it had been fetched again (offline: not at all).
+const FONTS = 'bomberbot-fonts';
 const SHELL = ['/', '/manifest.webmanifest', '/icon-180.png', '/icon-192.png', '/icon-512.png'];
 
 self.addEventListener('install', (event) => {
@@ -28,7 +31,7 @@ self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches
       .keys()
-      .then((keys) => Promise.all(keys.filter((k) => k.startsWith('bomberbot-') && k !== CACHE).map((k) => caches.delete(k))))
+      .then((keys) => Promise.all(keys.filter((k) => k.startsWith('bomberbot-') && k !== CACHE && k !== FONTS).map((k) => caches.delete(k))))
       .then(() => self.clients.claim()),
   );
 });
@@ -67,14 +70,20 @@ self.addEventListener('fetch', (event) => {
           }
           return r;
         })
-        .catch(() => caches.match('/').then((r) => r || Response.error())),
+        .catch(() =>
+          caches
+            .open(CACHE)
+            .then((c) => c.match('/'))
+            .then((r) => r || caches.match('/'))
+            .then((r) => r || Response.error()),
+        ),
     );
     return;
   }
 
   // the font (Google's) and the game's own files: the saved copy if there is one, else fetch and save it
-  const keep = url.origin === location.origin || url.hostname === 'fonts.googleapis.com' || url.hostname === 'fonts.gstatic.com';
-  if (!keep) return;
+  const font = url.hostname === 'fonts.googleapis.com' || url.hostname === 'fonts.gstatic.com';
+  if (!font && url.origin !== location.origin) return;
   event.respondWith(
     caches.match(req).then(
       (hit) =>
@@ -82,7 +91,7 @@ self.addEventListener('fetch', (event) => {
         fetch(req).then((r) => {
           if (r.ok || r.type === 'opaque') {
             const copy = r.clone();
-            caches.open(CACHE).then((c) => c.put(req, copy));
+            caches.open(font ? FONTS : CACHE).then((c) => c.put(req, copy));
           }
           return r;
         }),

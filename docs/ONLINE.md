@@ -7,6 +7,10 @@ The same address serves the game page and runs online rooms.
 
 In an online lobby the host has a bell beside the share button. It sends a notification to every phone that turned on Settings › App › Room invites (not the host's own): "Cody wants to play · Room BKTW is open. Tap to join." Tapping it opens the game at that room's join panel. The room's server object passes it to `Friends` (`worker.ts`), one object for the whole game, which keeps the list of phones and its own signing key on its disk, and sends through each phone's push service (Apple's or Google's) with `push.ts`. Limits: once a minute per room, 30 an hour in all, the newest 45 phones. On an iPhone, notifications only work in the home-screen app (iOS 16.4 and newer).
 
+## Even frames
+
+The picture's tick is read off a clock (`frame` in `predict.ts`). Frames come one tick apart on most screens, each at the same point in its tick; if that point is right where one tick turns into the next, the smallest wobble in a frame's time shows one tick twice and then skips one. A phone gives frame times in whole milliseconds, which is wobble enough. So a frame that falls within `EDGE` of that edge has the reading leaned to the middle of a tick, once (`lean`: always forwards, under a tick, so a press is never stamped later). Measured with `WHOLE_MS=1 tools/online-feel.py 35,25`: the host's own robot went from up to 5% of frames uneven to about 1% or less, with the delay from press to move unchanged (22 to 28 ms).
+
 ## How it plays
 
 - **Title › Online** opens a small panel: **Make a room** or type a friend's four-letter code and **Join**.

@@ -12,10 +12,10 @@
  */
 import { createWorld, step, ticksLeft, World, PlayerInput, Dir, TICK_HZ, DEATH_TICKS, type GameEvent } from './sim';
 import { Bot, BotLevel, BOT_LEVELS, LEVELS, createBot, botInput } from './bot';
-import { COLORS, NOBODY, botName, colorById, drawAngels, drawHead, drawStatic, drawDynamic, drawGhosts, setMap, warmSprites } from './render';
+import { COLORS, NOBODY, botName, colorById, drawAngels, drawGround, drawHead, drawStatic, drawDynamic, drawGhosts, groundKey, setMap, warmSprites } from './render';
 import { Input, PadReader, typing } from './input';
 import { drawTitle, closeTitle, drawIcon } from './title';
-import { initAudio, preview, setSound, sfx } from './audio';
+import { initAudio, preview, setSound, sfx, wakeAudio } from './audio';
 import { createLobby, LobbyHost } from './lobby';
 import { readDance, type DanceId } from './dances';
 import { createPadNav } from './padnav';
@@ -30,8 +30,31 @@ import { decodeWorld, packInput, readCode, unpackInput, type Score, type Seat, t
 /** Look up an element of src/page.html by its id. */
 const $ = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T;
 const canvas = $<HTMLCanvasElement>('cv');
-const ctx = canvas.getContext('2d')!;
+// (the arena is drawn over the whole of its canvas every frame, so the canvas need not be see-through: the
+// browser can then put it on the screen without blending it with what is behind)
+const ctx = canvas.getContext('2d', { alpha: false })!;
 const staticLayer = document.createElement('canvas');
+/**
+ * The floor and solid blocks (staticLayer) with the blocks' shadows and the breakable blocks on them: the
+ * whole arena as it stands, drawn once a frame as one picture and made again only when a block breaks or
+ * lands (`ground`).
+ */
+const groundLayer = document.createElement('canvas');
+const groundCtx = groundLayer.getContext('2d', { alpha: false })!;
+let groundFor = '';
+let staticStamp = 0;
+function ground(w: World): HTMLCanvasElement {
+  const key = `${groundKey(w)}|${staticStamp}`;
+  if (key !== groundFor || groundLayer.width !== staticLayer.width || groundLayer.height !== staticLayer.height) {
+    groundFor = key;
+    if (groundLayer.width !== staticLayer.width) groundLayer.width = staticLayer.width;
+    if (groundLayer.height !== staticLayer.height) groundLayer.height = staticLayer.height;
+    groundCtx.drawImage(staticLayer, 0, 0);
+    setMap(setup.map);
+    drawGround(groundCtx, w, T);
+  }
+  return groundLayer;
+}
 /** The layer the ghosts of knocked-out robots float up on. It lines up with the arena and reaches from its bottom edge to the top of the screen. */
 const ghosts = $<HTMLCanvasElement>('ghosts');
 const gctx = ghosts.getContext('2d')!;
@@ -39,6 +62,8 @@ const gctx = ghosts.getContext('2d')!;
 let ghostTop = 0;
 /** true if the ghost layer has something drawn on it */
 let ghostsShown = false;
+/** true while the ghost layer is on the screen (it is taken off while it is empty: see render) */
+let ghostsOn = true;
 const result = $('result');
 const touch = $('touch');
 const title = $('title');
@@ -293,7 +318,34 @@ let scoreHeadMax = 13;
 const MAX_DENSITY = 6;
 function density(): number {
   // Settings › Graphics › Sharpness can ask for less, to save battery (Sharpest is the usual)
-  return Math.min(window.devicePixelRatio || 1, MAX_DENSITY, SHARPNESS[prefs.sharpness].cap);
+  return Math.min(screenDensity(), MAX_DENSITY, SHARPNESS[prefs.sharpness].cap);
+}
+/**
+ * How many of the screen's pixels really make one of the page's, as far as the page can tell: what the
+ * browser reports, times how far the page itself is zoomed (`pageZoom`). A page can be shown zoomed without
+ * its reported density changing: pinched, shrunk to fit something too wide, or zoomed by the app showing
+ * it. Canvases drawn for the reported density alone are then stretched, and soft, while text stays sharp.
+ */
+function screenDensity(): number {
+  return (window.devicePixelRatio || 1) * pageZoom;
+}
+/**
+ * How far the page is zoomed on the screen (the browser's visualViewport.scale): 1 nearly always. A new
+ * value is taken up once it has held still for a moment (`watchZoom`, every frame), so a pinch in progress
+ * does not have every canvas and sprite made again on each frame of it.
+ */
+let pageZoom = 1;
+let zoomSeen = 1;
+let zoomSince = 0;
+const ZOOM_SETTLE_MS = 250;
+function watchZoom(now: number): void {
+  const raw = window.visualViewport?.scale ?? 1;
+  // (within half a per cent of 1 is 1: browsers report 0.9999... and the like)
+  const z = Number.isFinite(raw) && raw > 0.05 && Math.abs(raw - 1) > 0.005 ? Math.round(raw * 1000) / 1000 : 1;
+  if (z !== zoomSeen) {
+    zoomSeen = z;
+    zoomSince = now;
+  } else if (z !== pageZoom && now - zoomSince >= ZOOM_SETTLE_MS) pageZoom = z;
 }
 
 /**
@@ -433,6 +485,7 @@ function redrawStatic(): void {
   staticLayer.height = canvas.height;
   setMap(setup.map);
   drawStatic(staticLayer.getContext('2d')!, w, T);
+  staticStamp++; // (the picture with the breakable blocks on it is out of date too)
 }
 
 const score = $<HTMLCanvasElement>('score');
@@ -591,10 +644,10 @@ function render(time: number): void {
   // (online the drawn world runs a little ahead of the server's: a block that has landed in it is drawn in now)
   const w = shownWorld();
   if (landedIn(w) !== staticLanded) redrawStatic();
-  ctx.drawImage(staticLayer, 0, 0);
+  ctx.drawImage(ground(w), 0, 0);
   clock = time;
   const winner = world.over ? world.over.winner : -1;
-  drawDynamic(ctx, w, T, time, myIdx(), winner >= 0 && decidedAt >= 0 ? { player: winner, t: time - decidedAt, dance: danceOf(winner) } : undefined, leader);
+  drawDynamic(ctx, w, T, time, myIdx(), winner >= 0 && decidedAt >= 0 ? { player: winner, t: time - decidedAt, dance: danceOf(winner) } : undefined, leader, true);
   // a few of the robots' pictures made ahead of need, so play does not stutter (the winner's dance included)
   warmSprites(ctx, w, T, 4, world.over && world.over.winner >= 0 ? danceOf(world.over.winner) : 'party');
   // the ghosts, on their own layer, which is only cleared when it has something on it
@@ -604,6 +657,12 @@ function render(time: number): void {
   ghostsShown = prefs.ghosts ? drawGhosts(gctx, w, T, -ghostTop) : false; // they can be switched off in Settings › Graphics
   // angels on the wall are part of the game, so they are drawn whatever that setting says
   if (drawAngels(gctx, w, T, time)) ghostsShown = true;
+  // with nothing on it the layer is taken off the screen, so the browser has one big see-through picture
+  // fewer to lay over the arena every frame
+  if (ghostsShown !== ghostsOn) {
+    ghostsOn = ghostsShown;
+    ghosts.style.display = ghostsOn ? '' : 'none';
+  }
   drawTimer();
   drawScore();
 }
@@ -793,10 +852,14 @@ function announce(): void {
 
 let last = performance.now();
 let acc = 0;
+/** How early a tick may be taken, as a share of a tick (see frame). */
+const STEP_SLACK = 0.25;
+/** A screen whose frames are within this share of a sixtieth of a second apart has the round keep its time (see frame). */
+const STEP_LOCK = 0.06;
 function frame(now: number): void {
   const dt = Math.min(0.1, (now - last) / 1000);
   last = now;
-  keepSharp();
+  keepSharp(now);
   input.pad.poll(now); // notice a thumb that has stopped, in every mode
   input.others = new Set(guests.map((g) => g.pad));
   input.pollGamepad(); // the controllers: their sticks and buttons, for the round and the menus
@@ -808,15 +871,24 @@ function frame(now: number): void {
     // picture that is drawn moves on to now, your robot with it (predict.ts).
     net.frame(now, mode === 'playing' ? packInput(input.state()) : 0);
   } else if (mode === 'playing' || mode === 'over') {
+    // The round moves on in ticks of a sixtieth of a second, as many as the time that has passed holds. A
+    // screen's frames are a sixtieth apart too, but never exactly (16.6 ms, then 16.8), and counted strictly
+    // that made a frame with no tick now and then and the next with two: a small judder in everything that
+    // moves. So a tick is taken once the time is within STEP_SLACK of due, and the debt carried over. And
+    // on a screen that is close to sixty frames a second (within STEP_LOCK: 59.94, say), a frame that got its
+    // one tick has that debt eased towards the middle of its range, so the two never drift to where a frame
+    // would get none or two: the round then keeps the screen's own time, a hair off a true sixtieth. Any
+    // other screen (50, 90, 120 frames a second) is left alone and the round runs at exactly its speed.
     acc += dt;
     const stepLen = 1 / TICK_HZ;
     let n = 0;
-    while (acc >= stepLen && n < 6) {
+    while (acc >= stepLen * (1 - STEP_SLACK) && n < 6) {
       tick();
       acc -= stepLen;
       n++;
     }
     if (n === 6) acc = 0;
+    else if (n === 1 && Math.abs(dt - stepLen) < stepLen * STEP_LOCK) acc += ((0.5 - STEP_SLACK) * stepLen - acc) * 0.1;
   }
   // the title screen, the lobby and Settings cover everything, so the arena behind them is not drawn
   if (mode === 'title') renderTitle(now / 1000);
@@ -879,9 +951,90 @@ $('titleLocal').addEventListener('click', leaveTitle);
  * blurry until it is laid out again, which on a phone may be never. So every frame checks, and lays the
  * page out again if the screen is not the one it was made for. (Most of the time this is three comparisons.)
  */
-function keepSharp(): void {
+function keepSharp(now: number): void {
+  watchZoom(now);
   const dpr = density();
-  if (dpr !== laidOut.dpr || window.innerWidth !== laidOut.w || window.innerHeight !== laidOut.h) layout();
+  if (dpr !== laidOut.dpr || window.innerWidth !== laidOut.w || window.innerHeight !== laidOut.h) {
+    sharpTries = 0; // a new screen: the check starts afresh
+    layout();
+  } else if (now - sharpAt >= SHARP_EVERY_MS) checkSharp(now);
+}
+
+/**
+ * The check behind keepSharp (the owner's ask, November 2026: the arena and the robots went soft now and
+ * then, most often on the first visit after an update, and it had to stop for good). keepSharp trusts what
+ * the browser reports; this measures instead. Twice a second it asks the browser where the arena really is
+ * on the screen and how big, and compares that with the pixels it was drawn with:
+ *
+ * - shown at another size than it was drawn for (something stretched it): the page is laid out again;
+ * - not starting on a whole screen pixel (something moved the page under it by part of a pixel, after it
+ *   was placed): it is moved the rest of the way onto one.
+ *
+ * Each is tried a few times and then left, so a screen it cannot put right is not laid out for ever. What it
+ * found is kept in `sharp` and shown in Settings › Graphics under Sharpness, so a blurry screen can be
+ * reported with the reason on it.
+ *
+ * When the arena is drawn pixel for pixel, it is also shown with `image-rendering: pixelated`: the browser
+ * then copies each pixel as it is and never smooths between two, so a placement out by a hair cannot soften
+ * it. (Not when it is drawn with fewer pixels than the screen has, Sharpness below Sharpest: stretched that
+ * way it would look blocky, and smoothing is right.)
+ */
+const SHARP_EVERY_MS = 500;
+const SHARP_TRIES = 4;
+let sharpAt = 0;
+let sharpTries = 0;
+let sharp = { ok: true, text: 'not checked yet' };
+function checkSharp(now: number): void {
+  sharpAt = now;
+  if (shaken) return; // (mid-shake it is a pixel or two off on purpose)
+  // (behind the title, the lobby or Settings the arena is still laid out, so it is checked there too: by the
+  // time it shows it has been put right, and Settings can say what was found)
+  const r = canvas.getBoundingClientRect();
+  if (r.width < 2 || !canvas.width) return;
+  const vv = window.visualViewport;
+  const real = (window.devicePixelRatio || 1) * (vv && vv.scale > 0.05 ? vv.scale : 1); // the screen's pixels to one of the page's, right now
+  const want = density();
+  const exact = want >= screenDensity() - 0.001; // drawn with every pixel the screen has
+  const pix = exact ? 'pixelated' : '';
+  if (canvas.style.imageRendering !== pix) canvas.style.imageRendering = ghosts.style.imageRendering = pix;
+  const shownAt = canvas.width / r.width; // the canvas's pixels to one of the page's, as it is shown
+  const stretch = shownAt / want;
+  // how far its corner is from a whole screen pixel, in screen pixels
+  const off = (v: number): number => {
+    const d = v * real;
+    return d - Math.round(d);
+  };
+  const dx = off(r.left - (vv?.offsetLeft ?? 0));
+  const dy = off(r.top - (vv?.offsetTop ?? 0));
+  const zoomed = Math.abs(real / (window.devicePixelRatio || 1) - 1) > 0.005;
+  const stretched = Math.abs(stretch - 1) > 0.004;
+  const offGrid = !zoomed && (Math.abs(dx) > 0.03 || Math.abs(dy) > 0.03);
+  if (!stretched && !offGrid) {
+    sharpTries = 0;
+    sharp = { ok: true, text: zoomed ? `sharp (the page is zoomed ×${Math.round((real / (window.devicePixelRatio || 1)) * 100) / 100}, and drawn to match)` : 'sharp, pixel for pixel' };
+    if (!exact) sharp.text = 'drawn softer on purpose (Sharpness is below Sharpest)';
+    return;
+  }
+  sharp = {
+    ok: false,
+    text: stretched
+      ? `shown ${Math.round(Math.abs(1 / stretch - 1) * 1000) / 10}% ${stretch < 1 ? 'bigger' : 'smaller'} than it is drawn`
+      : `${Math.round(Math.max(Math.abs(dx), Math.abs(dy)) * 100) / 100} of a pixel off the screen's grid`,
+  };
+  if (sharpTries >= SHARP_TRIES) return;
+  sharpTries++;
+  if (stretched) layout();
+  else {
+    // onto the grid: the rest of the way to a whole screen pixel
+    const move = (prop: 'left' | 'top', d: number, alsoGhosts: boolean): void => {
+      const v = `${(parseFloat(canvas.style[prop]) || 0) - d / real}px`;
+      canvas.style[prop] = v;
+      if (alsoGhosts) ghosts.style[prop] = v;
+    };
+    if (Math.abs(dx) > 0.03) move('left', dx, true);
+    if (Math.abs(dy) > 0.03) move('top', dy, false);
+  }
+  sharpAt = now - SHARP_EVERY_MS + 60; // look again shortly, to see that it worked
 }
 
 /** Push the control settings into the swipe pad, the screen layout, the menu and the pad's caption, and optionally save them. */
@@ -1525,7 +1678,8 @@ async function copyText(text: string): Promise<boolean> {
 $('roomTell').addEventListener('click', async () => {
   if (!net || !net.isHost) return;
   sayNet('Telling friends…', 4000);
-  net.send({ t: 'invite', me: await myEndpoint() });
+  const me = await myEndpoint();
+  net?.send({ t: 'invite', me }); // (the room may have been left while that was looked up)
 });
 
 // share the room: the phone's share sheet, or the link copied
@@ -1698,9 +1852,9 @@ const gfxOpts: Opt[] = [
     onThumb: true,
     hint: () => {
       // what the screen reports and what the game draws at, so a blurry screen can be told apart
-      const screen = Math.round((window.devicePixelRatio || 1) * 100) / 100;
+      const screen = Math.round(screenDensity() * 100) / 100;
       const drawn = Math.round(density() * 100) / 100;
-      const now = ` This screen: ${screen}×, drawn at ${drawn}×.`;
+      const now = ` This screen: ${screen}×, drawn at ${drawn}×. Arena: ${sharp.text}.`;
       return prefs.sharpness === SHARPNESS.length - 1
         ? `Uses every pixel of the screen. The usual setting.${now}`
         : `Draws the game with fewer pixels, which uses less battery on big, sharp screens. It looks a little softer.${now}`;
@@ -1991,6 +2145,23 @@ document.addEventListener('contextmenu', (e) => e.preventDefault());
 for (const g of ['gesturestart', 'gesturechange', 'gestureend']) document.addEventListener(g, (e) => e.preventDefault());
 document.addEventListener('dblclick', (e) => e.preventDefault());
 window.addEventListener('resize', layout);
+// The game going out of view and coming back (another app, a call, the screen locking). A round on this
+// screen stops while it is away, so it is left with the menu open: coming back, you choose when it goes on
+// (it used to start again the instant the game was back in view). Online the round cannot wait. Coming back,
+// sound is woken (a phone switches it off in the background), and the screen is looked at afresh.
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) {
+    if (mode === 'playing' && !net) openPause();
+  } else {
+    wakeAudio();
+    last = performance.now();
+    sharpTries = 0;
+    sharpAt = 0;
+  }
+});
+for (const ev of ['pointerdown', 'touchend', 'keydown']) document.addEventListener(ev, wakeAudio, { capture: true, passive: true });
+window.visualViewport?.addEventListener('resize', () => (sharpAt = 0)); // (a zoom or a keyboard: check the arena on the next frame)
+window.addEventListener('pageshow', () => (sharpAt = 0));
 window.addEventListener('orientationchange', () => setTimeout(layout, 200));
 
 newWorld();
@@ -2043,6 +2214,10 @@ requestAnimationFrame(frame);
   },
   get mode() {
     return mode;
+  },
+  /** what the sharpness check last found (checkSharp), for tests */
+  get sharp() {
+    return { ...sharp, tries: sharpTries, zoom: pageZoom, density: density() };
   },
   get bots() {
     return bots;

@@ -176,7 +176,9 @@ Each effect is a few layers made in code and played together: tones that slide i
 
 Everything that ties the game to the page:
 
-- the fixed-rate loop (`frame`, `tick`)
+- the fixed-rate loop (`frame`, `tick`): a tick a frame, evenly, whatever the wobble in a phone's frame times (`STEP_SLACK`, `STEP_LOCK`)
+- staying sharp: `density`, `screenDensity` and `watchZoom` (the page's zoom counts), `keepSharp` every frame, and `checkSharp`, which measures the arena on the screen twice a second, puts it right and says what it found (shown in Settings › Graphics)
+- the arena as one picture (`ground`: floor, blocks, shadows and breakable blocks, made again only when a block breaks or lands)
 - sizing the arena and controls to the screen (`layout`)
 - the round timer at the top (`drawTimer`)
 - the title screen, where the game opens: showing it (`showTitle`), drawing it each frame instead of the arena (`renderTitle`, with the picture from `title.ts`), and leaving it for the lobby (`leaveTitle`, from Local; Online opens `#onlineSheet`, see Online play above). The lobby's back button goes back to it

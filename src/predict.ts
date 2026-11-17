@@ -44,6 +44,12 @@ const SLOW_DOWN = 0.05;
 const SNAP = 30;
 /** How far back the other robots are drawn eases forward this many ticks a second once the connection settles. */
 const DELAY_EASE = 1;
+/**
+ * A frame's reading of the clock is kept this far (in ticks) from the moment one tick turns into the next
+ * (`lean`, in `frame`): read right on that edge, a frame a hair early shows the same tick as the last one
+ * and the next shows two, and everything that moves judders.
+ */
+const EDGE = 0.15;
 /** Ticks of history kept (other robots, early sounds, what was guessed). */
 const RING = 128;
 
@@ -68,6 +74,8 @@ export class Predictor {
   private needs: number[] = [];
   private off = NaN;
   private slewAt = 0;
+  /** the clock is read this much ahead (under a tick), so frames fall in the middle of a tick: see EDGE */
+  private lean = 0;
 
   // your presses: those sent and not yet taken in by the server, and what the server holds for you
   private n = 0;
@@ -181,7 +189,22 @@ export class Predictor {
       this.hooks.send({ t: 'in', v, k: m.k, n: m.n, e: this.epoch });
     }
     this.slew(now);
-    const want = Number.isNaN(this.off) ? base.tick : Math.floor(now / TICK_MS + this.off);
+    let want = base.tick;
+    if (!Number.isNaN(this.off)) {
+      // Which tick is it now? Frames come a tick apart (on most screens), each at the same point in its tick.
+      // If that point is right where one tick turns into the next, the smallest wobble in a frame's time (a
+      // phone gives them in whole milliseconds) shows one tick twice and then skips one. So when a frame
+      // falls near that edge the reading is leaned, once, to put frames in the middle of a tick: always
+      // forwards, by under a tick (16 ms), so a press is never stamped for an earlier tick than it would
+      // have been and reaches the server no later for its tick.
+      const exact = now / TICK_MS + this.off;
+      const at = exact + this.lean - Math.floor(exact + this.lean); // 0 to 1: where in its tick this frame falls
+      if (at < EDGE || at > 1 - EDGE) {
+        this.lean += 0.5 - at;
+        this.lean -= Math.floor(this.lean);
+      }
+      want = Math.floor(exact + this.lean);
+    }
     this.head = Math.max(this.head, base.tick, Math.min(want, base.tick + MAX_AHEAD));
 
     let w = this.pred;

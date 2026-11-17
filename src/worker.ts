@@ -227,13 +227,17 @@ function readFriend(x: unknown): Friend | null {
 export class Friends {
   constructor(private state: DOState) {}
 
-  private async keys(): Promise<VapidKeys> {
-    let k = await this.state.storage.get<VapidKeys>('vapid');
-    if (!k) {
-      k = await makeVapidKeys();
-      await this.state.storage.put('vapid', k);
-    }
-    return k;
+  /** (one lookup, shared: two phones asking at the same first moment must not each make a key) */
+  private keyOnce?: Promise<VapidKeys>;
+  private keys(): Promise<VapidKeys> {
+    return (this.keyOnce ??= (async () => {
+      let k = await this.state.storage.get<VapidKeys>('vapid');
+      if (!k) {
+        k = await makeVapidKeys();
+        await this.state.storage.put('vapid', k);
+      }
+      return k;
+    })());
   }
 
   async fetch(req: Request): Promise<Response> {

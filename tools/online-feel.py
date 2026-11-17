@@ -15,6 +15,8 @@ It prints, as seen on the host's screen:
   other     the same for the friend's robot
   net       the connection: ping, how far the picture runs ahead, checksums, presses that arrived late
 
+Set WHOLE_MS=1 to give the pages their frame times in whole milliseconds, as an iPhone's Safari does.
+
 Needs Python with Playwright. docs/ONLINE.md has what it measured before and after the picture ran ahead.
 """
 import asyncio, os, sys, json, statistics
@@ -48,6 +50,8 @@ SHIM = """
   };
 })();
 """ % LAT
+# WHOLE_MS=1: frame times in whole milliseconds (17, 17, 16...), as an iPhone's Safari gives them
+WHOLE_MS = "const raf = window.requestAnimationFrame.bind(window); window.requestAnimationFrame = (f) => raf((t) => f(Math.round(t)));" if os.environ.get("WHOLE_MS") else ""
 REC = """
 window.__rec = []; window.__keys = [];
 addEventListener('keydown', e => { if (!e.repeat) window.__keys.push([performance.now(), e.code]); }, true);
@@ -58,7 +62,7 @@ async def main():
         chrome = os.environ.get("CHROME")
         b = await p.chromium.launch(executable_path=chrome, args=["--no-sandbox"]) if chrome else await p.chromium.launch()
         hc = await b.new_context(viewport={"width": 390, "height": 844}); fc = await b.new_context(viewport={"width": 900, "height": 700})
-        for c in (hc, fc): await c.add_init_script("localStorage.clear();" + SHIM + REC)
+        for c in (hc, fc): await c.add_init_script("localStorage.clear();" + WHOLE_MS + SHIM + REC)
         h = await hc.new_page(); f = await fc.new_page()
         await h.goto(URL); await h.wait_for_timeout(400)
         await h.click('#titleOnline'); await h.click('#onlineMake'); await h.wait_for_timeout(1200)

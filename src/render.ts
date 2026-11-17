@@ -180,9 +180,11 @@ export function drawHard(ctx: Ctx, px: number, py: number, T: number, map: MapId
 
 /** Breakable block: fills its whole tile. `variant` 0 or 1 gives neighbours a little variety. */
 export function drawSoft(ctx: Ctx, px: number, py: number, T: number, map: MapId = mapNow, variant = 0): void {
-  if (map !== 'western') drawBricks(ctx, px, py, T);
-  else if (Number.isInteger(T) && T <= 200) ctx.drawImage(crateSprite(T, variant & 1), px, py);
-  else drawCrate(ctx, px, py, T, variant & 1);
+  void variant;
+  // a whole size (every tile of an arena): stamped from a picture made once. Any other size: drawn here.
+  if (Number.isInteger(T) && T <= 200) ctx.drawImage(softSprite(map, T), px, py);
+  else if (map === 'western') drawCrate(ctx, px, py, T);
+  else drawBricks(ctx, px, py, T);
 }
 
 /** One tile of floor, at column x and row y of the arena. */
@@ -407,7 +409,7 @@ function drawRock(ctx: Ctx, px: number, py: number, T: number, joined: boolean, 
  * with a brace corner to corner) and under it its front, darker. A dark edge all round, so crates side by
  * side read as crates. Bold shapes and few lines: on a phone a tile is under half a centimetre.
  */
-function drawCrate(ctx: Ctx, px: number, py: number, T: number, _flip = 0): void {
+function drawCrate(ctx: Ctx, px: number, py: number, T: number): void {
   const g = Math.max(1, Math.round(T * 0.04)); // the dark edge
   const top = Math.round(T * 0.78); // the lid; the rest is the front
   const f = Math.max(2, Math.round(T * 0.13)); // a frame board's width
@@ -460,17 +462,19 @@ function drawCrate(ctx: Ctx, px: number, py: number, T: number, _flip = 0): void
   ctx.fillRect(lx + f - t, fy, t, fh);
   ctx.fillRect(lx + lw - f, fy, t, fh);
 }
-/** Crates are drawn once at each size and stamped from then on (a round has a hundred of them, every frame). */
-const crates = new Map<string, HTMLCanvasElement>();
-function crateSprite(T: number, flip: number): HTMLCanvasElement {
-  const key = `${T}|${flip}`;
-  let c = crates.get(key);
+/** A breakable block is drawn once at each size and stamped from then on (an arena has a hundred of them). */
+const softs = new Map<string, HTMLCanvasElement>();
+function softSprite(map: MapId, T: number): HTMLCanvasElement {
+  const key = `${map}|${T}`;
+  let c = softs.get(key);
   if (!c) {
-    if (crates.size > 24) crates.clear();
+    if (softs.size > 24) softs.clear();
     c = document.createElement('canvas');
     c.width = c.height = T;
-    drawCrate(c.getContext('2d')!, 0, 0, T, flip);
-    crates.set(key, c);
+    const g = c.getContext('2d')!;
+    if (map === 'western') drawCrate(g, 0, 0, T);
+    else drawBricks(g, 0, 0, T);
+    softs.set(key, c);
   }
   return c;
 }
@@ -611,10 +615,15 @@ function line(ctx: Ctx, x1: number, y1: number, x2: number, y2: number): void {
  * the tile player `focusId` counts as standing on, bombs on the floor, blasts,
  * robots (those further down the screen in front), then carried and flying bombs.
  */
-export function drawDynamic(ctx: Ctx, world: World, T: number, time: number, focusId = 0, celebrate?: Celebration, crowned = -1): void {
-  // every block casts a strip of shadow onto the floor below it
-  const west = mapNow === 'western';
-  ctx.fillStyle = west ? 'rgba(38,14,4,0.42)' : 'rgba(0,0,0,0.38)';
+/**
+ * The part of the arena that changes only when a block breaks or lands: the strip of shadow every block
+ * casts onto the floor below it, and the breakable blocks themselves. It goes over the floor and solid blocks
+ * (drawStatic) and under everything else. main.ts keeps a picture of the three together and draws that once
+ * a frame, making it again only when `groundKey` says the blocks have changed: drawn afresh every frame, the
+ * bricks alone were over two thousand rectangles.
+ */
+export function drawGround(ctx: Ctx, world: World, T: number): void {
+  ctx.fillStyle = mapNow === 'western' ? 'rgba(38,14,4,0.42)' : 'rgba(0,0,0,0.38)';
   for (let y = 0; y < world.h - 1; y++) {
     for (let x = 0; x < world.w; x++) {
       if (world.tiles[y * world.w + x] !== FLOOR && world.tiles[(y + 1) * world.w + x] === FLOOR) {
@@ -622,6 +631,27 @@ export function drawDynamic(ctx: Ctx, world: World, T: number, time: number, foc
       }
     }
   }
+  for (let y = 0; y < world.h; y++) {
+    for (let x = 0; x < world.w; x++) {
+      if (world.tiles[y * world.w + x] === SOFT) drawSoft(ctx, x * T, y * T, T, mapNow, x + y);
+    }
+  }
+}
+/** A number that is different whenever the arena's blocks are (so drawGround's picture would be too). */
+export function groundKey(world: World): number {
+  const t = world.tiles;
+  let h = world.w * 131 + world.h;
+  for (let i = 0; i < t.length; i++) h = (Math.imul(h, 31) + t[i]) | 0;
+  return h;
+}
+
+/**
+ * Everything that moves, every frame. `grounded`: the picture already has the shadows and breakable blocks
+ * in it (drawGround), so they are not drawn again.
+ */
+export function drawDynamic(ctx: Ctx, world: World, T: number, time: number, focusId = 0, celebrate?: Celebration, crowned = -1, grounded = false): void {
+  const west = mapNow === 'western';
+  if (!grounded) drawGround(ctx, world, T);
 
   // power-ups: a square of solid colour that pulses, with a dark icon. It is a little smaller
   // than its tile and hovers: it bobs slowly up and down over a shadow that stays on the floor.
@@ -649,12 +679,7 @@ export function drawDynamic(ctx: Ctx, world: World, T: number, time: number, foc
     drawItemIcon(ctx, it.kind, px + size / 2, py + size / 2, size * 0.36, ICON_DARK);
   }
 
-  // breakable blocks (burning ones flash and shrink)
-  for (let y = 0; y < world.h; y++) {
-    for (let x = 0; x < world.w; x++) {
-      if (world.tiles[y * world.w + x] === SOFT) drawSoft(ctx, x * T, y * T, T, mapNow, x + y);
-    }
-  }
+  // breakable blocks that are burning flash as they go
   for (const b of world.burning) {
     const k = b.ttl / FLAME_TICKS;
     ctx.fillStyle = `rgba(255,240,210,${0.25 + 0.6 * k})`;

@@ -58,6 +58,16 @@ export function initAudio(): void {
   }
 }
 
+/**
+ * Wake the sound up again if the phone has put it to sleep: after the game has been in the background, a
+ * call, or the screen locking, a phone leaves sound switched off until it is asked for again from a touch.
+ * Called on every touch and key, and when the game comes back into view; it does nothing while sound is
+ * running, or before sound has ever been switched on.
+ */
+export function wakeAudio(): void {
+  if (ac && ac.state !== 'running' && ac.state !== 'closed') void ac.resume().catch(() => {});
+}
+
 const ready = (): boolean => !!ac && !!master && ac.state === 'running' && level > 0;
 /** a little variety, so the same sound twice in a row is not identical (pitch ±`by`) */
 const vary = (by = 0.06): number => 1 + (Math.random() * 2 - 1) * by;
