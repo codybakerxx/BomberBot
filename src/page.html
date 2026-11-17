@@ -380,7 +380,7 @@
   @media (max-width: 430px) {
     #lobby .bar-end:has(#roomTell:not([hidden])) { gap: 4px; }
     #lobby .bar-end:has(#roomTell:not([hidden])) .icon-btn { width: 38px; }
-    #lobby .bar:has(#roomTell:not([hidden])) .mode-chip { white-space: nowrap; padding-left: 10px; padding-right: 10px; letter-spacing: 0.1em; }
+    #lobby .bar:has(#roomTell:not([hidden])) .mode-chip { white-space: nowrap; letter-spacing: 0.1em; }
   }
   .icon-btn svg, .round-btn svg, .step svg, .side-btn svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
   .round-btn { flex: 0 0 auto; width: 52px; height: 52px; border-radius: 50%; background: #151a28; }
@@ -397,6 +397,23 @@
     color: var(--accent); background: rgba(255, 197, 106, 0.1); border: 1px solid rgba(255, 197, 106, 0.45); border-radius: 999px;
   }
   .mode-chip::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+  /* online: the room's code is a button that copies it (a soft inner pill with a copy icon; a tick once copied) */
+  .mode-chip.online { padding: 3px 3px 3px 10px; gap: 7px; }
+  .code-copy {
+    display: inline-flex; align-items: center; gap: 6px; min-height: 26px; padding: 3px 8px 3px 10px; border: 0; border-radius: 999px; cursor: pointer;
+    font: 700 13px/1 var(--font-display); letter-spacing: 0.16em; color: #05060b; background: var(--accent);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35), 0 1px 6px rgba(255, 197, 106, 0.25);
+    transition: background 0.18s ease, transform 0.12s ease; -webkit-tap-highlight-color: transparent;
+  }
+  .code-copy:active { transform: scale(0.95); }
+  .code-copy svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; flex: 0 0 auto; }
+  .code-copy .done-glyph { display: none; }
+  .code-copy.copied { background: #7fe0a0; }
+  .code-copy.copied .copy-glyph { display: none; }
+  .code-copy.copied .done-glyph { display: block; animation: tick-in 0.25s ease; }
+  @keyframes tick-in { from { transform: scale(0.4); opacity: 0; } to { transform: none; opacity: 1; } }
+  body.calm .code-copy.copied .done-glyph { animation: none; }
+  .code-copy:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   .summary { margin: 2px 14px 8px; text-align: center; font: 500 13px/1.3 var(--font-body); color: var(--ink-dim); }
   .pages { flex: 0 0 auto; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); margin: 0 14px; border-bottom: 1px solid var(--line); }
   .pages.three { grid-template-columns: repeat(3, minmax(0, 1fr)); }

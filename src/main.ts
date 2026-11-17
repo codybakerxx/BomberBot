@@ -1103,7 +1103,7 @@ function fillPause(): void {
   const done = matchWinner >= 0;
   $('pauseState').textContent = roundLive ? (net ? 'Playing' : 'Paused') : done ? 'Match over' : world.over ? 'Round over' : 'You are out';
   // online: the room's code, the round goes on behind the menu, and only the host restarts or ends the match
-  $('pauseMode').textContent = net ? `Online · ${net.code}` : 'Local match';
+  modeChip($('pauseMode'), net?.code ?? null);
   const hosting = !net || net.isHost;
   $('pauseHostLine').textContent = hosting ? 'Match · you are the host' : `Match · ${hostName()} is the host`;
   $('pauseRestart').hidden = !hosting;
@@ -1334,6 +1334,7 @@ function leaveOnline(bye = true): void {
   if (net && bye) net.leave();
   net = null;
   $('roomTell').hidden = $('roomShare').hidden = true;
+  modeChip($('lobbyMode'), null);
   try {
     sessionStorage.removeItem('onlineRoom');
   } catch {
@@ -1376,7 +1377,7 @@ function onRoom(m: Extract<ServerMsg, { t: 'room' }>): void {
       remote: { name: x.name, p: k + 1, on: x.on, host: x.id === m.host },
     });
   });
-  $('lobbyMode').textContent = `Online · ${m.code}`;
+  modeChip($('lobbyMode'), m.code);
   $('lobbyHostNote').textContent = net.isHost ? 'You are the host' : `${hostName()} is the host`;
   $('roomShare').hidden = false;
   $('roomTell').hidden = !net.isHost || m.playing;
@@ -1448,6 +1449,66 @@ function onRound(w: World, s: Seat[], score: Score, fresh: boolean): void {
   mode = 'playing';
   hideScreens();
   if (w.over) announce();
+}
+
+const COPY_GLYPH =
+  '<svg class="copy-glyph" viewBox="0 0 24 24" aria-hidden="true"><rect x="8.5" y="8.5" width="11" height="11" rx="2.5"/><path d="M15.5 5.5v-.5a2 2 0 0 0-2-2H6a2.5 2.5 0 0 0-2.5 2.5v7.5a2 2 0 0 0 2 2h.5"/></svg>' +
+  '<svg class="done-glyph" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>';
+/**
+ * The chip at the top saying Local match, or Online with the room's code: a button that copies the code
+ * (the owner's ask). A tap turns it green with a tick for a moment (if copying fails, a note shows the code).
+ */
+function modeChip(chip: HTMLElement, code: string | null): void {
+  if (chip.dataset.code === (code ?? '')) return;
+  chip.dataset.code = code ?? '';
+  chip.classList.toggle('online', !!code);
+  if (!code) {
+    chip.textContent = 'Local match';
+    return;
+  }
+  chip.textContent = 'Online';
+  const b = document.createElement('button');
+  b.type = 'button';
+  b.className = 'code-copy';
+  b.setAttribute('aria-label', `Room code ${code.split('').join(' ')}. Copy it`);
+  const word = document.createElement('span');
+  word.className = 'code-word';
+  word.textContent = code;
+  b.append(word);
+  b.insertAdjacentHTML('beforeend', COPY_GLYPH);
+  let timer = 0;
+  b.addEventListener('click', async (e) => {
+    e.stopPropagation();
+    const ok = await copyText(code);
+    clearTimeout(timer);
+    b.classList.toggle('copied', ok);
+    // (the note would cover the chip, so only when it could not be copied)
+    if (!ok) sayNet(`Room code: ${code}`, 4000);
+    timer = window.setTimeout(() => b.classList.remove('copied'), 1600);
+  });
+  chip.append(b);
+}
+/** Put text on the clipboard: the modern way, or the old one for browsers without it. */
+async function copyText(text: string): Promise<boolean> {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    const box = document.createElement('textarea');
+    box.value = text;
+    box.setAttribute('readonly', '');
+    box.style.cssText = 'position:fixed;opacity:0;top:0;left:0';
+    document.body.append(box);
+    box.select();
+    let ok = false;
+    try {
+      ok = document.execCommand('copy');
+    } catch {
+      ok = false;
+    }
+    box.remove();
+    return ok;
+  }
 }
 
 // Tell friends: a notification to everyone who turned them on (Settings › App), that this room is open
