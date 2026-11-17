@@ -205,92 +205,26 @@ export function drawFloor(ctx: Ctx, x: number, y: number, px: number, py: number
 
 // Midnight (the game's first look): steel blocks and bricks on a dark floor
 
-/**
- * A steel block, as a little castle keep seen from above (the owner's reference, November 2026: a tapered
- * block with a merlon at each corner and a notch between them), in the first look's blue: sloping sides lit
- * from the upper left, a cross-shaped notch sunk in the top, and four merlons with chamfered corners, each lit
- * along its top and left edges. (It was a raised bevel with a sunken square in the middle.)
- */
+/** A steel block: raised bevel with a sunken square in the middle. */
 function drawSteel(ctx: Ctx, px: number, py: number, T: number): void {
-  const C = {
-    sideLit: '#5f6fa3', // the sloping sides facing the light (top, left)
-    sideDark: '#232a46', // and away from it (bottom, right)
-    sideMid: '#33406a',
-    notch: '#1b2139', // the floor of the notch
-    notchWall: '#141a2e', // the notch's wall in shadow, under a merlon's lit face
-    merlon: '#5868a0',
-    merlonLit: '#97a7dc',
-    merlonDark: '#2a3354',
-    seam: 'rgba(10,14,30,0.55)',
-  };
-  const r = (v: number): number => Math.round(v);
-  const x0 = px;
-  const y0 = py;
-  // the block's sides, sloping in from its foot to its top (a frame of four trapezoids)
-  const inset = r(T * 0.1);
-  const tx = x0 + inset;
-  const ty = y0 + inset;
-  const tw = T - inset * 2;
-  ctx.fillStyle = C.sideMid;
-  ctx.fillRect(x0, y0, T, T);
-  const quad = (pts: number[], col: string): void => {
-    ctx.fillStyle = col;
-    ctx.beginPath();
-    ctx.moveTo(pts[0], pts[1]);
-    for (let i = 2; i < pts.length; i += 2) ctx.lineTo(pts[i], pts[i + 1]);
-    ctx.closePath();
-    ctx.fill();
-  };
-  quad([x0, y0, x0 + T, y0, tx + tw, ty, tx, ty], C.sideLit); // top side
-  quad([x0, y0, tx, ty, tx, ty + tw, x0, y0 + T], '#4c5a8e'); // left side
-  quad([x0 + T, y0, x0 + T, y0 + T, tx + tw, ty + tw, tx + tw, ty], C.sideDark); // right side
-  quad([x0, y0 + T, tx, ty + tw, tx + tw, ty + tw, x0 + T, y0 + T], '#1c2340'); // bottom side
-  // the top: the notch floor first, then the four merlons on it
-  ctx.fillStyle = C.notch;
-  ctx.fillRect(tx, ty, tw, tw);
-  const gap = Math.max(2, r(tw * 0.17)); // the notch's width
-  const m = (tw - gap) / 2; // a merlon's size
-  const ch = Math.max(1, T * 0.05); // the chamfer on a merlon's outer corner
-  const e = Math.max(1, r(T * 0.035)); // a lit or shaded edge
-  for (const [i, j] of [
-    [0, 0],
-    [1, 0],
-    [0, 1],
-    [1, 1],
-  ]) {
-    const mx = r(tx + i * (m + gap));
-    const my = r(ty + j * (m + gap));
-    const mw = r(tx + i * (m + gap) + m) - mx;
-    // its shadow into the notch, down and to the right
-    ctx.fillStyle = C.notchWall;
-    ctx.fillRect(mx + e, my + e, mw, mw);
-    // the merlon, its outer corner chamfered
-    const ox = i ? mx + mw : mx; // its outer corner
-    const oy = j ? my + mw : my;
-    const sx = i ? -1 : 1;
-    const sy = j ? -1 : 1;
-    ctx.fillStyle = C.merlon;
-    ctx.beginPath();
-    ctx.moveTo(ox + sx * ch, oy);
-    ctx.lineTo(ox + sx * mw, oy);
-    ctx.lineTo(ox + sx * mw, oy + sy * mw);
-    ctx.lineTo(ox, oy + sy * mw);
-    ctx.lineTo(ox, oy + sy * ch);
-    ctx.closePath();
-    ctx.fill();
-    // lit along its top and left edges, shaded along its bottom and right
-    ctx.fillStyle = C.merlonLit;
-    ctx.fillRect(mx + (i ? 0 : ch), my, mw - ch, e);
-    ctx.fillRect(mx, my + (j ? 0 : ch), e, mw - ch);
-    ctx.fillStyle = C.merlonDark;
-    ctx.fillRect(mx + (i ? 0 : 0), my + mw - e, mw - (i && j ? ch : 0), e);
-    ctx.fillRect(mx + mw - e, my + (j ? 0 : 0), e, mw - (i && j ? ch : 0));
-  }
-  // a thin dark line where the block meets its neighbours, so a row of them reads as separate blocks
-  ctx.fillStyle = C.seam;
-  const s = Math.max(1, r(T * 0.02));
-  ctx.fillRect(x0, y0 + T - s, T, s);
-  ctx.fillRect(x0 + T - s, y0, s, T);
+  const e = Math.max(1, Math.round(T * 0.07));
+  ctx.fillStyle = '#39456b';
+  ctx.fillRect(px, py, T, T);
+  ctx.fillStyle = '#6676a8'; // lit top and left edges
+  ctx.fillRect(px, py, T, e);
+  ctx.fillRect(px, py, e, T);
+  ctx.fillStyle = '#1a2036'; // shaded bottom and right edges
+  ctx.fillRect(px, py + T - e, T, e);
+  ctx.fillRect(px + T - e, py, e, T);
+  const i = Math.round(T * 0.26);
+  const w = T - i * 2;
+  ctx.fillStyle = '#1a2036';
+  ctx.fillRect(px + i, py + i, w, w);
+  ctx.fillStyle = '#2b3454';
+  ctx.fillRect(px + i + e, py + i + e, w - e, w - e);
+  ctx.fillStyle = '#6676a8';
+  ctx.fillRect(px + i, py + i + w - e, w, e);
+  ctx.fillRect(px + i + w - e, py + i, e, w);
 }
 
 /** Four staggered courses of bricks. */
