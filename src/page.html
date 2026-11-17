@@ -629,6 +629,9 @@
   .opt-name { display: flex; flex-direction: column; gap: 3px; min-width: 0; flex: 1 1 auto; cursor: default; }
   .opt-toggle .opt-name { cursor: pointer; }
   .opt-label { font: 700 14px/1.15 var(--font-display); letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink); }
+  /* the switches under Randomize CPUs keep to one line, so "Random CPU difficulty" does not make its row taller on the narrowest phones */
+  .opt-under .opt-toggle .opt-label { white-space: nowrap; }
+  @media (max-width: 359px) { .opt-under .opt-toggle .opt-label { letter-spacing: 0.03em; } }
   .opt-hint { font: 500 12px/1.3 var(--font-body); color: var(--ink-dim); }
   .opt-hint:empty { display: none; }
   .opt-ctl { display: flex; align-items: center; flex: 0 0 auto; }

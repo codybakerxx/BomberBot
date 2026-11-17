@@ -455,7 +455,7 @@ export function createLobby(host: LobbyHost): {
           },
         }),
         toggle({
-          label: 'Random levels',
+          label: 'Random CPU difficulty',
           get: () => s().randLevels,
           set: (on) => {
             s().randLevels = on;
