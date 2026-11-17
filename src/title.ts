@@ -94,7 +94,7 @@ function sceneFor(stage: Box): Scene {
  * The arena behind the robots, with the dark coming in over it, drawn once for a size of screen and kept.
  * Tiles are counted from the rivals' feet: they stand on row 0, in columns -1 and 1.
  */
-function drawBackdrop(g: Ctx, W: number, H: number, sc: Scene, me: BotColor, stage: Box): void {
+function drawBackdrop(g: Ctx, W: number, H: number, sc: Scene, me: BotColor, stage: Box, bare = false): void {
   const t = Math.max(8, Math.round(sc.S * FLOOR_TILE));
   const ox = sc.x - t / 2; // the left edge of column 0, under your robot
   const oy = sc.y - t * 0.96; // the top edge of row 0, which your robot's feet are on (near the bottom of the tile, as in play)
@@ -113,7 +113,7 @@ function drawBackdrop(g: Ctx, W: number, H: number, sc: Scene, me: BotColor, sta
       g.fillStyle = '#0e1220';
       g.fillRect(px, py, t, t);
       // the corridor the robots stand in stays clear, so they stand out against the floor
-      if (j >= -clearUp && j <= 1) continue;
+      if (bare || (j >= -clearUp && j <= 1)) continue;
       // solid blocks on every other row and column, as in the arena; bricks scattered between them
       if (i % 2 === 0 && j % 2 !== 0) drawHard(g, px, py, t);
       else if (hash(i, j) < 0.42) drawSoft(g, px, py, t);
@@ -164,16 +164,16 @@ const usedPx = new Set<number>();
  * Draw the title picture. `ctx` is the full-screen canvas, `stage` where the robots stand (both in canvas
  * pixels), `me` your colour, `t` seconds since the title opened.
  */
-export function drawTitle(ctx: Ctx, stage: Box, me: BotColor, t: number): void {
+export function drawTitle(ctx: Ctx, stage: Box, me: BotColor, t: number, bare = false): void {
   const W = ctx.canvas.width;
   const H = ctx.canvas.height;
   const sc = sceneFor(stage);
-  const key = `${W}x${H}|${Math.round(stage.x)},${Math.round(stage.y)},${Math.round(stage.w)},${Math.round(stage.h)}|${me.id}`;
+  const key = `${W}x${H}|${Math.round(stage.x)},${Math.round(stage.y)},${Math.round(stage.w)},${Math.round(stage.h)}|${me.id}|${bare}`;
   if (key !== backdropKey) {
     backdropKey = key;
     backdrop.width = W;
     backdrop.height = H;
-    drawBackdrop(backdrop.getContext('2d')!, W, H, sc, me, stage);
+    drawBackdrop(backdrop.getContext('2d')!, W, H, sc, me, stage, bare);
   }
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.drawImage(backdrop, 0, 0);
@@ -215,7 +215,7 @@ export function drawIcon(size: number): HTMLCanvasElement {
   c.width = c.height = size;
   const g = c.getContext('2d')!;
   // the stage fills the square (a little room over the raised arm); the arm right up, mid-wave
-  drawTitle(g, { x: 0, y: size * 0.04, w: size, h: size * 0.96 }, colorById('gold'), WAVE_FIRST + WAVE_UP + 0.001);
+  drawTitle(g, { x: 0, y: size * 0.04, w: size, h: size * 0.96 }, colorById('gold'), WAVE_FIRST + WAVE_UP + 0.001, true); // bare: no blocks or bricks behind (the owner's ask: a brick showed at the bottom)
   backdropKey = ''; // (the title screen draws its own again next time)
   return c;
 }

@@ -1685,6 +1685,7 @@ const padOpts: Opt[] = [
 const gfxOpts: Opt[] = [
   slider({
     label: 'Sharpness',
+    onThumb: true,
     hint: () => {
       // what the screen reports and what the game draws at, so a blurry screen can be told apart
       const screen = Math.round((window.devicePixelRatio || 1) * 100) / 100;
