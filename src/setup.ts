@@ -186,6 +186,62 @@ export interface MatchSetup {
   postMortem: boolean;
   /** with angels: an angel whose bomb knocks a robot out comes back in its place */
   angelsBack: boolean;
+  /**
+   * Teams (the Players page; the owner's ask, November 2026): two sides, the Red team and the Blue team
+   * (TEAMS), and the last side standing wins the round. Every robot on it gets the point.
+   */
+  teamsOn: boolean;
+  /** each robot's side by its colour (one colour is one robot in a match). A robot not in it is put on the smaller side (`teamsFor`). */
+  teams: Record<string, number>;
+  /** in a teams match, can a teammate's blast knock you out? */
+  friendlyFire: boolean;
+}
+
+/** The two sides of a teams match. */
+export const TEAMS = [
+  { name: 'Red team', short: 'Red', color: '#ff5a5f' },
+  { name: 'Blue team', short: 'Blue', color: '#3fa7ff' },
+];
+
+/**
+ * The side of each robot in a match, given their colours in player order (you, the other players, the CPU
+ * players): the side picked for it, or the smaller side for one with none yet. Always two sides that each
+ * have someone on them (with two robots or more): if everyone is on one side, the last one goes to the other.
+ */
+export function teamsFor(s: MatchSetup, colours: string[]): number[] {
+  const out: number[] = [];
+  const count = [0, 0];
+  for (const c of colours) {
+    const t = s.teams[c];
+    if (t === 0 || t === 1) count[t]++;
+  }
+  for (const c of colours) {
+    let t = s.teams[c];
+    if (t !== 0 && t !== 1) {
+      t = count[1] < count[0] ? 1 : 0;
+      count[t]++;
+    }
+    out.push(t);
+  }
+  if (out.length > 1 && out.every((t) => t === out[0])) out[out.length - 1] = 1 - out[0];
+  return out;
+}
+
+/** Two robots swap colours (a CPU player gives its colour up to you): each keeps its side, so their sides swap with the colours. */
+export function swapTeams(s: MatchSetup, a: string, b: string): void {
+  const ta = s.teams[a];
+  const tb = s.teams[b];
+  delete s.teams[a];
+  delete s.teams[b];
+  if (tb !== undefined) s.teams[a] = tb;
+  if (ta !== undefined) s.teams[b] = ta;
+}
+
+/** Split the robots into two sides, half and half: the first half (P1, P2...) red, the rest blue. With an odd number, red has one more. */
+export function splitTeams(s: MatchSetup, colours: string[]): void {
+  const half = Math.ceil(colours.length / 2);
+  s.teams = {};
+  colours.forEach((c, i) => (s.teams[c] = i < half ? 0 : 1));
 }
 
 export function defaultSetup(myColor: string): MatchSetup {
@@ -212,6 +268,9 @@ export function defaultSetup(myColor: string): MatchSetup {
     afterlife: 'watch', // watching is the standard: Post-Mortem Behavior off (the owner's call)
     postMortem: false,
     angelsBack: false,
+    teamsOn: false,
+    teams: {},
+    friendlyFire: false, // teammates are safe from each other's blasts unless it is switched on
   };
 }
 
@@ -229,7 +288,8 @@ export function pickArena(s: MatchSetup, id: ArenaId): void {
  * the players are left as they are.
  */
 export function defaultRules(s: MatchSetup, myColor: string): MatchSetup {
-  const out = { ...defaultSetup(myColor), cpus: s.cpus, map: s.map, randEmotes: s.randEmotes, randLevels: s.randLevels };
+  // (the Players page's settings stay: the players, Randomize CPUs and the teams)
+  const out = { ...defaultSetup(myColor), cpus: s.cpus, map: s.map, randEmotes: s.randEmotes, randLevels: s.randLevels, teamsOn: s.teamsOn, teams: s.teams, friendlyFire: s.friendlyFire };
   pickArena(out, s.arena);
   return out;
 }
@@ -271,7 +331,9 @@ export function itemChances(s: MatchSetup): [ItemKind, number][] {
 /** The config sim.ts builds a round from: you first, then the other players on this screen, then the CPU players in their lobby order. */
 export function worldConfig(s: MatchSetup, myColor: string, seed: number, guests: string[] = []): WorldConfig {
   const size = arenaSize(s, guests.length);
+  const colours = [myColor, ...guests, ...s.cpus.map((c) => c.colorId)];
   return {
+    ...(s.teamsOn ? { teams: teamsFor(s, colours), friendlyFire: s.friendlyFire } : {}),
     seed,
     cols: size.cols,
     rows: size.rows,
@@ -302,6 +364,7 @@ export function summary(s: MatchSetup, guests = 0): string {
     s.timerOn ? `${clockText(s.roundSecs)} rounds` : 'No timer',
     `First to ${s.firstTo}`,
   ];
+  if (s.teamsOn) parts.push(s.friendlyFire ? 'Teams, friendly fire' : 'Teams');
   if (s.lives > 1) parts.push(`${s.lives} lives`);
   if (afterlifeOf(s) === 'angel') parts.push(s.angelsBack ? 'Angels come back' : 'Angels');
   if (afterlifeOf(s) === 'zombie') parts.push('Zombies');
@@ -366,6 +429,11 @@ export function readSetup(raw: unknown, myColor: string, colorIds: string[]): Ma
   if (typeof was.postMortem === 'boolean') out.postMortem = was.postMortem;
   else out.postMortem = out.afterlife !== 'watch';
   if (typeof r.angelsBack === 'boolean') out.angelsBack = r.angelsBack;
+  if (typeof r.teamsOn === 'boolean') out.teamsOn = r.teamsOn;
+  if (typeof r.friendlyFire === 'boolean') out.friendlyFire = r.friendlyFire;
+  if (r.teams && typeof r.teams === 'object') {
+    for (const [c, t] of Object.entries(r.teams)) if (colorIds.includes(c) && (t === 0 || t === 1)) out.teams[c] = t;
+  }
   return out;
 }
 
@@ -415,6 +483,8 @@ export interface Prefs {
 
   /** the ghosts of knocked-out robots floating up the screen */
   ghosts: boolean;
+  /** every blast burns ordinary orange fire, in place of its robot's colour (Settings › Graphics) */
+  orangeFire: boolean;
   /** less movement in the menus: no pulsing buttons, no waving robot on the title */
   calm: boolean;
   /** how strongly the touch controls show: 40 to 200 (per cent of the usual) */
@@ -427,7 +497,7 @@ export interface Prefs {
 }
 
 export function defaultPrefs(): Prefs {
-  return { soundOn: true, volume: 80, muted: [], sharpness: DEFAULT_SHARPNESS, ghosts: true, calm: false, padShow: 100, keys: defaultKeys(), padKeys: defaultPad(), rumble: true };
+  return { soundOn: true, volume: 80, muted: [], sharpness: DEFAULT_SHARPNESS, ghosts: true, orangeFire: false, calm: false, padShow: 100, keys: defaultKeys(), padKeys: defaultPad(), rumble: true };
 }
 
 export function readPrefs(raw: unknown): Prefs {
@@ -440,6 +510,7 @@ export function readPrefs(raw: unknown): Prefs {
     muted: Array.isArray(r.muted) ? r.muted.filter((m) => SOUND_NAMES.some(([id]) => id === m)) : [],
     sharpness: clampInt(r.sharpness, 0, SHARPNESS.length - 1, d.sharpness),
     ghosts: typeof r.ghosts === 'boolean' ? r.ghosts : d.ghosts,
+    orangeFire: typeof r.orangeFire === 'boolean' ? r.orangeFire : d.orangeFire,
     calm: typeof r.calm === 'boolean' ? r.calm : d.calm,
     padShow: clampInt(r.padShow, 40, 200, d.padShow),
     keys: readKeys(r.keys),

@@ -197,6 +197,18 @@ The blocks were made 20% faster on 11 November 2026, after play-testing: they to
 - Once a round is decided, nothing more can happen to the winner, no more blocks start to fall, and nobody moves.
 - The other bots are CPU players, each at the level the lobby gave it. Be the last one in and the round is won.
 
+## Teams
+
+*`teams` and `friendlyFire` in `WorldConfig`, `allies`, `blastHurts`, `winnersOf` in sim.ts; `teamsFor`, `splitTeams` in setup.ts*
+
+- With **Teams** switched on (the Players page), the robots play on two sides, the **Red team** and the **Blue team**. Switched on, it splits everyone half and half in player order (P1, P2… red, the rest blue; with an odd number red has one more). **Split evenly** does it again. The badge under each robot's feet on its card says its side, and a tap moves it to the other (a CPU player's panel has a Team row too). A side is never left empty: the last robot on one stays.
+- A robot that joins goes on the smaller side. A robot keeps its side when it swaps colours with another.
+- The round is won by the **last side** with a robot in it. Every robot on that side wins the round and gets the point, those knocked out included, so teammates always have the same score and reach Rounds to win together. The result panel names the side (Red team wins the round; Your team wins the round).
+- **Friendly fire** (off unless switched on): off, a teammate's blast does not knock you out; your own blast still does. On, it does, like anyone's.
+- Angels and zombies keep their side. An angel coming back takes the place of a robot of the other side only.
+- CPU players do not go after their teammates, and with friendly fire on do not drop a bomb that would leave a teammate caught with no way out.
+- In the arena each robot stands on a ring in its side's colour; the scoreboard rings its head in that colour, and the menu during a match marks each line.
+
 ## Lives and angels
 
 *`knockOut`, `bringBack`, `comeBackTile`, `angelStep` and the end of `step`, in sim.ts*
@@ -321,7 +333,8 @@ The host can change these before a match. Left alone, every one is the usual rul
 | Custom power-ups | For each kind: Off, Rare (half), Normal, Lots (double) | Its chance under a brick (`itemChance`). A boot and a glove are only made sure of when they are not Off |
 | Lives | 1 to 5 | Lives each robot has in a round (`lives`); see Lives and angels |
 | Post-Mortem Behavior | Off (the default: watch) or on: Angel (with Angels come back) or Zombie | What a robot out of lives does: watches, haunts the wall throwing bombs in (`angels`: 'on'; 'revive' with Angels come back), or gets up as a zombie (`zombies`) |
+| Teams (Players page) | Off, or on: Red and Blue, Split evenly, each robot's side; Friendly fire off or on | The last side standing wins (`teams`, `friendlyFire`); see Teams |
 
 ## Not in the game yet
 
-Teams, playing online, more arenas, and setting bombs off by remote. See [ROADMAP.md](ROADMAP.md).
+More arenas, and setting bombs off by remote. See [ROADMAP.md](ROADMAP.md).

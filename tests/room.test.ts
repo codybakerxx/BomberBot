@@ -23,7 +23,7 @@ import {
   type ServerMsg,
 } from '../src/net';
 import { makeRng } from '../src/sim';
-import { ARENAS, MAPS, defaultRules, itemChances, defaultSetup, readSetup, rollCpus, summary, wholeTile } from '../src/setup';
+import { ARENAS, MAPS, defaultRules, itemChances, defaultSetup, readSetup, rollCpus, splitTeams, summary, swapTeams, teamsFor, wholeTile, worldConfig } from '../src/setup';
 import { BOT_LEVELS } from '../src/bot';
 import { DANCE_IDS } from '../src/dances';
 import type { World } from '../src/sim';
@@ -339,6 +339,66 @@ assert.strictEqual(back.last('room')!.host, back.last('room')!.you, 'the friend 
   }
   assert.ok(seen.size > 4, `the picks change from match to match (${seen.size} different)`);
   assert.deepStrictEqual(h.last('room')!.setup.cpus, lobby.cpus, 'the cards in the lobby are as the host left them');
+}
+
+// teams online: the server's round has the sides, and every robot on the winning side gets the point
+{
+  const room3 = new Room('TEAM', makeRng(5));
+  const h = new Page('h3');
+  h.member = room3.hello(h.conn, { t: 'hello', id: 'h3', name: 'Cody', colorId: 'gold', dance: 'spin', create: true, pv: PROTOCOL }, now);
+  const first = h.last('room')!.setup;
+  const cpus = first.cpus.map((c) => c.colorId);
+  const teams = Object.fromEntries(['gold', ...cpus].map((c, i) => [c, i < 2 ? 0 : 1]));
+  room3.message(h.member!, { t: 'setup', setup: { ...first, teamsOn: true, friendlyFire: false, teams, firstTo: 2, timerOn: false } }, now);
+  room3.message(h.member!, { t: 'start' }, now);
+  const cfg = h.last('round')!.cfg;
+  assert.deepStrictEqual(cfg.teams, [0, 0, 1, 1], 'the round the server sends has the sides');
+  assert.strictEqual(cfg.friendlyFire, false);
+  const w = room3.world!;
+  for (const x of [w, h.world!]) for (const p of x.players) if (p.team === 1) Object.assign(p, { alive: false, lives: 0, respawnAt: -1 });
+  let t = now + 3000;
+  for (let i = 0; i < 40 && !w.over; i++) room3.advance((t += 100));
+  assert.strictEqual(w.over?.team, 0, 'the red side wins');
+  assert.deepStrictEqual(room3.score.wins, [1, 1, 0, 0], 'a point each for both robots on it');
+}
+
+// teams: split half and half, balanced as players come and go, kept through colour swaps and saving
+{
+  const s = defaultSetup('gold');
+  const four = ['gold', 'black', 'pink', 'blue'];
+  assert.equal(s.teamsOn, false, 'teams are off to start with');
+  assert.equal(s.friendlyFire, false, 'and friendly fire is off');
+  assert.equal(worldConfig(s, 'gold', 1).teams, undefined, 'off: every robot for itself');
+  splitTeams(s, four);
+  assert.deepStrictEqual(teamsFor(s, four), [0, 0, 1, 1], 'half and half, in player order');
+  splitTeams(s, ['gold', 'black', 'pink']);
+  assert.deepStrictEqual(teamsFor(s, ['gold', 'black', 'pink']), [0, 0, 1], 'an odd number: red has one more');
+  // someone new goes on the smaller side
+  splitTeams(s, four);
+  assert.deepStrictEqual(teamsFor(s, [...four, 'red']), [0, 0, 1, 1, 0]);
+  s.teams.black = 1;
+  assert.deepStrictEqual(teamsFor(s, [...four, 'red']), [0, 1, 1, 1, 0]);
+  // never only one side
+  s.teams = { gold: 0, black: 0, pink: 0, blue: 0 };
+  assert.deepStrictEqual(teamsFor(s, four), [0, 0, 0, 1]);
+  // a CPU player gives its colour up to you: you each keep your side
+  s.teams = { gold: 0, black: 0, pink: 1, blue: 1 };
+  swapTeams(s, 'gold', 'pink');
+  assert.deepStrictEqual(s.teams, { gold: 1, black: 0, pink: 0, blue: 1 });
+  // into the world, and read back as saved
+  s.teamsOn = true;
+  s.friendlyFire = true;
+  s.cpus = [{ colorId: 'black', level: 'normal' }, { colorId: 'gold', level: 'normal' }, { colorId: 'blue', level: 'normal' }];
+  const cfg = worldConfig(s, 'pink', 1);
+  assert.deepStrictEqual(cfg.teams, [0, 0, 1, 1]);
+  assert.equal(cfg.friendlyFire, true);
+  const back = readSetup(JSON.parse(JSON.stringify(s)), 'pink', COLOR_IDS);
+  assert.equal(back.teamsOn, true);
+  assert.equal(back.friendlyFire, true);
+  assert.deepStrictEqual(back.teams, s.teams);
+  assert.deepStrictEqual(readSetup({ ...s, teams: { gold: 3, nope: 1, blue: 1 } }, 'pink', COLOR_IDS).teams, { blue: 1 }, 'only real colours and sides are kept');
+  assert.equal(defaultRules(s, 'pink').teamsOn, true, 'Reset to Default on the Match page leaves the teams alone');
+  assert.ok(summary(s).includes('Teams, friendly fire'));
 }
 
 console.log('room checks passed');

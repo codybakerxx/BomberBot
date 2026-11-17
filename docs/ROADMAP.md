@@ -12,7 +12,7 @@ Each step is played on a phone before the next one starts.
 | 2 | **Computer players.** The other bots move, avoid blasts and fight back, so the game can be played alone. | Built: three levels (Beginner, Normal, Hard). Being play-tested. |
 | 3 | **Round flow.** Last one standing wins, blocks fall to shrink the arena as time runs out, and a results screen. | Built: a timer of 1 minute 30, then 50 seconds of falling blocks, then a fight in the square that is left; a scoreboard of rounds won, with a crown for the leader; knock-out and winning animations. Being play-tested. Choosing the round length is still to come. |
 | 4 | **Menus.** A proper character select, a choice of round length, a colour picker, level select, and choosing which power-ups are in a custom game. | Planned |
-| 5 | **Teams.** Team battles by colour. | Planned |
+| 5 | **Teams.** Red and Blue sides, split evenly or by hand, friendly fire on or off. | Built (November 2026) |
 | 6 | **Online.** Rooms for up to eight players. | Built (November 2026): see docs/ONLINE.md. Being play-tested. |
 | 7 | **Polish.** Final look, colours and sound, then putting it online for friends. | Planned |
 
@@ -24,7 +24,7 @@ Agreed with the owner in November 2026, after he listed everything he wants the 
 
 1. **Match setup and screens.** A title screen, then a lobby that holds the settings: round length, rounds per match, CPU level and your colour. The warm-up, a more realistic bomb with a fuse that burns down, is done. The title screen and the lobby are built (November 2026), with Settings and a new menu for during a match; both are being play-tested. Teams wait for step 3. Up to eight players works locally already.
 2. **Online.** A small server, room codes, a join-room screen, up to eight players. Built (November 2026) on Cloudflare: see `docs/ONLINE.md`. Next: play-testing between two people.
-3. **Modes.** Teams, a zombie mode, knocked-out players throwing bombs from the border as angels, and lives per game. Angels, zombies and lives are built (November 2026; see the decisions below); teams are not wanted for now (the owner, November 2026).
+3. **Modes.** Teams, a zombie mode, knocked-out players throwing bombs from the border as angels, and lives per game. Angels, zombies, lives and teams are built (November 2026; teams at the owner's ask on 17 November: see docs/GAME-RULES.md › Teams).
 
 **Any time, between steps:** more emotes (picked before the game), redesigned sound effects and a menu to choose which you hear, music with an off switch, detail passes on the default graphics.
 

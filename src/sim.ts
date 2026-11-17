@@ -121,6 +121,8 @@ export interface Player {
    */
   zombie: boolean;
   zombieDown: boolean;
+  /** the side it plays on in a teams match (WorldConfig.teams): 0, 1... ; -1 when every robot plays for itself */
+  team: number;
 }
 
 export interface Bomb {
@@ -248,8 +250,12 @@ export interface World {
   nextBombId: number;
   /** what happened on the latest tick (cleared at the start of each one) */
   events: GameEvent[];
-  /** set once the round is decided; winner is a player id, or -1 for a draw */
-  over: { winner: number } | null;
+  /**
+   * set once the round is decided; winner is a player id, or -1 for a draw. In a teams match `team` is the
+   * side that won and `winner` one of its robots (one still standing if any is): every robot on that side
+   * wins the round, those knocked out included (`winnersOf`).
+   */
+  over: { winner: number; team?: number } | null;
   /** ticks left before the result is declared once one player or none is left; -1 until then */
   overCountdown: number;
   /** optional and off by default: letting go finishes the step so players stop in the middle of a tile */
@@ -262,6 +268,10 @@ export interface World {
   spawns: { x: number; y: number }[];
   /** what a robot starts with, and comes back with after losing a life */
   start: { bombs: number; fire: number; speed: number };
+  /** a teams match: the round is won by the last side standing (Player.team) */
+  teams: boolean;
+  /** in a teams match, whether a teammate's blast can knock you out (your own always can) */
+  friendlyFire: boolean;
 }
 
 /** Knocked-out players as angels: off, on (they throw bombs in), or on and able to come back (`revive`). */
@@ -302,6 +312,13 @@ export interface WorldConfig {
   angels?: AngelRule;
   /** Knocked-out players as zombies (World.zombies), in place of angels. Default false. */
   zombies?: boolean;
+  /**
+   * A teams match: the side of each player, in the order of `players` (0, 1...). The last side with a robot in
+   * the round wins it. Left out, or with fewer than two sides, every robot plays for itself.
+   */
+  teams?: number[];
+  /** In a teams match, can a teammate's blast knock you out? Default true. Your own blast always can. */
+  friendlyFire?: boolean;
 }
 
 // ---------------------------------------------------------------- constants
@@ -474,6 +491,7 @@ export function createWorld(cfg: WorldConfig): World {
   const startFire = within(cfg.startFire, START_FIRE, MAX_FIRE, START_FIRE);
   const startSpeed = within(cfg.startSpeed, 0, MAX_SPEED_ITEMS, 0);
   const lives = within(cfg.lives, 1, MAX_LIVES, 1);
+  const teamsOn = !!cfg.teams && cfg.teams.length === cfg.players.length && new Set(cfg.teams).size > 1 && cfg.teams.every((t) => Number.isInteger(t) && t >= 0);
   const players: Player[] = cfg.players.map((p, id) => ({
     id,
     colorId: p.colorId,
@@ -510,6 +528,7 @@ export function createWorld(cfg: WorldConfig): World {
     angelHeld: 0,
     zombie: false,
     zombieDown: false,
+    team: teamsOn ? cfg.teams![id] : -1,
   }));
 
   return {
@@ -537,6 +556,8 @@ export function createWorld(cfg: WorldConfig): World {
     zombies: !!cfg.zombies,
     spawns: spawns.map((p) => ({ ...p })),
     start: { bombs: startBombs, fire: startFire, speed: startSpeed },
+    teams: teamsOn,
+    friendlyFire: cfg.friendlyFire ?? true,
   };
 }
 
@@ -631,7 +652,7 @@ function fallBlocks(world: World): void {
       if (!p.alive) continue;
       const px = Math.round(p.x);
       const py = Math.round(p.y);
-      if (px === cx && py === cy && world.over && world.over.winner === p.id) {
+      if (px === cx && py === cy && wonRound(world, p)) {
         // the round is decided and this is the winner: the block leaves it be
       } else if (px === cx && py === cy) {
         knockOut(world, p, 'block', -1);
@@ -643,9 +664,9 @@ function fallBlocks(world: World): void {
     }
     world.events.push({ type: 'block', cx, cy });
     // The last robot standing wins even if a block gets it a moment after the others went.
-    // (Several under the same block went together: that is left to end as a draw.)
-    if (!world.over && under.length === 1 && world.players.length > 1 && !world.players.some(inRound) && under[0].lives === 0 && !under[0].zombie) {
-      world.over = { winner: under[0].id };
+    // (Several under the same block went together: that is left to end as a draw, unless they are teammates.)
+    if (!world.over && under.length >= 1 && oneSide(under) && world.players.length > 1 && !world.players.some(inRound) && under.every((u) => u.lives === 0 && !u.zombie)) {
+      world.over = decided(world, under);
     }
   }
   world.falling = world.falling.filter((f) => f.landAt > world.tick);
@@ -1242,6 +1263,43 @@ export function inRound(p: Player): boolean {
   return !p.zombie && (p.alive || p.respawnAt >= 0);
 }
 
+/** Two different robots on the same side in a teams match. */
+export function allies(a: Player, b: Player): boolean {
+  return a.team >= 0 && a.team === b.team && a.id !== b.id;
+}
+
+/** Can a blast of `owner`'s knock `p` out? Always, unless they are teammates and friendly fire is off. */
+export function blastHurts(world: World, owner: number, p: Player): boolean {
+  const by = world.players[owner];
+  return world.friendlyFire || !by || !allies(by, p);
+}
+
+/** Every robot that won the round just decided: the winner, or its whole side in a teams match. None for a draw. */
+export function winnersOf(world: World): number[] {
+  const o = world.over;
+  if (!o || o.winner < 0) return [];
+  if (o.team === undefined) return [o.winner];
+  return world.players.filter((p) => p.team === o.team).map((p) => p.id);
+}
+
+/** Has `p` won the round (on its own, or with its side)? Once the round is decided nothing more can happen to it. */
+export function wonRound(world: World, p: Player): boolean {
+  const o = world.over;
+  return !!o && o.winner >= 0 && (o.winner === p.id || (o.team !== undefined && p.team === o.team));
+}
+
+/** The round's result, given the robots left in it (and one to name the winner by if they are all one side). */
+function decided(world: World, left: Player[]): { winner: number; team?: number } {
+  if (!left.length) return { winner: -1 };
+  const w = left.find((p) => p.alive) ?? left[0];
+  return world.teams ? { winner: w.id, team: w.team } : { winner: w.id };
+}
+
+/** Are these robots all one side: one robot, or teammates? */
+function oneSide(list: Player[]): boolean {
+  return list.every((p) => p.id === list[0].id || allies(p, list[0]));
+}
+
 /** How far it is round the outer wall, in tiles: along the top, down the right, back along the bottom, up the left. */
 export function wallLength(world: World): number {
   return 2 * (world.w - 1) + 2 * (world.h - 1);
@@ -1456,9 +1514,10 @@ export function step(world: World, inputs: (PlayerInput | undefined)[]): void {
     if (!p.alive) continue;
     const cx = Math.round(p.x);
     const cy = Math.round(p.y);
-    const flame = world.flames.find((f) => f.cx === cx && f.cy === cy);
-    // (once the round is decided, nothing more can happen to the winner)
-    if (flame && !(world.over && world.over.winner === p.id)) {
+    // (a teammate's blast does no harm with friendly fire off)
+    const flame = world.flames.find((f) => f.cx === cx && f.cy === cy && blastHurts(world, f.owner, p));
+    // (once the round is decided, nothing more can happen to the winner, or to its side)
+    if (flame && !wonRound(world, p)) {
       if (p.graceTicks > 0 || p.safeTicks > 0) {
         // its shield has just taken this blast, or it has only just come back
         // its shield has just taken this blast
@@ -1470,7 +1529,7 @@ export function step(world: World, inputs: (PlayerInput | undefined)[]): void {
         knockOut(world, p, 'blast', flame.owner);
         // an angel's bomb, with Angels come back on: the angel takes this robot's place
         const by = world.players[flame.owner];
-        if (world.angels === 'revive' && by && by.angel && by.id !== p.id && !comebacks.some((c) => c[0] === by)) comebacks.push([by, cx, cy, p.id]);
+        if (world.angels === 'revive' && by && by.angel && by.id !== p.id && !allies(by, p) && !comebacks.some((c) => c[0] === by)) comebacks.push([by, cx, cy, p.id]);
         continue;
       }
     }
@@ -1490,16 +1549,17 @@ export function step(world: World, inputs: (PlayerInput | undefined)[]): void {
     world.events.push({ type: 'revive', player: angel.id, victim });
   }
 
-  // last one standing wins; a short wait lets a double knockout count as a draw. A robot waiting to come
-  // back with a life left is still in; an angel is not (unless it comes back, which calls the wait off).
+  // last one standing wins (in a teams match, the last side); a short wait lets a double knockout count as a
+  // draw. A robot waiting to come back with a life left is still in; an angel is not (unless it comes back,
+  // which calls the wait off).
   if (!world.over) {
     const still = world.players.filter(inRound);
-    // (the one left is waiting to come back: let it come back first, so the winner is standing)
-    const waitFor = still.length === 1 && !still[0].alive;
-    if (still.length <= 1 && world.players.length > 1 && !waitFor) {
+    // (the ones left are all waiting to come back: let one come back first, so the winner is standing)
+    const waitFor = still.length > 0 && !still.some((p) => p.alive);
+    if (oneSide(still) && world.players.length > 1 && !waitFor) {
       if (world.overCountdown < 0) world.overCountdown = 45;
       else if (--world.overCountdown === 0) {
-        world.over = { winner: still.length === 1 ? still[0].id : -1 };
+        world.over = decided(world, still);
       }
     } else world.overCountdown = -1;
   }

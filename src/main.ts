@@ -12,7 +12,7 @@
  */
 import { createWorld, step, ticksLeft, World, PlayerInput, Dir, TICK_HZ, DEATH_TICKS, type GameEvent } from './sim';
 import { Bot, BotLevel, BOT_LEVELS, LEVELS, createBot, botInput } from './bot';
-import { COLORS, NOBODY, botName, colorById, drawAngels, drawGround, drawHead, drawItemTile, drawStatic, drawDynamic, drawGhosts, groundKey, setMap, warmSprites } from './render';
+import { COLORS, NOBODY, botName, colorById, drawAngels, drawGround, drawHead, drawItemTile, drawStatic, drawDynamic, drawGhosts, groundKey, setMap, setOrangeFire, warmSprites } from './render';
 import { Input, PadReader, typing } from './input';
 import { drawTitle, closeTitle, drawIcon } from './title';
 import { initAudio, preview, setSound, sfx, wakeAudio } from './audio';
@@ -21,7 +21,7 @@ import { readDance, type DanceId } from './dances';
 import { createPadNav } from './padnav';
 import { PAD } from './bindings';
 import { createRemap } from './remap';
-import { CpuSlot, Guest, ITEM_NAMES, MatchSetup, Prefs, SHARPNESS, SOUND_NAMES, arenaOf, clockText, defaultSetup, load, readPrefs, readSetup, rollCpus, save, summary, wholeTile, worldConfig } from './setup';
+import { CpuSlot, Guest, ITEM_NAMES, MatchSetup, Prefs, SHARPNESS, SOUND_NAMES, TEAMS, arenaOf, clockText, defaultSetup, load, readPrefs, readSetup, rollCpus, save, summary, wholeTile, worldConfig } from './setup';
 import { Opt, answerConfirm, choice, confirmFirst, confirmOpen, heading, mount, note, slider, toggle, wireConfirm, wireFlash } from './ui';
 import { Hand, SENSITIVITY, DEFAULT_SENS, STRAIGHT, standardAims } from './swipe';
 import { Online } from './online';
@@ -560,9 +560,19 @@ function drawScore(): void {
     drawHead(sctx, cx, cy, r, col, { xEyes: !!p && !p.alive });
     sctx.globalAlpha = 1;
     if (!p) return;
+    // a teams match: a ring round the head in its side's colour
+    if (p.team >= 0) {
+      sctx.strokeStyle = TEAMS[p.team].color;
+      sctx.lineWidth = Math.max(1.5, r * 0.16);
+      sctx.globalAlpha = dim < 1 ? 0.6 : 1;
+      sctx.beginPath();
+      sctx.arc(cx, cy, r + sctx.lineWidth * 0.9, 0, Math.PI * 2);
+      sctx.stroke();
+      sctx.globalAlpha = 1;
+    }
     // the crown goes on last, and is not dimmed
     if (i === leader) drawHead(sctx, cx, cy, r, col, { crownOnly: true });
-    sctx.fillStyle = i === winner ? col.glow : p.alive ? '#eef1fb' : '#8a90a3';
+    sctx.fillStyle = winner >= 0 && onSide(i, winner) ? col.glow : p.alive ? '#eef1fb' : '#8a90a3';
     sctx.fillText(label, numX, cy + 1);
     // with more than one life a round, a little dot for each life left, under the number (the name is under the head)
     if (setup.lives > 1 && p.lives > 0) {
@@ -586,7 +596,7 @@ function drawScore(): void {
     // centred under the head, kept inside its own place
     sctx.fillText(shown, Math.max(cell.x + 2 + half, Math.min(cx, cell.x + cell.w - 2 - half)), cell.ny);
     sctx.textAlign = 'left';
-    said.push(`${nameOf(i)} ${wins[i]}${i === leader ? ' (in the lead)' : ''}`);
+    said.push(`${nameOf(i)}${p.team >= 0 ? `, ${TEAMS[p.team].name},` : ''} ${wins[i]}${i === leader ? ' (in the lead)' : ''}`);
   });
   score.setAttribute('aria-label', `Rounds won: ${said.join(', ')}`);
 }
@@ -809,11 +819,8 @@ function advance(inputs: (PlayerInput | undefined)[]): void {
     decidedAt = clock;
     const winner = world.over.winner;
     if (winner >= 0) {
-      wins[winner]++;
-      // the crown goes to whoever is in front; a player who only draws level does not take it
-      if (leader < 0 || wins[winner] > wins[leader]) leader = winner;
+      addPoint(winner);
       sfx.win();
-      if (wins[winner] >= setup.firstTo) matchWinner = winner;
     }
     announce();
   } else if (!world.over && !overShown && couch() && world.players.every((p, i) => !human(i) || (!p.alive && p.lives === 0 && !p.angel && !p.zombie && p.deadTicks >= DEATH_TICKS))) {
@@ -829,6 +836,31 @@ function advance(inputs: (PlayerInput | undefined)[]): void {
   }
 }
 
+/**
+ * A round won by `w`: a point on the scoreboard for it or, in a teams match, for every robot on its side.
+ * The crown goes to whoever is in front (a player who only draws level does not take it), and the match to
+ * whoever reaches Rounds to win.
+ */
+function addPoint(w: number): void {
+  const side = world.players[w].team;
+  for (const p of world.players) if (p.id === w || (side >= 0 && p.team === side)) wins[p.id]++;
+  if (leader < 0 || wins[w] > wins[leader]) leader = w;
+  if (wins[w] >= setup.firstTo) matchWinner = w;
+}
+
+/** Who won, as the result panel says it: the robot's name or, in a teams match, its side. */
+function sideName(i: number): string {
+  const t = world.players[i]?.team ?? -1;
+  return t >= 0 ? TEAMS[t].name : nameOf(i);
+}
+
+/** Did `i` win (on its own or with its side)? */
+function onSide(i: number, of: number): boolean {
+  const a = world.players[i];
+  const b = world.players[of];
+  return !!a && !!b && (i === of || (a.team >= 0 && a.team === b.team));
+}
+
 /** How you were knocked out, for the result panel. */
 function howOut(): string {
   const me = world.players[myIdx()];
@@ -842,15 +874,16 @@ function announce(): void {
   const me = world.players[mi];
   const winner = world.over ? world.over.winner : -1;
   const how = howOut();
+  const teams = world.teams;
   if (couch()) {
-    // several people here: say who, by name and P-number
-    if (matchWinner >= 0) finish(`${nameOf(matchWinner)} wins the match`, `First to ${setup.firstTo}. Final score ${scoreLine()}.`);
-    else if (winner >= 0) finish(`${nameOf(winner)} wins the round`, `${wins[winner]} of ${setup.firstTo} to win the match.`);
+    // several people here: say who, by name and P-number (or which side)
+    if (matchWinner >= 0) finish(`${sideName(matchWinner)} wins the match`, `First to ${setup.firstTo}. Final score ${scoreLine()}.`);
+    else if (winner >= 0) finish(`${sideName(winner)} wins the round`, `${wins[winner]} of ${setup.firstTo} to win the match.`);
     else finish('Draw', 'Nobody was left standing.');
-  } else if (matchWinner === mi) finish('You win the match', `First to ${setup.firstTo}. Final score ${scoreLine()}.`);
-  else if (matchWinner >= 0) finish(`${nameOf(matchWinner)} wins the match`, `First to ${setup.firstTo}. Final score ${scoreLine()}.${me.alive ? '' : ' ' + how}`);
-  else if (winner === mi) finish('You win the round', `Last bot standing. ${wins[mi]} of ${setup.firstTo} to win the match.`);
-  else if (winner >= 0) finish(`${nameOf(winner)} wins the round`, me.alive ? '' : how);
+  } else if (matchWinner >= 0 && onSide(mi, matchWinner)) finish(teams ? 'Your team wins the match' : 'You win the match', `${teams ? `${sideName(matchWinner)}. ` : ''}First to ${setup.firstTo}. Final score ${scoreLine()}.`);
+  else if (matchWinner >= 0) finish(`${sideName(matchWinner)} wins the match`, `First to ${setup.firstTo}. Final score ${scoreLine()}.${me.alive ? '' : ' ' + how}`);
+  else if (winner >= 0 && onSide(mi, winner)) finish(teams ? 'Your team wins the round' : 'You win the round', `${teams ? `${sideName(winner)}, last side standing.` : 'Last bot standing.'} ${wins[mi]} of ${setup.firstTo} to win the match.`);
+  else if (winner >= 0) finish(`${sideName(winner)} wins the round`, me.alive ? '' : how);
   else finish('Draw', me.alive ? 'Nobody was left standing.' : `${how} Nobody was left standing.`);
 }
 
@@ -1258,7 +1291,7 @@ function fillPause(): void {
   $('pauseLobby').hidden = !hosting;
   $('pauseLobby').textContent = net ? 'End match' : 'Leave to the lobby';
   $('pauseLeave').hidden = !net;
-  $('pauseTitle').textContent = done ? `${nameOf(matchWinner)} won the match` : `Round ${roundNo}`;
+  $('pauseTitle').textContent = done ? `${sideName(matchWinner)} won the match` : `Round ${roundNo}`;
   const left = ticksLeft(world);
   const time = world.over || left === Infinity ? '' : left > 0 ? ` · ${clockText(Math.ceil(left / TICK_HZ))} left` : ' · Blocks falling';
   // (online: the round trip to the server, so a slow connection can be told from a fault)
@@ -1275,6 +1308,11 @@ function fillPause(): void {
     const col = colorById(p.colorId);
     drawHead(cv.getContext('2d')!, cv.width / 2, cv.height / 2, cv.width * 0.42, col, { xEyes: !p.alive, crown: false });
     if (i === leader) drawHead(cv.getContext('2d')!, cv.width / 2, cv.height / 2, cv.width * 0.42, col, { crownOnly: true });
+    if (p.team >= 0) {
+      // a teams match: its side's colour along the edge of its line
+      li.classList.add('team');
+      li.style.setProperty('--team', TEAMS[p.team].color);
+    }
     const who = document.createElement('div');
     const name = document.createElement('b');
     // (names typed by people: set as text, never as markup)
@@ -1290,9 +1328,10 @@ function fillPause(): void {
         : human(i)
           ? `P${i + 1} · controller ${guests[i - 1].pad + 1}`
           : cpuLevel();
+    if (p.team >= 0) sub.textContent = `${TEAMS[p.team].short} · ${sub.textContent}`;
     who.append(name, sub);
     const st = document.createElement('span');
-    const won = world.over && world.over.winner === i;
+    const won = world.over && world.over.winner >= 0 && onSide(i, world.over.winner);
     st.className = `st${p.alive && !p.zombie ? ' in' : ''}`;
     // (with more than one life: how many are left; out of lives with angels on: an angel)
     st.textContent = won ? 'Won' : !p.zombie && (p.alive || p.respawnAt >= 0) ? (setup.lives > 1 ? `${p.lives} ${p.lives === 1 ? 'life' : 'lives'}` : 'In') : p.angel ? 'Angel' : p.zombie ? 'Zombie' : 'Out';
@@ -1409,9 +1448,8 @@ function settleUnfinished(): boolean {
   if (!still.length) return true; // everyone is out: a draw, no point
   const w = still[Math.floor(Math.random() * still.length)].id;
   counted = true;
-  wins[w]++;
-  if (leader < 0 || wins[w] > wins[leader]) leader = w;
-  if (wins[w] < setup.firstTo) return true;
+  addPoint(w); // (in a teams match, its whole side)
+  if (matchWinner < 0) return true;
   // That point won the match. No panel and no note (the owner's ask): a new match starts at once, as Rematch
   // would.
   newMatch();
@@ -1838,6 +1876,7 @@ function applyPrefs(): void {
   mute.setAttribute('aria-label', prefs.soundOn ? 'Mute all sound' : 'Sound is off: switch it back on');
   input.setBindings(prefs.keys, prefs.padKeys);
   document.body.classList.toggle('calm', prefs.calm);
+  setOrangeFire(prefs.orangeFire);
   document.documentElement.style.setProperty('--pad-show', String(prefs.padShow / 100));
 }
 
@@ -1937,6 +1976,15 @@ const gfxOpts: Opt[] = [
       prefsChanged();
     },
     text: (v) => SHARPNESS[v].name,
+  }),
+  toggle({
+    label: 'Orange fire',
+    hint: 'Every blast burns ordinary orange fire, in place of the colour of the robot whose bomb it was',
+    get: () => prefs.orangeFire,
+    set: (v) => {
+      prefs.orangeFire = v;
+      prefsChanged();
+    },
   }),
   toggle({
     label: 'Ghosts',

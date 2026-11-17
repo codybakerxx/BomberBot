@@ -47,6 +47,8 @@ import {
   playerSpeed,
   tileAt,
   makeRng,
+  winnersOf,
+  wonRound,
 } from '../src/sim';
 
 /** no direction, no buttons */
@@ -1179,4 +1181,59 @@ for (let seed = 1; seed <= 40; seed++) {
   }
   // the first four are always the corners, in the usual order
   assert.deepEqual(spawnPoints(15, 13, 8).slice(0, 4), [{ x: 1, y: 1 }, { x: 13, y: 11 }, { x: 13, y: 1 }, { x: 1, y: 11 }]);
+}
+
+// 23. teams: the last side standing wins; with friendly fire off a teammate's blast does no harm
+{
+  const four = [{ colorId: 'a' }, { colorId: 'b' }, { colorId: 'c' }, { colorId: 'd' }];
+  const place = (w: World): void => {
+    const spots = [[3, 3], [3, 5], [9, 3], [9, 9]];
+    w.players.forEach((p, i) => ([p.x, p.y] = spots[i]));
+  };
+  // not a teams match with only one side, or none given
+  assert.equal(createWorld({ seed: 1, players: four }).teams, false);
+  assert.equal(createWorld({ seed: 1, players: four, teams: [0, 0, 0, 0] }).teams, false);
+  assert.ok(createWorld({ seed: 1, players: four }).players.every((p) => p.team === -1));
+
+  // friendly fire off: a's blast reaches b, its teammate, and leaves it standing (a itself is still caught)
+  {
+    const w = createWorld({ seed: 2, players: four, softDensity: 0, roundTicks: 0, teams: [0, 0, 1, 1], friendlyFire: false });
+    place(w);
+    w.players[0].fire = 3;
+    step(w, [{ dir: 0, a: true, b: false }, none, none, none]);
+    run(w, FUSE_TICKS + 5, none);
+    assert.ok(w.players[1].alive, 'friendly fire off: the teammate in the blast is not knocked out');
+    assert.ok(!w.players[0].alive, 'your own blast still knocks you out');
+    assert.equal(w.over, null, 'b is still in, so its side has not lost');
+  }
+  // friendly fire on: the same blast knocks the teammate out too, and the other side wins
+  {
+    const w = createWorld({ seed: 2, players: four, softDensity: 0, roundTicks: 0, teams: [0, 0, 1, 1], friendlyFire: true });
+    place(w);
+    w.players[0].fire = 3;
+    step(w, [{ dir: 0, a: true, b: false }, none, none, none]);
+    run(w, FUSE_TICKS + 60, none);
+    assert.ok(!w.players[1].alive, 'friendly fire on: the teammate is knocked out');
+    assert.equal(w.over?.team, 1, 'the other side wins the round');
+    assert.ok([2, 3].includes(w.over!.winner));
+    assert.deepEqual(winnersOf(w), [2, 3], 'both robots on the winning side win it');
+    assert.ok(wonRound(w, w.players[2]) && wonRound(w, w.players[3]) && !wonRound(w, w.players[0]));
+  }
+  // one robot of a side left against one of the other: the round goes on until a side is out
+  {
+    const w = createWorld({ seed: 3, players: four, softDensity: 0, roundTicks: 0, teams: [0, 1, 0, 1] });
+    place(w);
+    w.players[0].alive = false; w.players[0].lives = 0;
+    w.players[1].alive = false; w.players[1].lives = 0;
+    run(w, 120, none);
+    assert.equal(w.over, null, 'one of each side left: no result yet');
+    w.players[3].alive = false; w.players[3].lives = 0;
+    run(w, 60, none);
+    assert.deepEqual(w.over, { winner: 2, team: 0 }, 'the side with a robot left wins, though one of its robots is out');
+    assert.deepEqual(winnersOf(w), [0, 2]);
+    // nothing more happens to anyone on the winning side
+    w.flames.push({ cx: 9, cy: 3, ttl: 20, owner: 1, kind: 'c', tip: 0 });
+    run(w, 5, none);
+    assert.ok(w.players[2].alive);
+  }
 }

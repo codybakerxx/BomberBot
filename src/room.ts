@@ -13,9 +13,9 @@
  * - A dropped connection keeps its place (its robot stands still meanwhile) and comes back where it was. A host
  *   who drops for a while hands the room on.
  */
-import { MAX_PLAYERS, TICK_HZ, step, type World, type WorldConfig } from './sim';
+import { MAX_PLAYERS, TICK_HZ, step, winnersOf, type World, type WorldConfig } from './sim';
 import { BOT_LEVELS, botInput, createBot, type Bot, type BotLevel } from './bot';
-import { MAX_CPUS, problem, readSetup, rollCpus, worldConfig, type CpuSlot, type MatchSetup } from './setup';
+import { MAX_CPUS, problem, readSetup, rollCpus, swapTeams, worldConfig, type CpuSlot, type MatchSetup } from './setup';
 import { readDance, type DanceId } from './dances';
 import {
   CHECK_EVERY,
@@ -140,6 +140,7 @@ export class Room {
   /** `m` takes robot `colorId`: a CPU player wearing it takes the one `m` had (the lobby's rule). */
   private takeColour(m: Member, colorId: string): void {
     for (const c of this.setup.cpus) if (c.colorId === colorId) c.colorId = m.colorId;
+    if (colorId !== m.colorId) swapTeams(this.setup, colorId, m.colorId); // (each keeps its side in a teams match)
     m.colorId = colorId;
   }
   /** Eight players at most: a CPU player makes room for a person. */
@@ -471,7 +472,8 @@ export class Room {
         const winner = w.over.winner;
         if (winner >= 0) {
           const s = this.score;
-          s.wins[winner]++;
+          // a point for the winner or, in a teams match, for every robot on its side
+          for (const id of winnersOf(w)) s.wins[id]++;
           if (s.leader < 0 || s.wins[winner] > s.wins[s.leader]) s.leader = winner;
           if (s.wins[winner] >= (this.match?.firstTo ?? 1)) s.matchWinner = winner;
         }

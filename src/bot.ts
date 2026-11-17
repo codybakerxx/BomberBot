@@ -30,6 +30,7 @@
  * docs/CPU-PLAYERS.md explains all of this in plain words.
  */
 import {
+  allies,
   ANGEL_BOMBS,
   ANGEL_CHARGE_TICKS,
   ANGEL_MAX_TILES,
@@ -980,8 +981,8 @@ function decide(c: Ctx): PlayerInput | null {
   const { world, me, bot, spec, D, walls, S } = c;
   const sx = S % world.w;
   const sy = (S - sx) / world.w;
-  // (a zombie goes after the robots still in the round, not other zombies)
-  const enemies = world.players.filter((p) => p.alive && p.id !== me.id && !(me.zombie && p.zombie));
+  // (a zombie goes after the robots still in the round, not other zombies; nobody goes after a teammate)
+  const enemies = world.players.filter((p) => p.alive && p.id !== me.id && !(me.zombie && p.zombie) && !allies(me, p));
   const wasIdle = bot.path.length === 0;
   const canBomb =
     !me.carrying &&
@@ -1214,10 +1215,27 @@ function boxedIn(c: Ctx, victim: Player, what: ExtraBomb[], blockTile: number): 
  * watching could shut that way out first, and playing the move forward
  * confirms it survives. Returns the button press, or null if it must not.
  */
+/**
+ * With friendly fire on, would a bomb dropped where it stands leave a teammate caught in its blast with no
+ * way out? Then a CPU player does not drop it. (A teammate who can step out of the way is left to do so, as
+ * the bot does itself: holding back whenever one was in reach, CPU players hardly ever bombed at all and
+ * most rounds never ended.)
+ */
+function trapsTeammate(c: Ctx): boolean {
+  const { world, me, S } = c;
+  if (!world.teams || !world.friendlyFire) return false;
+  const sx = S % world.w;
+  const sy = (S - sx) / world.w;
+  const what = [{ cx: sx, cy: sy, range: me.fire, fuse: FUSE_TICKS }];
+  return world.players.some((p) => p.alive && allies(me, p) && Math.abs(Math.round(p.x) - sx) + Math.abs(Math.round(p.y) - sy) <= me.fire && boxedIn(c, p, what, S));
+}
+
 function placeBomb(c: Ctx): PlayerInput | null {
   const { world, me, bot, spec, walls, S } = c;
   const sx = S % world.w;
   const sy = (S - sx) / world.w;
+  // (with friendly fire on: not on top of a teammate)
+  if (trapsTeammate(c)) return null;
   const what = [{ cx: sx, cy: sy, range: me.fire, fuse: FUSE_TICKS }];
   // For getting clear of its own bomb, a tile only has to outlast the blast: a block due on it
   // after that is something to deal with afterwards. (Near the end, no tile lasts much longer.)
@@ -1233,7 +1251,7 @@ function placeBomb(c: Ctx): PlayerInput | null {
     const blocked = walls.slice();
     blocked[S] = 1;
     for (const e of world.players) {
-      if (!e.alive || e.id === me.id || e.carrying || e.activeBombs >= e.bombsMax) continue;
+      if (!e.alive || e.id === me.id || allies(me, e) || e.carrying || e.activeBombs >= e.bombsMax) continue;
       const ex = Math.round(e.x);
       const ey = Math.round(e.y);
       if (Math.abs(ex - sx) + Math.abs(ey - sy) > spec.guard) continue;
@@ -1387,7 +1405,7 @@ function angelInput(world: World, bot: Bot, me: Player): PlayerInput {
   let target: Player | null = null;
   let bestD = Infinity;
   for (const p of world.players) {
-    if (!p.alive || p.id === me.id) continue;
+    if (!p.alive || p.id === me.id || allies(me, p)) continue;
     const d = Math.abs(p.x - here.x) + Math.abs(p.y - here.y);
     if (d < bestD) {
       bestD = d;

@@ -9,9 +9,9 @@
  */
 import { drawRobot, warmRobots, CRACK, GHOST_ARMS, ROBOT, type Pose, type Wanted } from './robot';
 import { danceFrame, danceSamples, type DanceId } from './dances';
-import type { MapId } from './setup';
+import { TEAMS, type MapId } from './setup';
 export { warmRobots } from './robot';
-import { World, FLOOR, HARD, SOFT, FLAME_TICKS, DEATH_TICKS, GHOST_TICKS, SHIELD_GRACE_TICKS, FALL_TICKS, TICK_HZ, ItemKind, Player, Bomb, FLY_TICKS_PER_TILE, THROW_TILES, FUSE_TICKS, CARRY_FUSE_TICKS, DX, DY, angelAim, angelReach, perimeterAt } from './sim';
+import { World, FLOOR, HARD, SOFT, FLAME_TICKS, DEATH_TICKS, GHOST_TICKS, SHIELD_GRACE_TICKS, FALL_TICKS, TICK_HZ, ItemKind, Player, Bomb, FLY_TICKS_PER_TILE, THROW_TILES, FUSE_TICKS, CARRY_FUSE_TICKS, DX, DY, allies, angelAim, angelReach, perimeterAt } from './sim';
 
 export interface BotColor {
   /** saved with the player's choice and sent to the rules as Player.colorId */
@@ -535,7 +535,8 @@ function softSprite(map: MapId, T: number, variant = 0): HTMLCanvasElement {
 
 /** Floor and fixed walls. Redrawn only when the screen size changes. */
 export function drawStatic(ctx: Ctx, world: World, T: number): void {
-  fireSprites(); // (made now, at the start of a round, so the first blast does not wait for them)
+  // the fire every robot here burns with: made now, at the start of a round, so the first blast does not wait
+  for (const p of world.players) fireOf(world, p.id);
   for (let y = 0; y < world.h; y++) {
     for (let x = 0; x < world.w; x++) {
       const px = x * T;
@@ -876,8 +877,54 @@ interface FireSprites {
   cool: HTMLCanvasElement[];
   smoke: HTMLCanvasElement[];
   glow: HTMLCanvasElement;
+  /** the colour of its sparks */
+  spark: string;
 }
-let fireCache: FireSprites | null = null;
+/** Made once for each colour of fire (by robot colour id, or 'classic' for orange fire). */
+const fireCache = new Map<string, FireSprites>();
+
+/** Heat to colour: [heat 0 to 1, red, green, blue], from the cool edge to the white-hot heart. */
+type Ramp = [number, number, number, number][];
+/** Fire as it really is: deep red, orange, yellow, white. */
+const CLASSIC_RAMP: Ramp = [
+  [0.0, 110, 12, 2],
+  [0.22, 196, 38, 6],
+  [0.42, 246, 98, 14],
+  [0.62, 255, 166, 40],
+  [0.8, 255, 222, 120],
+  [1.0, 255, 250, 228],
+];
+/**
+ * Each robot's fire (the owner's ask, November 2026: fire the colour of the player, still realistic): the
+ * colour flames burn in, a little deeper than the robot's glow so it reads as fire and not as light. Black
+ * burns a smoky steel and White an icy white, so the two can be told apart.
+ */
+const FIRE_HUE: Record<string, string> = {
+  gold: '#ffb02e',
+  black: '#7c86a0',
+  pink: '#ff3fae',
+  blue: '#2ea8ff',
+  red: '#ff2a2a',
+  orange: '#ff6f14',
+  white: '#dce8ff',
+  green: '#2cf06c',
+  purple: '#9a62ff',
+};
+/** Off: each blast burns in its robot's colour. On: every blast is ordinary orange fire (Settings › Graphics). */
+let orangeFire = false;
+export function setOrangeFire(on: boolean): void {
+  orangeFire = on;
+}
+/** The same build of heat as real fire, in one colour: dark at the edge, that colour, then towards white at the heart. */
+function rampOf(hex: string): Ramp {
+  const n = parseInt(hex.slice(1), 16);
+  const c = [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+  const at = (h: number, dark: number, white: number): [number, number, number, number] => {
+    const [r, g, b] = c.map((v) => v * dark + (255 - v * dark) * white);
+    return [h, r, g, b];
+  };
+  return [at(0.0, 0.3, 0), at(0.22, 0.62, 0), at(0.42, 0.95, 0.04), at(0.62, 1, 0.25), at(0.8, 1, 0.55), at(1.0, 1, 0.88)];
+}
 
 /** Smooth value noise in 2-D, 0 to 1, from `scatter` on a grid (the same every time: no Math.random). */
 function noise2(x: number, y: number, seed: number): number {
@@ -900,7 +947,7 @@ function fbm(x: number, y: number, seed: number): number {
  * One picture: a lick of flame (taller than wide, ragged, hottest low in its middle), or a puff of smoke.
  * `cool`: the colours a flame has as it dies (no white heart, more red).
  */
-function makeSprite(kind: 'hot' | 'cool' | 'smoke', seed: number): HTMLCanvasElement {
+function makeSprite(kind: 'hot' | 'cool' | 'smoke', seed: number, stops: Ramp = CLASSIC_RAMP): HTMLCanvasElement {
   const n = SPRITE_PX;
   const c = document.createElement('canvas');
   c.width = c.height = n;
@@ -933,14 +980,6 @@ function makeSprite(kind: 'hot' | 'cool' | 'smoke', seed: number): HTMLCanvasEle
       } else {
         // the colour of fire by its heat: deep red, orange, yellow, white (cooler for a dying flame)
         const h = kind === 'cool' ? heat * 0.72 : heat;
-        const stops: [number, number, number, number][] = [
-          [0.0, 110, 12, 2],
-          [0.22, 196, 38, 6],
-          [0.42, 246, 98, 14],
-          [0.62, 255, 166, 40],
-          [0.8, 255, 222, 120],
-          [1.0, 255, 250, 228],
-        ];
         let k = 0;
         while (k < stops.length - 2 && h > stops[k + 1][0]) k++;
         const [h0, r0, g0, b0] = stops[k];
@@ -960,26 +999,39 @@ function makeSprite(kind: 'hot' | 'cool' | 'smoke', seed: number): HTMLCanvasEle
   g.putImageData(img, 0, 0);
   return c;
 }
-function fireSprites(): FireSprites {
-  if (!fireCache) {
+/** The pictures one colour of fire is drawn with: `colorId` a robot's colour, or 'classic' for orange fire. */
+function fireSprites(colorId = 'classic'): FireSprites {
+  const key = FIRE_HUE[colorId] ? colorId : 'classic';
+  let f = fireCache.get(key);
+  if (!f) {
+    const ramp = key === 'classic' ? CLASSIC_RAMP : rampOf(FIRE_HUE[key]);
+    const rgb = (k: number, a: number): string => `rgba(${ramp[k][1] | 0},${ramp[k][2] | 0},${ramp[k][3] | 0},${a})`;
     const glow = document.createElement('canvas');
     glow.width = glow.height = 64;
     const gg = glow.getContext('2d')!;
     const grad = gg.createRadialGradient(32, 32, 0, 32, 32, 32);
-    grad.addColorStop(0, 'rgba(255,170,60,0.5)');
-    grad.addColorStop(0.35, 'rgba(255,100,24,0.24)');
-    grad.addColorStop(0.7, 'rgba(255,70,14,0.07)');
-    grad.addColorStop(1, 'rgba(255,60,10,0)');
+    grad.addColorStop(0, rgb(3, 0.5));
+    grad.addColorStop(0.35, rgb(2, 0.24));
+    grad.addColorStop(0.7, rgb(1, 0.07));
+    grad.addColorStop(1, rgb(1, 0));
     gg.fillStyle = grad;
     gg.fillRect(0, 0, 64, 64);
-    fireCache = {
-      hot: [1, 2, 3, 4].map((sd) => makeSprite('hot', sd)),
-      cool: [5, 6, 7].map((sd) => makeSprite('cool', sd)),
-      smoke: [8, 9, 10].map((sd) => makeSprite('smoke', sd)),
+    // (the smoke is the same for every colour: made once and shared)
+    const smoke = key === 'classic' ? [8, 9, 10].map((sd) => makeSprite('smoke', sd)) : fireSprites('classic').smoke;
+    f = {
+      hot: [1, 2, 3, 4].map((sd) => makeSprite('hot', sd, ramp)),
+      cool: [5, 6, 7].map((sd) => makeSprite('cool', sd, ramp)),
+      smoke,
       glow,
+      spark: rgb(4, 1),
     };
+    fireCache.set(key, f);
   }
-  return fireCache;
+  return f;
+}
+/** The fire a blast of `owner`'s burns with. */
+function fireOf(world: World, owner: number): FireSprites {
+  return fireSprites(orangeFire ? 'classic' : (world.players[owner]?.colorId ?? 'classic'));
 }
 
 /** A soft round glow in one colour (whose blast it is), made once per colour. */
@@ -1004,7 +1056,6 @@ function tintGlow(col: string): HTMLCanvasElement {
 /** The blasts, drawn as fire (see where drawDynamic calls it, and `fireSprites`). */
 function drawFire(ctx: Ctx, world: World, T: number, time: number, west: boolean): void {
   if (!world.flames.length) return;
-  const sp = fireSprites();
   ctx.save();
   const stamp = (img: HTMLCanvasElement, x: number, y: number, w: number, h: number, turn: number): void => {
     if (w < 0.5 || h < 0.5) return;
@@ -1026,7 +1077,7 @@ function drawFire(ctx: Ctx, world: World, T: number, time: number, west: boolean
       const n = 3;
       for (let i = 0; i <= n; i++) pts.push([x1 + ((x2 - x1) * i) / n, y1 + ((y2 - y1) * i) / n]);
     }
-    return { f, t, life, k, pts, seed: f.cx * 13.1 + f.cy * 7.7 };
+    return { f, t, life, k, pts, seed: f.cx * 13.1 + f.cy * 7.7, sp: fireOf(world, f.owner) };
   });
 
   // scorch and the shadow of smoke on the ground
@@ -1041,14 +1092,15 @@ function drawFire(ctx: Ctx, world: World, T: number, time: number, west: boolean
   }
   // the light it throws on the ground round it
   ctx.globalCompositeOperation = 'lighter';
-  for (const { pts, k } of tiles) {
+  for (const { pts, k, sp } of tiles) {
     // (one per tile, at its middle: soft enough that the tiles of a blast run into one light)
     const [x, y] = pts[Math.floor(pts.length / 2)];
     ctx.globalAlpha = 0.5 * k;
     ctx.drawImage(sp.glow, x - T * 0.9, y - T * 0.9, T * 1.8, T * 1.8);
   }
-  // a faint glow in the colour of whoever placed the bomb, so it is still clear whose blast it is
-  for (const { f, pts, k } of tiles) {
+  // orange fire: a faint glow in the colour of whoever placed the bomb, so it is still clear whose blast it is
+  // (fire in the robot's own colour says so already)
+  for (const { f, pts, k } of orangeFire ? tiles : []) {
     const tint = tintGlow(colorById(world.players[f.owner]?.colorId ?? 'gold').glow);
     const [x, y] = pts[Math.floor(pts.length / 2)];
     ctx.globalAlpha = 0.6 * k;
@@ -1057,7 +1109,7 @@ function drawFire(ctx: Ctx, world: World, T: number, time: number, west: boolean
 
   // the flames: tongues that rise, swell, curl and cool over their short lives, many of them overlapping
   ctx.globalCompositeOperation = 'source-over';
-  for (const { pts, k, t, seed } of tiles) {
+  for (const { pts, k, t, seed, sp } of tiles) {
     pts.forEach(([x, y], i) => {
       for (let j = 0; j < 2; j++) {
         const s = seed + i * 3.3 + j * 1.7;
@@ -1076,7 +1128,7 @@ function drawFire(ctx: Ctx, world: World, T: number, time: number, west: boolean
   }
   // the white-hot heart, added on as light
   ctx.globalCompositeOperation = 'lighter';
-  for (const { pts, k, t, seed } of tiles) {
+  for (const { pts, k, t, seed, sp } of tiles) {
     if (t < 0.25) continue;
     pts.forEach(([x, y], i) => {
       if (i % 2) return; // (every other point is enough for the heart)
@@ -1088,7 +1140,7 @@ function drawFire(ctx: Ctx, world: World, T: number, time: number, west: boolean
   }
   // smoke: dark puffs rising off it, more of it as the fire dies
   ctx.globalCompositeOperation = 'source-over';
-  for (const { pts, life, seed } of tiles) {
+  for (const { pts, life, seed, sp } of tiles) {
     for (let j = 0; j < 1; j++) {
       const [x, y] = pts[(j * 2 + 1) % pts.length];
       const s = seed + j * 4.4;
@@ -1101,8 +1153,8 @@ function drawFire(ctx: Ctx, world: World, T: number, time: number, west: boolean
   }
   // sparks thrown up and out
   ctx.globalCompositeOperation = 'lighter';
-  ctx.fillStyle = 'rgb(255,214,140)';
-  for (const { f, t, life } of tiles) {
+  for (const { f, t, life, sp } of tiles) {
+    ctx.fillStyle = sp.spark;
     for (let e = 0; e < 3; e++) {
       const s = f.cx * 5.3 + f.cy * 8.9 + e * 2.1;
       const age = (life * 1.6 + scatter(s) * 0.6) % 1;
@@ -1535,7 +1587,11 @@ export function warmSprites(ctx: Ctx, world: World, T: number, ms = 4, dance: Da
   for (const p of world.players) wanted.push({ c: ghostOf(colorById(p.colorId)), kind: 'ghost' });
   // zombies: their walk, arms out, in every direction
   for (const p of world.players) if (p.zombie) wanted.push({ c: zombieOf(colorById(p.colorId)), kind: 'dance', moves: ZOMBIE_MOVES });
-  if (world.over && world.over.winner >= 0) wanted.push({ c: colorById(world.players[world.over.winner].colorId), kind: 'dance', moves: danceSamples(dance) });
+  // the winner's dance (in a teams match its teammates dance it with it)
+  if (world.over && world.over.winner >= 0) {
+    const w = world.players[world.over.winner];
+    for (const p of world.players) if (p === w || allies(p, w)) wanted.push({ c: colorById(p.colorId), kind: 'dance', moves: danceSamples(dance) });
+  }
   warmRobots(ctx, T, wanted, ms);
 }
 
@@ -1560,14 +1616,35 @@ const GHOST_EASE = 18; // it takes about this many ticks to get up to that speed
 const GHOST_FADE = 2.5; // it fades over the last few tiles before its head reaches the top of the screen
 const ASH = 18; // specks of ash
 
+/**
+ * A teams match: a ring on the floor round the robot's feet in its side's colour (TEAMS), so who is on
+ * whose side can be seen at a glance.
+ */
+function drawTeamRing(ctx: Ctx, p: Player, x: number, y: number, T: number): void {
+  const c = TEAMS[p.team]?.color ?? '#fff';
+  const cy = y - T * 0.05;
+  ctx.save();
+  ctx.globalAlpha = p.safeTicks > 0 ? 0.45 : 0.9;
+  ctx.fillStyle = c + '30';
+  ctx.strokeStyle = c;
+  ctx.lineWidth = Math.max(1.5, T * 0.055);
+  ctx.beginPath();
+  ctx.ellipse(x, cy, T * 0.4, T * 0.15, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+  ctx.restore();
+}
+
 /** A robot on its tile; the winner celebrating; or, for a moment after being knocked out, its remains and its ghost. */
 function drawPlayer(ctx: Ctx, world: World, p: Player, T: number, time: number, celebrate?: Celebration, crowned = -1): void {
   const col = colorById(p.colorId);
   const x = (p.x + 0.5) * T;
   const y = (p.y + 0.5) * T + T * 0.46;
   if (p.alive) {
-    if (celebrate && celebrate.player === p.id) {
-      // the winner: their victory dance
+    if (p.team >= 0 && !p.zombie) drawTeamRing(ctx, p, x, y, T);
+    const won = world.players[celebrate?.player ?? -1];
+    if (celebrate && won && (won === p || allies(won, p))) {
+      // the winner: their victory dance (in a teams match, everyone on the winning side still standing)
       const f = danceFrame(celebrate.dance ?? 'party', celebrate.t);
       drawRobot(ctx, x + f.dx * T, y, T, col, f.facing, f.walk, f.moving, { ...f.pose, crown: crowned === p.id });
     } else {
