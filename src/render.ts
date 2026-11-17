@@ -701,9 +701,10 @@ function flameLine(f: World['flames'][number], T: number): [number, number, numb
 
 /**
  * A breakable block breaking (the owner's ask, November 2026: a realistic crumbling effect; it used to flash
- * white and vanish). Over the time a blast lasts (FLAME_TICKS) the block shudders and cracks, then bursts:
- * its own picture is cut into chunks that fly outwards and up, tumble, land and fade, with small chips thrown
- * further and a cloud of dust rolling out. Bricks break into blue-grey rubble, crates into splinters and
+ * white and vanish). Over the time a blast lasts (FLAME_TICKS) the block shudders and cracks, then collapses:
+ * its own picture is cut into chunks that slump down where it stood and settle as rubble, with a few small
+ * pieces knocked off sideways and a low cloud of dust (made gentler at the owner's ask: at first it burst
+ * outwards and up). Bricks break into blue-grey rubble, crates into splinters and
  * planks with tan dust. All of it from the block's own picture, so it matches whatever the block looks like.
  */
 function drawCrumble(ctx: Ctx, b: { cx: number; cy: number; ttl: number }, T: number, time: number): void {
@@ -746,20 +747,23 @@ function drawCrumble(ctx: Ctx, b: { cx: number; cy: number; ttl: number }, T: nu
   const dust = west ? [196, 160, 110] : [128, 140, 182];
   for (let d = 0; d < 4; d++) {
     const a = (d / 4) * Math.PI * 2 + scatter(seed + d * 3) * 1.4;
-    const r = T * (0.15 + 0.45 * Math.sqrt(u));
-    const size = T * (0.4 + 0.5 * u) * (0.8 + 0.4 * scatter(seed + d));
+    const r = T * (0.1 + 0.25 * Math.sqrt(u));
+    const size = T * (0.35 + 0.35 * u) * (0.8 + 0.4 * scatter(seed + d));
     const cx = x0 + T / 2 + Math.cos(a) * r;
-    const cy = y0 + T / 2 + Math.sin(a) * r * 0.8 - u * T * 0.1;
+    const cy = y0 + T * 0.62 + Math.sin(a) * r * 0.6;
     const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, size);
-    const al = 0.38 * (1 - u) * Math.min(1, u * 6 + 0.3);
+    const al = 0.28 * (1 - u) * Math.min(1, u * 6 + 0.3);
     grad.addColorStop(0, `rgba(${dust[0]},${dust[1]},${dust[2]},${al})`);
     grad.addColorStop(1, `rgba(${dust[0]},${dust[1]},${dust[2]},0)`);
     ctx.fillStyle = grad;
     ctx.fillRect(cx - size, cy - size, size * 2, size * 2);
   }
-  // the chunks: the block's picture cut in a 3 by 3 grid (a little uneven), each flying out from the middle
+  // the chunks: the block's picture cut in a 3 by 3 grid, each slumping down where it was (the owner's ask:
+  // a crumble, not an explosion). The top rows fall furthest, onto the rows below; they spread a little as
+  // they settle, tip over, darken with dust and fade as rubble.
   const n = 3;
   const cut = (i: number): number => Math.round((T * i) / n);
+  const fall = u < 0.55 ? (u / 0.55) * (u / 0.55) : 1; // gathers speed, then lies still
   for (let gy = 0; gy < n; gy++) {
     for (let gx = 0; gx < n; gx++) {
       const s = seed + gx * 3.1 + gy * 5.3;
@@ -767,43 +771,34 @@ function drawCrumble(ctx: Ctx, b: { cx: number; cy: number; ttl: number }, T: nu
       const sy = cut(gy);
       const sw = cut(gx + 1) - sx;
       const sh = cut(gy + 1) - sy;
-      // away from the middle (the middle one goes a random way), a little up, then down onto the floor
-      let dx = gx - 1;
-      let dy = gy - 1;
-      if (!dx && !dy) {
-        dx = scatter(s) - 0.5;
-        dy = scatter(s + 1) - 0.5;
-      }
-      const len = Math.hypot(dx, dy) || 1;
-      const speed = T * (0.35 + 0.35 * scatter(s + 2));
-      const out = 1 - (1 - u) * (1 - u); // fast at first, slowing as it skids
-      const hop = Math.sin(Math.min(1, u * 1.6) * Math.PI) * T * (0.18 + 0.12 * scatter(s + 3)); // in the air
-      const px = x0 + sx + sw / 2 + (dx / len) * speed * out;
-      const py = y0 + sy + sh / 2 + (dy / len) * speed * out * 0.8;
-      const turn = (scatter(s + 4) - 0.5) * 4 * out;
-      const shrink = 1 - 0.35 * u;
-      const alpha = u < 0.65 ? 1 : 1 - (u - 0.65) / 0.35;
-      // its shadow on the floor, smaller and fainter the higher it is
-      ctx.globalAlpha = 0.35 * alpha;
-      ctx.fillStyle = '#000';
-      ctx.beginPath();
-      ctx.ellipse(px, py + sh * 0.3, sw * 0.45 * shrink, sh * 0.2 * shrink, 0, 0, Math.PI * 2);
-      ctx.fill();
+      // how far it drops: the higher rows more, onto the floor of the tile's lower half
+      const drop = T * (0.42 - gy * 0.14 + 0.06 * scatter(s)) * fall;
+      // and a little outwards as the pile spreads
+      const spread = (gx - 1 + (scatter(s + 1) - 0.5) * 0.6) * T * 0.07 * fall;
+      const px = x0 + sx + sw / 2 + spread;
+      const py = y0 + sy + sh / 2 + drop;
+      const turn = (scatter(s + 4) - 0.5) * 0.9 * fall;
+      const squash = 1 - 0.3 * fall; // seen from above, a piece lying down is shorter
+      const shrink = 1 - 0.15 * fall;
+      const alpha = u < 0.6 ? 1 : 1 - (u - 0.6) / 0.4;
       ctx.globalAlpha = alpha;
-      ctx.translate(px, py - hop);
+      ctx.translate(px, py);
       ctx.rotate(turn);
-      ctx.drawImage(img, sx, sy, sw, sh, (-sw / 2) * shrink, (-sh / 2) * shrink, sw * shrink, sh * shrink);
+      ctx.drawImage(img, sx, sy, sw, sh, (-sw / 2) * shrink, (-sh / 2) * shrink * squash, sw * shrink, sh * shrink * squash);
+      // dust settling on it
+      ctx.fillStyle = `rgba(${dust[0]},${dust[1]},${dust[2]},${0.35 * fall})`;
+      ctx.fillRect((-sw / 2) * shrink, (-sh / 2) * shrink * squash, sw * shrink, sh * shrink * squash);
       ctx.setTransform(base);
     }
   }
-  // chips thrown further
+  // a few small pieces knocked off, skittering out in other directions
   ctx.fillStyle = west ? '#c99554' : '#8d9cd0';
-  for (let c = 0; c < 7; c++) {
+  for (let c = 0; c < 4; c++) {
     const s = seed + c * 9.7;
     const a = scatter(s) * Math.PI * 2;
-    const dist = T * (0.5 + 0.6 * scatter(s + 1)) * (1 - (1 - u) * (1 - u));
-    const hop = Math.sin(Math.min(1, u * 1.3) * Math.PI) * T * 0.25;
-    const sz = Math.max(1, T * (0.04 + 0.04 * scatter(s + 2)));
+    const dist = T * (0.35 + 0.35 * scatter(s + 1)) * (1 - (1 - u) * (1 - u));
+    const hop = Math.sin(Math.min(1, u * 1.8) * Math.PI) * T * 0.08;
+    const sz = Math.max(1, T * (0.035 + 0.03 * scatter(s + 2)));
     ctx.globalAlpha = u < 0.6 ? 1 : 1 - (u - 0.6) / 0.4;
     ctx.fillRect(x0 + T / 2 + Math.cos(a) * dist - sz / 2, y0 + T / 2 + Math.sin(a) * dist * 0.8 - hop - sz / 2, sz, sz * (west ? 2.2 : 1));
   }
