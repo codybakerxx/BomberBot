@@ -2125,7 +2125,6 @@ function goBack(): void {
   if (confirmOpen()) answerConfirm(false);
   else if (mode === 'title' && !$('onlineSheet').hidden) closeOnlineSheet();
   else if (!$('keySheet').hidden) closeKey();
-  else if (mode === 'lobby' && lobby.sheetOpen()) lobby.closeSheet();
   else if (mode === 'lobby') lobbyHost.back();
   else if (mode === 'settings') closeSettings();
   else if (mode === 'pause') closePause();
@@ -2146,7 +2145,7 @@ input.onPause = pauseKey;
  */
 input.claim = (index, button) => {
   // (online everyone plays on their own screen: no joining with a second controller)
-  if (mode === 'lobby' && !net && (button === PAD.A || button === PAD.MENU) && !confirmOpen() && !lobby.sheetOpen()) return lobby.join(index) ? 'join' : 'ignore';
+  if (mode === 'lobby' && !net && (button === PAD.A || button === PAD.MENU) && !confirmOpen()) return lobby.join(index) ? 'join' : 'ignore';
   return input.mineIndex < 0 ? 'mine' : 'ignore';
 };
 
@@ -2185,7 +2184,7 @@ window.addEventListener('keydown', (e) => {
   }
   if ((e.code === 'KeyQ' || e.code === 'KeyE') && !confirmOpen() && !e.repeat && !typing(e)) {
     const d = e.code === 'KeyQ' ? -1 : 1;
-    if (mode === 'lobby' && !lobby.sheetOpen()) lobby.turn(d);
+    if (mode === 'lobby') lobby.turn(d);
     else if (mode === 'settings') stepSettings(d);
   }
 });
@@ -2198,7 +2197,6 @@ function padTop(): HTMLElement | null {
   if (confirmOpen()) return $('confirm');
   if (mode === 'title' && !$('onlineSheet').hidden) return $('onlineSheet');
   if (!$('keySheet').hidden) return $('keySheet');
-  if (mode === 'lobby' && lobby.sheetOpen()) return $('cpuSheet');
   const screens: Partial<Record<typeof mode, string>> = { title: 'title', lobby: 'lobby', settings: 'settings', pause: 'pause', over: 'result' };
   const id = screens[mode];
   return id ? $(id) : null;
@@ -2208,16 +2206,16 @@ const padNav = createPadNav(input, {
   back: goBack,
   turn: (d) => {
     if (confirmOpen()) return;
-    if (mode === 'lobby' && !lobby.sheetOpen()) lobby.turn(d);
+    if (mode === 'lobby') lobby.turn(d);
     else if (mode === 'settings') stepSettings(d);
   },
   ready: () => {
-    if (mode === 'lobby' && !lobby.sheetOpen() && !confirmOpen()) $('colOk').click();
+    if (mode === 'lobby' && !confirmOpen()) $('colOk').click();
   },
   menu: () => {
     if (confirmOpen()) return;
     if (mode === 'title') leaveTitle();
-    else if (mode === 'lobby' && !lobby.sheetOpen()) $('arenaStart').click();
+    else if (mode === 'lobby') $('arenaStart').click();
     else if (mode === 'settings') closeSettings();
     else pauseKey();
   },

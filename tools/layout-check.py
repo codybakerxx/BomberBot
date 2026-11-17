@@ -72,8 +72,12 @@ async def main():
             await pg.evaluate("document.getElementById('titleLocal').click()"); await look('lobby players')
             for y in (400, 900, 5000):
                 await pg.evaluate(f"document.querySelector('#lobby .scroll').scrollTop = {y}"); await look('lobby players scrolled')
-            await pg.evaluate("document.getElementById('slot-1').click()"); await look('cpu panel')
-            await pg.evaluate("document.getElementById('cpuDone').click()")
+            # teams on: every card has its Team row too (and the longest team name, Yellow, on the first team)
+            await pg.evaluate("[...document.querySelectorAll('#lobby .opt-label')].find(e => e.textContent === 'Teams').click()")
+            await pg.evaluate("document.getElementById('who-me').click(); document.getElementById('who-me').click(); document.getElementById('who-me').click()")
+            for y in (0, 400, 900, 5000):
+                await pg.evaluate(f"document.querySelector('#lobby .scroll').scrollTop = {y}"); await look('lobby players, teams')
+            await pg.evaluate("[...document.querySelectorAll('#lobby .opt-label')].find(e => e.textContent === 'Teams').click()")
             await pg.evaluate("document.getElementById('colOk').click(); document.getElementById('pgMatch').click()"); await look('lobby match')
             for y in (500, 1200, 5000):
                 await pg.evaluate(f"document.querySelector('#lobby .scroll').scrollTop = {y}"); await look('lobby match scrolled')

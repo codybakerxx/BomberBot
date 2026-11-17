@@ -105,13 +105,15 @@ async def main():
         chrome = os.environ.get("CHROME")
         browser = await p.chromium.launch(executable_path=chrome, args=["--no-sandbox"]) if chrome else await p.chromium.launch()
 
-        # --- upright phone: the lobby's two pages, a CPU player's panel, then Settings
+        # --- upright phone: the lobby's two pages (the player cards, then with teams on), then Settings
         context, page = await phone(browser, 393, 740, title="title.png")
         await page.screenshot(path=str(OUT / "lobby.png"))
-        await page.tap("#slot-2")
+        await page.evaluate("[...document.querySelectorAll('#lobby .opt-label')].find(e => e.textContent === 'Teams').click()")
+        await page.evaluate("document.getElementById('slots').scrollIntoView({block: 'start'})")
         await page.wait_for_timeout(100)
-        await page.screenshot(path=str(OUT / "lobby-cpu.png"))
-        await page.tap("#cpuDone")
+        await page.screenshot(path=str(OUT / "lobby-cards.png"))
+        await page.evaluate("[...document.querySelectorAll('#lobby .opt-label')].find(e => e.textContent === 'Teams').click()")
+        await page.evaluate("document.querySelector('#lobby .scroll').scrollTop = 0")
         await page.tap("#colOk")
         await page.wait_for_timeout(500)
         await page.screenshot(path=str(OUT / "lobby-ready.png"))

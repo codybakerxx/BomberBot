@@ -25,7 +25,6 @@
               dots youDots; the name over them, youName, with editName, the pencil that swaps it for a box (myName) to type your own; the player
               cards in slots, each with its victory dance along its foot (dp-prev-, dp-name-, dp-next-); allCpus) and lobbyMatch (the arena picture arenaPic with
               arenaPrev, arenaNext, arenaDots, the map buttons mapPick over it, and a Start under it, arenaStart; the rules; rulesReset; startNote and lobbyStart, Start again at the end); playersNext ends lobbyPlayers
-    cpuSheet  a CPU player's panel, over the lobby: colour and level (cpuRows), cpuRemove, cpuDone
     settings  your own settings, five pages: setControls (Steering thumb: handLeft, handRight; Swipe
               Movement sensitivity: sensOpts; padOpts; keys: remapKeys, resetKeys),
               setGamepad (padStatus, remapPad, resetPad, rumbleBtn), setSound (soundOpts), setApp (appLead, appSteps,
@@ -610,25 +609,37 @@
   /* a long typed name, or a narrow phone: the card's lines are cut short with … and never run out of the card */
   .slot small, .slot:not(.add):not(.join) b { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   /* each card's victory dance, a small ‹ name › along its foot (the owner's design); the card above makes room */
-  .slot-wrap .slot { padding-bottom: 46px; }
+  .slot-wrap .slot { padding-bottom: calc(var(--rows, 1) * 38px + 8px); cursor: default; }
+  /* the rows along a card's foot (Team, Level, Emote), one under another */
+  .picks { position: absolute; left: 1px; right: 1px; bottom: 1px; display: flex; flex-direction: column; border-radius: 0 0 13px 13px; overflow: hidden; }
+  .picks .dance-pick { position: static; flex: 0 0 38px; border-radius: 0; }
+  /* a CPU player's robot (a tap: the next colour) and where the name is (a tap: the team's next colour) */
+  .slot .pic { display: grid; place-items: center; padding: 0; margin: 0; cursor: pointer; background: transparent; border: 0; border-radius: 10px; }
+  .slot .who { display: block; min-width: 0; padding: 0; margin: 0; text-align: left; color: inherit; font: inherit; background: transparent; border: 0; border-radius: 8px; }
+  .slot button.who { cursor: pointer; }
+  /* dragging a card onto another (held down first): it lifts and follows the finger; the card under it lights up */
+  .slot-wrap { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+  .slot-wrap.dragging { opacity: 0.3; }
+  .slot-wrap.drop-on .slot { border-color: var(--team, var(--accent)); box-shadow: 0 0 0 2px var(--team, var(--accent)), 0 0 18px color-mix(in srgb, var(--team, var(--accent)) 45%, transparent); }
+  /* the narrowest phones (320 wide): a smaller robot, so the name and Not ready fit beside it */
+  @media (max-width: 359px) {
+    .slots .slot:not(.add):not(.join) { grid-template-columns: 42px minmax(0, 1fr); gap: 6px; padding-left: 4px; }
+    .slots .slot canvas { width: 42px; height: 56px; }
+    .slots .slot b { font-size: 15px; letter-spacing: 0.03em; }
+    .slot-wrap .slot b { padding-right: 34px; }
+    .slots .slot .rdy { font-size: 10px; letter-spacing: 0.03em; padding: 2px 5px; }
+  }
+  .drag-ghost { position: fixed; z-index: 60; margin: 0; pointer-events: none; transform: scale(1.04) rotate(-1.5deg); filter: drop-shadow(0 16px 26px rgba(0, 0, 0, 0.65)); }
   .dance-pick { position: absolute; left: 1px; right: 1px; bottom: 1px; height: 38px; display: grid; grid-template-columns: 34px minmax(0, 1fr) 34px; align-items: stretch; border-top: 1px solid var(--line); border-radius: 0 0 13px 13px; background: #121726; touch-action: pan-y; }
   .dance-pick button { display: grid; place-items: center; padding: 0; cursor: pointer; color: var(--ink-dim); background: transparent; border: 0; }
   .dance-pick button svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 2.6; stroke-linecap: round; stroke-linejoin: round; }
   .dance-pick .dp-name { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; min-width: 0; text-transform: uppercase; }
   .dance-pick .dp-label { font: 600 9px/1 var(--font-body); letter-spacing: 0.14em; color: var(--ink-dim); }
   .dance-pick .dp-text { max-width: 100%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font: 700 12px/1 var(--font-display); letter-spacing: 0.1em; color: var(--ink); }
-  .dance-pick .dp-text::before { content: '♪ '; color: var(--accent); }
-  /* teams (November 2026): a badge with the robot's team under its feet (a tap changes the team's colour), and the team's colour along the card's top */
+  .dance-pick.emote .dp-text::before { content: '♪ '; color: var(--accent); }
+  /* teams (November 2026): the team's colour along the card's top */
   .slot-wrap.teamed .slot { box-shadow: inset 0 3px 0 var(--team); }
-  .team-chip {
-    position: absolute; left: 4px; bottom: 42px; width: 62px; height: 22px; padding: 0; display: grid; place-items: center; cursor: pointer;
-    font: 700 10px/1 var(--font-display); letter-spacing: 0.07em; text-transform: uppercase; color: #fff;
-    background: color-mix(in srgb, var(--team) 28%, #0e1220); border: 1.5px solid var(--team); border-radius: 11px;
-    box-shadow: 0 0 10px color-mix(in srgb, var(--team) 35%, transparent);
-  }
-  .team-chip::before { content: ''; position: absolute; inset: -10px -4px; } /* a bigger target for a finger */
-  .team-chip:disabled { cursor: default; opacity: 1; }
-  .slot.me.tap-team { cursor: pointer; }
+  .slot-wrap.teamed.drop-on .slot { box-shadow: inset 0 3px 0 var(--team), 0 0 0 2px var(--team), 0 0 18px color-mix(in srgb, var(--team) 45%, transparent); }
   .opt-split .opt-label { color: var(--ink-dim); }
   .opt-split .mini { margin-right: 6px; }
   .bin { position: absolute; top: 6px; right: 6px; width: 36px; height: 36px; display: grid; place-items: center; padding: 0; cursor: pointer; color: #ff9a9a; background: #151a28; border: 1px solid #3a2530; border-radius: 10px; }
@@ -697,14 +708,12 @@
   .sheet-wrap[hidden] { display: none; }
   .sheet-wrap.middle { align-items: center; padding: 16px; }
   /* over everything, the menu during a match included */
-  #cpuSheet { z-index: 3; }
   #confirm { z-index: 5; }
   #onlineSheet { z-index: 6; } /* over the title screen */
   .sheet { width: min(100%, 520px); max-height: 92%; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; padding: 16px 14px 18px; background: var(--panel); border: 1px solid var(--line); border-radius: 22px 22px 0 0; }
   .sheet.small { border-radius: 18px; gap: 12px; }
   .sheet h2 { font-size: 22px; }
   .sheet-head { display: flex; align-items: center; gap: 12px; }
-  #cpuBot { width: 72px; height: 92px; flex: 0 0 auto; }
   .sheet .opts .opt, .sheet .opts .opt-group { background: #131827; }
   /* the menu during a match */
   #pause { z-index: 2; display: flex; }
@@ -981,22 +990,6 @@
 </div>
 
 <!-- A CPU player's panel: opens over the lobby when its card is tapped. -->
-<div id="cpuSheet" class="sheet-wrap" hidden>
-  <section class="sheet" role="dialog" aria-modal="true" aria-labelledby="cpuTitle">
-    <div class="sheet-head">
-      <canvas id="cpuBot" aria-hidden="true"></canvas>
-      <div>
-        <h2 id="cpuTitle">CPU 1</h2>
-        <p class="hint" id="cpuDesc"></p>
-      </div>
-    </div>
-    <div class="opts" id="cpuRows"></div>
-    <div class="row2">
-      <button class="go danger" id="cpuRemove" type="button">Remove</button>
-      <button class="go" id="cpuDone" type="button">Done</button>
-    </div>
-  </section>
-</div>
 
 <!-- Settings: your own, never anyone else's. Opened from the lobby or from the menu during a match. -->
 <div id="settings" class="screen" hidden>

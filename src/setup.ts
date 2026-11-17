@@ -194,8 +194,12 @@ export interface MatchSetup {
   teamsOn: boolean;
   /** each robot's team by its colour (one colour is one robot in a match): an index into TEAMS. A robot not in it joins the smallest team (`teamsFor`). */
   teams: Record<string, number>;
-  /** how many teams Split evenly makes, 2 to MAX_TEAMS (the lobby offers it as Teams of 2, 3, 4) */
-  teamCount: number;
+  /**
+   * Team size (the lobby's Custom, Teams of 2, Teams of 4...): 0 is Custom, the default, where any robot can be
+   * on any team. Otherwise every team has exactly this many robots: only offered when the players divide into
+   * such teams (`teamSizes`), and Custom while they do not.
+   */
+  teamSize: number;
   /** in a teams match, can a teammate's blast knock you out? */
   friendlyFire: boolean;
 }
@@ -211,16 +215,21 @@ export const TEAMS = [
   { name: 'Pink team', short: 'Pink', color: '#ff6ec7' },
   { name: 'Cyan team', short: 'Cyan', color: '#3ee6e0' },
 ];
-/** The most teams a match can be split into: four teams of two, with eight players. */
-export const MAX_TEAMS = 4;
 const isTeam = (t: unknown): t is number => typeof t === 'number' && Number.isInteger(t) && t >= 0 && t < TEAMS.length;
 
-/** How many teams there can be with `n` robots: 2 up to one team for every two robots (4 at most). */
-export function maxTeams(n: number): number {
-  return Math.max(2, Math.min(MAX_TEAMS, Math.ceil(n / 2)));
+/** The team sizes `n` robots can be split into exactly, in at least two teams: 8 robots, [2, 4]; 6, [2, 3]; 5, none. */
+export function teamSizes(n: number): number[] {
+  const out: number[] = [];
+  for (let k = 2; k <= n / 2; k++) if (n % k === 0) out.push(k);
+  return out;
 }
 
-/** The teams' colours, first one picked for the players in order, then the rest of TEAMS in its order. */
+/** The team size in force for `n` robots: the one picked if they divide into it, else 0 (Custom). */
+export function fixedSize(s: MatchSetup, n: number): number {
+  return teamSizes(n).includes(s.teamSize) ? s.teamSize : 0;
+}
+
+/** The teams' colours, first the ones the players have, in their order, then the rest of TEAMS in its order. */
 function teamOrder(s: MatchSetup, colours: string[]): number[] {
   const out: number[] = [];
   for (const c of colours) if (isTeam(s.teams[c]) && !out.includes(s.teams[c])) out.push(s.teams[c]);
@@ -228,37 +237,53 @@ function teamOrder(s: MatchSetup, colours: string[]): number[] {
   return out;
 }
 
-/** `n` robots in `k` teams as evenly as can be, the bigger teams first: 7 in 3 is [3, 2, 2]. */
-export function teamSizes(n: number, k: number): number[] {
-  return Array.from({ length: k }, (_, i) => Math.floor(n / k) + (i < n % k ? 1 : 0));
+/** `n` robots in `k` teams as evenly as can be, in player order, the teams taking the colours of `order`. */
+function evenly(n: number, k: number, order: number[]): number[] {
+  const out: number[] = [];
+  for (let t = 0; t < k; t++) {
+    const size = Math.floor(n / k) + (t < n % k ? 1 : 0);
+    for (let j = 0; j < size; j++) out.push(order[t]);
+  }
+  return out;
+}
+
+/** How many teams Split evenly makes: as many as the team size gives; in Custom, as many as there are now (two at least). */
+function splitCount(s: MatchSetup, colours: string[], now: number[]): number {
+  const n = colours.length;
+  const size = fixedSize(s, n);
+  if (size) return n / size;
+  return Math.max(2, Math.min(n, new Set(now).size));
 }
 
 /**
  * The team of each robot in a match, given their colours in player order (you, the other players, the CPU
  * players): the one picked for it or, for one with none yet, the smallest team. With nobody on a team yet,
- * an even split. Always at least two teams (with two robots or more).
+ * two even teams. Always at least two teams (with two robots or more), and with a team size in force,
+ * every team that size (split again evenly if a player coming or going has upset it).
  */
 export function teamsFor(s: MatchSetup, colours: string[]): number[] {
+  const n = colours.length;
+  const order = teamOrder(s, colours);
   if (!colours.some((c) => isTeam(s.teams[c]))) {
-    const k = Math.min(Math.max(2, s.teamCount), maxTeams(colours.length));
-    const order = teamOrder(s, colours);
-    const sizes = teamSizes(colours.length, k);
-    const out: number[] = [];
-    sizes.forEach((n, i) => {
-      for (let j = 0; j < n; j++) out.push(order[i]);
-    });
-    return out;
+    const size = fixedSize(s, n);
+    return evenly(n, size ? n / size : 2, order);
   }
   const count = new Map<number, number>();
   for (const c of colours) if (isTeam(s.teams[c])) count.set(s.teams[c], (count.get(s.teams[c]) ?? 0) + 1);
   const out = colours.map((c) => {
     if (isTeam(s.teams[c])) return s.teams[c];
     let best = -1;
-    for (const [t, n] of count) if (best < 0 || n < count.get(best)!) best = t;
+    for (const [t, k] of count) if (best < 0 || k < count.get(best)!) best = t;
     count.set(best, count.get(best)! + 1);
     return best;
   });
-  if (out.length > 1 && out.every((t) => t === out[0])) out[out.length - 1] = teamOrder(s, colours).find((t) => t !== out[0])!;
+  if (n > 1 && out.every((t) => t === out[0])) out[n - 1] = order.find((t) => t !== out[0])!;
+  const size = fixedSize(s, n);
+  if (size) {
+    const sizes = new Map<number, number>();
+    for (const t of out) sizes.set(t, (sizes.get(t) ?? 0) + 1);
+    if ([...sizes.values()].some((k) => k !== size)) return evenly(n, n / size, teamOrder({ ...s, teams: Object.fromEntries(colours.map((c, i) => [c, out[i]])) }, colours));
+  }
   return out;
 }
 
@@ -270,23 +295,20 @@ function settle(s: MatchSetup, colours: string[]): number[] {
 }
 
 /**
- * Split the robots into `s.teamCount` teams (as many as there is room for) as evenly as can be, in player
- * order: P1 and the next ones in the first team, and so on. The teams keep the colours they have.
+ * Split the robots evenly, in player order (P1 and the next ones in the first team, and so on): into teams
+ * of the team size, or in Custom into as many teams as there are now. The teams keep the colours they have.
  */
 export function splitTeams(s: MatchSetup, colours: string[]): void {
-  const k = Math.min(Math.max(2, s.teamCount), maxTeams(colours.length));
-  const order = teamOrder(s, colours);
-  const sizes = teamSizes(colours.length, k);
+  const now = teamsFor(s, colours);
+  const k = splitCount(s, colours, now);
+  const out = evenly(colours.length, k, teamOrder(s, colours));
   s.teams = {};
-  let i = 0;
-  sizes.forEach((n, t) => {
-    for (let j = 0; j < n; j++) s.teams[colours[i++]] = order[t];
-  });
+  colours.forEach((c, i) => (s.teams[c] = out[i]));
 }
 
 /**
- * A team takes the next colour along that no other team has (the owner's ask: tap your card and your
- * team's colour changes, your teammates' with it). Returns its new colour.
+ * A team takes the next colour along that no other team has (the owner's ask: tap where a robot's name is
+ * and its team's colour changes, for everyone on it). Returns its new colour.
  */
 export function recolourTeam(s: MatchSetup, colours: string[], team: number): number {
   const now = settle(s, colours);
@@ -301,13 +323,39 @@ export function recolourTeam(s: MatchSetup, colours: string[], team: number): nu
   return team;
 }
 
-/** Move one robot to another team. Not if that would leave fewer than two teams: false then. */
-export function moveToTeam(s: MatchSetup, colours: string[], colour: string, team: number): boolean {
+/**
+ * The teams a robot can be put on with the ‹ › on its card, in TEAMS order: in Custom every colour (a colour
+ * nobody has starts a team), except one that would leave only one team; with a team size, the teams there are.
+ */
+export function teamChoices(s: MatchSetup, colours: string[], colour: string): number[] {
+  const now = teamsFor(s, colours);
+  const i = colours.indexOf(colour);
+  if (fixedSize(s, colours.length)) return [...new Set(now)].sort((a, b) => a - b);
+  return TEAMS.map((_, t) => t).filter((t) => t === now[i] || new Set(now.map((x, k) => (k === i ? t : x))).size >= 2);
+}
+
+/**
+ * Put one robot on a team (its card's ‹ ›, or dropping its card on a robot of that team). With a team size,
+ * a full team gives up one of its robots in exchange (the last one in player order other than `keep`, so a
+ * CPU player before a person), and every team stays that size. Never down to one team: false then.
+ */
+export function joinTeam(s: MatchSetup, colours: string[], colour: string, team: number, keep = ''): boolean {
   const now = settle(s, colours);
   const i = colours.indexOf(colour);
   if (i < 0 || !isTeam(team)) return false;
-  const after = now.map((t, k) => (k === i ? team : t));
-  if (new Set(after).size < 2) return false;
+  if (now[i] === team) return true;
+  const size = fixedSize(s, colours.length);
+  if (size) {
+    if (!now.includes(team)) return false;
+    const members = colours.filter((c, k) => now[k] === team);
+    if (members.length >= size) {
+      const out = [...members].reverse().find((c) => c !== keep) ?? members[members.length - 1];
+      s.teams[out] = now[i];
+    }
+    s.teams[colour] = team;
+    return true;
+  }
+  if (new Set(now.map((t, k) => (k === i ? team : t))).size < 2) return false;
   s.teams[colour] = team;
   return true;
 }
@@ -355,7 +403,7 @@ export function defaultSetup(myColor: string): MatchSetup {
     angelsBack: false,
     teamsOn: false,
     teams: {},
-    teamCount: 2,
+    teamSize: 0, // Custom (the owner's call)
     friendlyFire: false, // teammates are safe from each other's blasts unless it is switched on
   };
 }
@@ -375,7 +423,7 @@ export function pickArena(s: MatchSetup, id: ArenaId): void {
  */
 export function defaultRules(s: MatchSetup, myColor: string): MatchSetup {
   // (the Players page's settings stay: the players, Randomize CPUs and the teams)
-  const out = { ...defaultSetup(myColor), cpus: s.cpus, map: s.map, randEmotes: s.randEmotes, randLevels: s.randLevels, teamsOn: s.teamsOn, teams: s.teams, teamCount: s.teamCount, friendlyFire: s.friendlyFire };
+  const out = { ...defaultSetup(myColor), cpus: s.cpus, map: s.map, randEmotes: s.randEmotes, randLevels: s.randLevels, teamsOn: s.teamsOn, teams: s.teams, teamSize: s.teamSize, friendlyFire: s.friendlyFire };
   pickArena(out, s.arena);
   return out;
 }
@@ -520,7 +568,8 @@ export function readSetup(raw: unknown, myColor: string, colorIds: string[]): Ma
   if (r.teams && typeof r.teams === 'object') {
     for (const [c, t] of Object.entries(r.teams)) if (colorIds.includes(c) && isTeam(t)) out.teams[c] = t;
   }
-  out.teamCount = clampInt(r.teamCount, 2, MAX_TEAMS, d.teamCount);
+  out.teamSize = clampInt(r.teamSize, 0, 4, d.teamSize);
+  if (out.teamSize === 1) out.teamSize = 0;
   return out;
 }
 

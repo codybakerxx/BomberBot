@@ -49,10 +49,12 @@ import {
   clockText,
   defaultRules,
   problem,
+  fixedSize,
+  joinTeam,
   lineUp,
-  maxTeams,
-  moveToTeam,
   recolourTeam,
+  teamChoices,
+  teamSizes,
   splitTeams,
   swapTeams,
   TEAMS,
@@ -115,8 +117,6 @@ export function createLobby(host: LobbyHost): {
   hide(): void;
   page(): LobbyPage;
   turn(d: number): void;
-  sheetOpen(): boolean;
-  closeSheet(): void;
   redraw(): void;
   /** have you pressed Ready (on the robot you are showing)? */
   isReady(): boolean;
@@ -146,8 +146,6 @@ export function createLobby(host: LobbyHost): {
   /** whether you have pressed Ready (with the colour you are showing). Lost when another colour is picked. */
   let ready = false;
   const wide = (): boolean => window.matchMedia('(min-width: 820px) and (min-height: 480px)').matches;
-  /** the CPU player whose panel is open, or -1 */
-  let editing = -1;
   const s = (): MatchSetup => host.setup;
   const guests = (): Guest[] => host.guests;
   /** everyone in the match: you, the other players here, the CPU players */
@@ -244,7 +242,6 @@ export function createLobby(host: LobbyHost): {
     previews.set(who, performance.now());
     startDancing();
   }
-  let danceFrom = performance.now();
   let looping = false;
   function danceLoop(now: number): void {
     if ($('lobby').hidden) {
@@ -265,9 +262,7 @@ export function createLobby(host: LobbyHost): {
         drawBotOn(cv, colour); // done: standing again
       } else drawDancer(cv, colour, d, t, 0.8);
     }
-    const c = s().cpus[editing];
-    if (!sheet.hidden && c) drawDancer($<HTMLCanvasElement>('cpuBot'), c.colorId, c.dance ?? 'party', (now - danceFrom) / 1000, 0.78);
-    if (previews.size || !sheet.hidden) requestAnimationFrame(danceLoop);
+    if (previews.size) requestAnimationFrame(danceLoop);
     else looping = false;
   }
   /** whose card: its robot's colour now, and its dance */
@@ -293,7 +288,6 @@ export function createLobby(host: LobbyHost): {
       if (!c) return;
       c.dance = id;
       host.save();
-      refreshCpu();
     }
     const name = document.getElementById(`dp-name-${who}`);
     if (name) {
@@ -305,7 +299,7 @@ export function createLobby(host: LobbyHost): {
   /** The small ‹ dance › along the foot of a card, and a swipe across the whole card. */
   function dancePick(wrap: HTMLElement, who: string, readOnly = false, random = false): void {
     const row = document.createElement('div');
-    row.className = 'dance-pick';
+    row.className = 'dance-pick emote';
     row.setAttribute('role', 'group');
     row.setAttribute('aria-label', 'Victory dance');
     if (random) {
@@ -345,7 +339,7 @@ export function createLobby(host: LobbyHost): {
       mk(`dp-next-${who}`, '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg>', 'Next dance', () => step(1)),
     );
     wrap.append(row);
-    swipeable(wrap, step);
+    swipeable(row, step); // (a swipe along the row, as along each row on the card)
   }
   function startDancing(): void {
     if (looping) return;
@@ -475,9 +469,9 @@ export function createLobby(host: LobbyHost): {
         }),
       ],
     }),
-    // Teams (the owner's ask, November 2026): the robots split evenly into teams of 2, 3 or 4 with one tap, a
-    // CPU player moved to another team on its panel, a team's colour changed by tapping its badge (or your own
-    // card); and whether teammates' blasts can knock each other out.
+    // Teams (the owner's asks, November 2026): Team size (Custom, or teams all one size), the teams as they are
+    // with Split evenly, and whether teammates' blasts can knock each other out. Each robot's team is picked on
+    // its card (the cards: see `card`).
     toggle({
       label: 'Teams',
       get: () => s().teamsOn,
@@ -487,17 +481,16 @@ export function createLobby(host: LobbyHost): {
         changed();
       },
       under: [
+        // Custom (the default: any robot on any team), or teams all one size, as the players divide into
         choice({
           label: 'Team size',
-          // (from the smallest teams to the biggest: with 8 players, Teams of 2, 3, 4)
-          values: () => teamCounts().map((k) => `Teams of ${Math.ceil(inOrder().length / k)}`),
-          get: () => teamCounts().indexOf(Math.min(Math.max(2, s().teamCount), maxTeams(inOrder().length))),
+          values: () => ['Custom', ...teamSizes(inOrder().length).map((k) => `Teams of ${k}`)],
+          get: () => Math.max(0, [0, ...teamSizes(inOrder().length)].indexOf(fixedSize(s(), inOrder().length))),
           set: (i) => {
-            s().teamCount = teamCounts()[i];
-            splitTeams(s(), inOrder());
+            s().teamSize = [0, ...teamSizes(inOrder().length)][i] ?? 0;
+            if (s().teamSize) splitTeams(s(), inOrder());
             changed();
           },
-          disabled: () => teamCounts().length < 2,
           wrap: false,
         }),
         splitRow(),
@@ -513,13 +506,6 @@ export function createLobby(host: LobbyHost): {
     }),
   ];
   const refreshAll = mount($('allCpus'), allCpus);
-
-  /** How many teams the players here can be split into, most first (so the smallest teams come first). */
-  function teamCounts(): number[] {
-    const out: number[] = [];
-    for (let k = maxTeams(inOrder().length); k >= 2; k--) out.push(k);
-    return out;
-  }
 
   /** The row under Team size: the teams as they are (2 v 2), and Split evenly, which splits everyone afresh in player order. */
   function splitRow(): Opt {
@@ -559,37 +545,12 @@ export function createLobby(host: LobbyHost): {
     const order = inOrder();
     return teamsFor(s(), order)[order.indexOf(colour)] ?? 0;
   }
-  /** The teams in play, in TEAMS order. */
-  function teamsInPlay(): number[] {
-    return [...new Set(teamsFor(s(), inOrder()))].sort((a, b) => a - b);
-  }
   /** The next colour for the team `colour` is on: everyone on it changes with it (the owner's ask). */
   function nextTeamColour(colour: string): void {
     if (!canEdit() || !s().teamsOn) return;
     recolourTeam(s(), inOrder(), teamOf(colour));
     changed();
   }
-  /** The badge on a card in a teams match: its team's colour, and a tap changes the colour of the whole team. */
-  function teamChip(wrap: HTMLElement, colour: string, who: string): void {
-    if (!s().teamsOn) return;
-    const t = teamOf(colour);
-    const chip = document.createElement('button');
-    chip.type = 'button';
-    chip.className = 'team-chip';
-    chip.dataset.colour = colour;
-    chip.style.setProperty('--team', TEAMS[t].color);
-    chip.textContent = TEAMS[t].short;
-    chip.setAttribute('aria-label', `${who}: ${TEAMS[t].name}.${canEdit() ? ' Tap to change the team’s colour, for everyone on it.' : ''}`);
-    if (!canEdit()) chip.disabled = true;
-    chip.addEventListener('click', (e) => {
-      e.stopPropagation();
-      nextTeamColour(colour);
-    });
-    wrap.classList.add('teamed');
-    wrap.style.setProperty('--team', TEAMS[t].color);
-    wrap.append(chip);
-  }
-
   function drawBotOn(cv: HTMLCanvasElement, colorId: string, fill = 0.92): void {
     const dpr = host.density();
     const r = cv.getBoundingClientRect();
@@ -607,109 +568,234 @@ export function createLobby(host: LobbyHost): {
     drawRobot(g, w / 2, h * 0.96, size, colorById(colorId), 2, 0, false, { fine: false });
   }
 
+  // ------------------------------------------------------------ the player cards
+  // Each card (the owner's design, 17 November 2026): the robot, its name, P-number and whether it is ready;
+  // then along its foot a ‹ › for each thing to pick: Team (in a teams match), Level (a CPU player) and Emote.
+  // A tap on a CPU player's robot gives it the next colour free; a tap where the name is gives the robot's
+  // team the next colour no other team has. A card held down can be dragged onto another: it joins that
+  // robot's team and, for a CPU player, takes the place after it. (There was a panel for each CPU player.)
+  const CHEV_L = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>';
+  const CHEV_R = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg>';
+  /** The colour of the robot on a card (`me`, `g<pad>`, `c<i>`): the one it plays in. */
+  function colourOf(who: string): string {
+    if (who === 'me') return host.myColor;
+    if (who[0] === 'g') return guestOf(Number(who.slice(1)))?.colorId ?? '';
+    return s().cpus[Number(who.slice(1))]?.colorId ?? '';
+  }
+  /**
+   * One ‹ value › row along a card's foot. `step` moves it one way or the other; none, and it only shows the
+   * value. `colour`: the value in that colour (a team).
+   */
+  function pickRow(id: string, label: string, text: string, step: ((d: number) => void) | null, colour = ''): HTMLElement {
+    const row = document.createElement('div');
+    row.className = 'dance-pick';
+    row.setAttribute('role', 'group');
+    row.setAttribute('aria-label', `${label}: ${text}`);
+    const name = document.createElement('span');
+    name.className = 'dp-name';
+    name.id = `${id}-name`;
+    name.innerHTML = '<span class="dp-label"></span><span class="dp-text"></span>';
+    name.querySelector('.dp-label')!.textContent = label;
+    const t = name.querySelector<HTMLElement>('.dp-text')!;
+    t.textContent = text;
+    if (colour) {
+      t.style.color = colour;
+      row.classList.add('team-pick');
+    }
+    if (!step) {
+      row.classList.add('ro');
+      row.append(name);
+      return row;
+    }
+    const mk = (dir: number, svg: string): HTMLButtonElement => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.id = `${id}-${dir < 0 ? 'prev' : 'next'}`;
+      b.innerHTML = svg;
+      b.setAttribute('aria-label', `${dir < 0 ? 'Previous' : 'Next'} ${label.toLowerCase()}`);
+      b.addEventListener('click', () => step(dir));
+      return b;
+    };
+    row.append(mk(-1, CHEV_L), name, mk(1, CHEV_R));
+    swipeable(row, step);
+    return row;
+  }
+  /** The Team row on a card: ‹ the robot's team ›, through the teams it can be on (`teamChoices`). */
+  function teamRow(who: string): HTMLElement {
+    const colour = colourOf(who);
+    const t = teamOf(colour);
+    const step = (d: number): void => {
+      const order = inOrder();
+      const list = teamChoices(s(), order, colour);
+      const at = list.indexOf(teamOf(colour));
+      const next = list[(at + d + list.length) % list.length];
+      if (next !== undefined && joinTeam(s(), order, colour, next)) changed();
+    };
+    return pickRow(`tp-${who}`, 'Team', TEAMS[t].short, canEdit() ? step : null, TEAMS[t].color);
+  }
+  /** The Level row on a CPU player's card. */
+  function levelRow(i: number): HTMLElement {
+    const c = s().cpus[i];
+    if (s().randLevels) return pickRow(`lv-c${i}`, 'Level', 'Random', null);
+    const step = (d: number): void => {
+      const at = BOT_LEVELS.indexOf(s().cpus[i].level) + d;
+      if (at < 0 || at >= BOT_LEVELS.length) return;
+      s().cpus[i].level = BOT_LEVELS[at];
+      changed();
+    };
+    return pickRow(`lv-c${i}`, 'Level', LEVELS[c.level].label, canEdit() ? step : null);
+  }
+  /** A CPU player's robot in the next colour nobody else wears (a tap on its robot). It keeps its team. */
+  function nextCpuColour(i: number): void {
+    const c = s().cpus[i];
+    if (!c || !canEdit()) return;
+    const free = freeFor(i);
+    const ids = COLORS.map((x) => x.id);
+    let at = ids.indexOf(c.colorId);
+    for (let n = 0; n < ids.length; n++) {
+      at = (at + 1) % ids.length;
+      if (free.includes(ids[at]) && ids[at] !== c.colorId) {
+        swapTeams(s(), c.colorId, ids[at]);
+        c.colorId = ids[at];
+        changed();
+        return;
+      }
+    }
+  }
+
+  /** A card: the robot and its name (`top`), the rows along its foot, and the bin if it has one. */
+  function card(who: string, cls: string, label: string, nameHtml: (t: HTMLElement) => void, opts: { cpu?: number; bin?: HTMLButtonElement; dance: [boolean, boolean] }): HTMLElement {
+    const colour = colourOf(who);
+    const teamed = s().teamsOn;
+    const wrap = document.createElement('div');
+    wrap.className = 'slot-wrap';
+    wrap.dataset.who = who;
+    const slot = document.createElement('div');
+    slot.className = `slot ${cls}`;
+    slot.setAttribute('role', 'group');
+    slot.setAttribute('aria-label', label);
+    if (who[0] === 'c') slot.id = `slot-${Number(who.slice(1)) + 1}`;
+    if (who[0] === 'g') slot.id = `guest-${who.slice(1)}`;
+    // the robot: a CPU player's is a button that gives it the next colour
+    const cv = document.createElement('canvas');
+    cv.dataset.who = who;
+    let pic: HTMLElement = cv;
+    if (opts.cpu !== undefined && canEdit()) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'pic';
+      b.id = `pic-${who}`;
+      b.setAttribute('aria-label', `${botName(colorById(colour))}: tap for the next robot colour`);
+      b.append(cv);
+      const i = opts.cpu;
+      b.addEventListener('click', () => nextCpuColour(i));
+      pic = b;
+    }
+    // where the name is: in a teams match a button that gives the team the next colour
+    const t = document.createElement(teamed && canEdit() ? 'button' : 'div');
+    t.className = 'who';
+    if (t instanceof HTMLButtonElement) {
+      t.type = 'button';
+      t.id = `who-${who}`;
+      t.setAttribute('aria-label', `${TEAMS[teamOf(colour)].name}: tap to change the team’s colour, for everyone on it`);
+      t.addEventListener('click', () => nextTeamColour(colour));
+    }
+    nameHtml(t);
+    slot.append(pic, t);
+    wrap.append(slot);
+    if (opts.bin) wrap.append(opts.bin);
+    const rows: HTMLElement[] = [];
+    if (teamed) {
+      wrap.classList.add('teamed');
+      wrap.style.setProperty('--team', TEAMS[teamOf(colour)].color);
+      rows.push(teamRow(who));
+    }
+    if (opts.cpu !== undefined) rows.push(levelRow(opts.cpu));
+    const foot = document.createElement('div');
+    foot.className = 'picks';
+    foot.append(...rows);
+    wrap.append(foot);
+    dancePick(foot, who, opts.dance[0], opts.dance[1]);
+    wrap.style.setProperty('--rows', String(foot.children.length));
+    dragFrom(wrap, who);
+    return wrap;
+  }
+
   function buildSlots(): void {
     const box = $('slots');
     box.textContent = '';
-    const me = document.createElement('div');
-    me.className = 'slot me';
-    me.setAttribute('role', 'group');
-    me.setAttribute('aria-label', `${host.myName || 'You'}, P${myP()}, playing as ${botName(colorById(host.myColor))}, ${ready ? 'ready' : 'not ready'}`);
-    const mc = document.createElement('canvas');
-    const mt = document.createElement('div');
-    mt.innerHTML = `<b></b><small>P${myP()} · you${net()?.host ? ' · host' : ''}</small><span class="rdy${ready ? ' on' : ''}">${ready ? '✓ Ready' : 'Not ready'}</span>`;
-    mt.querySelector('b')!.textContent = host.myName || 'You'; // typed by the player: set as text, never as markup
-    me.append(mc, mt);
-    mc.dataset.who = 'me';
-    // a teams match: a tap on your card changes your team's colour, your teammates' with it (the owner's ask)
-    if (s().teamsOn && canEdit()) {
-      me.classList.add('tap-team');
-      me.addEventListener('click', () => nextTeamColour(host.myColor));
-    }
-    const meWrap = document.createElement('div');
-    meWrap.className = 'slot-wrap';
-    meWrap.append(me);
-    dancePick(meWrap, 'me');
-    teamChip(meWrap, host.myColor, host.myName || 'You');
-    box.append(meWrap);
-    const cvs: [HTMLCanvasElement, string][] = [[mc, host.myColor]];
+    const cvs: [HTMLCanvasElement, string][] = [];
     const lastOne = s().cpus.length + guests().length <= 1;
+    const add = (wrap: HTMLElement, colour: string): void => {
+      box.append(wrap);
+      cvs.push([wrap.querySelector('canvas')!, colour]);
+    };
+    // you
+    add(
+      card('me', 'me', `${host.myName || 'You'}, P${myP()}, playing as ${botName(colorById(host.myColor))}, ${ready ? 'ready' : 'not ready'}`, (t) => {
+        t.innerHTML = `<b></b><small>P${myP()} · you${net()?.host ? ' · host' : ''}</small><span class="rdy${ready ? ' on' : ''}">${ready ? '✓ Ready' : 'Not ready'}</span>`;
+        t.querySelector('b')!.textContent = host.myName || 'You'; // typed by the player: set as text, never as markup
+      }, { dance: [false, false] }),
+      host.myColor,
+    );
+    // the other players here, or online
     guests().forEach((g) => {
       const n = guestP(g);
-      const card = document.createElement('div');
-      card.className = 'slot guest';
-      card.id = `guest-${g.pad}`;
-      card.setAttribute('role', 'group');
-      const looking = botName(colorById(g.pick));
-      card.setAttribute('aria-label', `${looking}, P${n}, on controller ${g.pad + 1}, ${g.ready && g.pick === g.colorId ? 'ready' : 'not ready'}`);
-      const cv = document.createElement('canvas');
-      const t = document.createElement('div');
       const on = g.ready && g.pick === g.colorId;
-      t.innerHTML = `<b></b><small></small><span class="rdy${on ? ' on' : ''}">${on ? '✓ Ready' : g.remote ? 'Not ready' : 'Not ready: A'}</span>`;
-      // (a name typed by another person: set as text, never as markup)
-      t.querySelector('b')!.textContent = g.remote ? g.remote.name || looking : looking;
-      t.querySelector('small')!.textContent = g.remote
-        ? `P${n} · ${g.remote.host ? 'host' : 'online'}${g.remote.on ? '' : ' · away'}`
-        : `P${n} · controller ${g.pad + 1}`;
-      if (g.remote) card.setAttribute('aria-label', `${g.remote.name || looking}, P${n}, online, ${on ? 'ready' : 'not ready'}`);
-      card.append(cv, t);
-      cv.dataset.who = `g${g.pad}`;
-      const bin = document.createElement('button');
-      bin.type = 'button';
-      bin.className = 'bin';
-      bin.id = `gbin-${g.pad}`;
-      bin.innerHTML = BIN;
-      bin.disabled = lastOne;
-      bin.setAttribute('aria-label', lastOne ? 'A match needs someone to play against' : `Remove P${n}`);
-      bin.addEventListener('click', () => leave(g.pad));
-      const wrap = document.createElement('div');
-      wrap.className = 'slot-wrap';
-      wrap.append(card);
-      if (!g.remote) wrap.append(bin); // nobody removes another person from an online room
-      dancePick(wrap, `g${g.pad}`, !!g.remote);
-      teamChip(wrap, g.colorId, g.remote?.name || looking);
+      const looking = botName(colorById(g.pick));
+      const label = g.remote ? `${g.remote.name || looking}, P${n}, online, ${on ? 'ready' : 'not ready'}` : `${looking}, P${n}, on controller ${g.pad + 1}, ${on ? 'ready' : 'not ready'}`;
+      let bin: HTMLButtonElement | undefined;
+      if (!g.remote) {
+        bin = document.createElement('button'); // nobody removes another person from an online room
+        bin.type = 'button';
+        bin.className = 'bin';
+        bin.id = `gbin-${g.pad}`;
+        bin.innerHTML = BIN;
+        bin.disabled = lastOne;
+        bin.setAttribute('aria-label', lastOne ? 'A match needs someone to play against' : `Remove P${n}`);
+        bin.addEventListener('click', () => leave(g.pad));
+      }
+      const wrap = card(`g${g.pad}`, 'guest', label, (t) => {
+        t.innerHTML = `<b></b><small></small><span class="rdy${on ? ' on' : ''}">${on ? '✓ Ready' : g.remote ? 'Not ready' : 'Not ready: A'}</span>`;
+        // (a name typed by another person: set as text, never as markup)
+        t.querySelector('b')!.textContent = g.remote ? g.remote.name || looking : looking;
+        t.querySelector('small')!.textContent = g.remote ? `P${n} · ${g.remote.host ? 'host' : 'online'}${g.remote.on ? '' : ' · away'}` : `P${n} · controller ${g.pad + 1}`;
+      }, { bin, dance: [!!g.remote, false] });
       box.append(wrap);
-      cvs.push([cv, g.pick]);
+      cvs.push([wrap.querySelector('canvas')!, g.pick]);
     });
+    // the CPU players
     s().cpus.forEach((c, i) => {
-      const b = document.createElement('button');
-      b.type = 'button';
-      b.className = 'slot';
-      b.id = `slot-${i + 1}`;
-      const lv = s().randLevels ? "Random" : LEVELS[c.level].label;
-      b.setAttribute('aria-label', `${botName(colorById(c.colorId))}, CPU player, P${cpuP(i)}, ${lv}, ready. Tap to change.`);
-      const cv = document.createElement('canvas');
-      const t = document.createElement('div');
-      t.innerHTML = `<b>${botName(colorById(c.colorId))}</b><small>P${cpuP(i)} · ${lv}</small><span class="rdy on">✓ Ready</span>`;
-      b.append(cv, t);
-      cv.dataset.who = `c${i}`;
-      b.addEventListener('click', () => openSheet(i));
-      if (!canEdit()) b.classList.add('ro'); // the host's to change
-      // the bin: removes this CPU player at once (Undo brings it back)
-      const bin = document.createElement('button');
-      bin.type = 'button';
-      bin.className = 'bin';
-      bin.id = `bin-${i + 1}`;
-      bin.innerHTML = BIN;
-      bin.disabled = lastOne;
-      bin.setAttribute('aria-label', lastOne ? 'A match needs someone to play against' : `Remove ${botName(colorById(c.colorId))}`);
-      bin.addEventListener('click', () => removeCpu(i));
-      const wrap = document.createElement('div');
-      wrap.className = 'slot-wrap';
-      wrap.append(b);
-      if (canEdit()) wrap.append(bin);
-      dancePick(wrap, `c${i}`, !canEdit(), s().randEmotes);
-      teamChip(wrap, c.colorId, botName(colorById(c.colorId)));
-      box.append(wrap);
-      cvs.push([cv, c.colorId]);
+      const name = botName(colorById(c.colorId));
+      let bin: HTMLButtonElement | undefined;
+      if (canEdit()) {
+        // the bin: removes this CPU player at once (Undo brings it back)
+        bin = document.createElement('button');
+        bin.type = 'button';
+        bin.className = 'bin';
+        bin.id = `bin-${i + 1}`;
+        bin.innerHTML = BIN;
+        bin.disabled = lastOne;
+        bin.setAttribute('aria-label', lastOne ? 'A match needs someone to play against' : `Remove ${name}`);
+        bin.addEventListener('click', () => removeCpu(i));
+      }
+      const lv = s().randLevels ? 'Random' : LEVELS[c.level].label;
+      add(
+        card(`c${i}`, `cpu${canEdit() ? '' : ' ro'}`, `${name}, CPU player, P${cpuP(i)}, ${lv}, ready`, (t) => {
+          t.innerHTML = `<b></b><small>P${cpuP(i)} · CPU</small><span class="rdy on">✓ Ready</span>`;
+          t.querySelector('b')!.textContent = name;
+        }, { cpu: i, bin, dance: [!canEdit(), s().randEmotes] }),
+        c.colorId,
+      );
     });
     if (s().cpus.length < maxCpus() && canEdit()) {
-      const add = document.createElement('button');
-      add.type = 'button';
-      add.className = 'slot add';
-      add.id = 'slotAdd';
-      add.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><b>Add CPU player</b>';
-      add.addEventListener('click', addCpu);
-      box.append(add);
+      const addBtn = document.createElement('button');
+      addBtn.type = 'button';
+      addBtn.className = 'slot add';
+      addBtn.id = 'slotAdd';
+      addBtn.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><b>Add CPU player</b>';
+      addBtn.addEventListener('click', addCpu);
+      box.append(addBtn);
     }
     // with a controller connected and room for one more: how another player joins
     if (total() < MAX_CPUS + 1 && host.controllers() > 0 && !net()) {
@@ -724,87 +810,137 @@ export function createLobby(host: LobbyHost): {
     $('playerCount').textContent = `${total()} of ${MAX_CPUS + 1}`;
   }
 
-  // ------------------------------------------------------------ a CPU player's panel
-  const sheet = $('cpuSheet');
-  const cpuOpts: Opt[] = [
-    choice({
-      label: 'Robot',
-      hint: () => (s().cpus[editing] ? `${colorById(s().cpus[editing].colorId).name}. Each colour is a robot of its own.` : ''),
-      values: () => freeFor(editing).map((id) => botName(colorById(id))),
-      get: () => freeFor(editing).indexOf(s().cpus[editing]?.colorId ?? ''),
-      set: (i) => {
-        const was = s().cpus[editing].colorId;
-        s().cpus[editing].colorId = freeFor(editing)[i];
-        swapTeams(s(), was, s().cpus[editing].colorId); // (it keeps its side in its new colour)
-        changed();
-      },
-    }),
-    choice({
-      label: 'Level',
-      hint: () => (s().randLevels ? 'Picked at random each match (Randomize CPUs, on the Players page)' : s().cpus[editing] ? LEVELS[s().cpus[editing].level].blurb : ''),
-      values: () => (s().randLevels ? BOT_LEVELS.map(() => 'Random') : BOT_LEVELS.map((l) => LEVELS[l].label)),
-      disabled: () => s().randLevels,
-      get: () => BOT_LEVELS.indexOf(s().cpus[editing]?.level ?? 'normal'),
-      set: (i) => {
-        s().cpus[editing].level = BOT_LEVELS[i];
-        changed();
-      },
-      wrap: false,
-    }),
-    // which team it plays on: one of the teams in play (it cannot leave only one team)
-    choice({
-      label: 'Team',
-      hint: () => (s().teamsOn ? '' : 'Switch Teams on first, on the Players page'),
-      values: () => (s().teamsOn ? teamsInPlay().map((t) => TEAMS[t].name) : ['Off']),
-      get: () => (s().teamsOn && s().cpus[editing] ? Math.max(0, teamsInPlay().indexOf(teamOf(s().cpus[editing].colorId))) : 0),
-      set: (i) => {
-        const c = s().cpus[editing];
-        if (c && moveToTeam(s(), inOrder(), c.colorId, teamsInPlay()[i])) changed();
-      },
-      disabled: () => !s().teamsOn,
-      wrap: false,
-    }),
-    choice({
-      label: 'Victory dance',
-      hint: () => (s().randEmotes ? 'Picked at random each match (Randomize CPUs, on the Players page)' : s().cpus[editing] ? danceOf(s().cpus[editing].dance ?? 'party').blurb : ''),
-      values: () => (s().randEmotes ? DANCES.map(() => 'Random') : DANCES.map((d) => d.name)),
-      disabled: () => s().randEmotes,
-      get: () => DANCES.findIndex((d) => d.id === (s().cpus[editing]?.dance ?? 'party')),
-      set: (i) => {
-        s().cpus[editing].dance = DANCES[i].id;
-        danceFrom = performance.now();
-        changed();
-        startDancing();
-      },
-    }),
-  ];
-  const refreshCpu = mount($('cpuRows'), cpuOpts);
-  function openSheet(i: number): void {
+  // ------------------------------------------------------------ dragging a card onto another
+  /** The card being dragged, if one is: who, its picture following the finger, and the card under it. */
+  let drag: { who: string; wrap: HTMLElement; ghost: HTMLElement; dx: number; dy: number; over: HTMLElement | null; id: number } | null = null;
+  /** Clicks are not presses for a moment after a drag ends (the finger lifting over a button). */
+  let quietUntil = 0;
+  /** How long a card is held still before it lifts to be dragged, and how far a finger may wander meanwhile. */
+  const HOLD_MS = 380;
+  const HOLD_SLOP = 10;
+  /**
+   * A card can be held down and dragged onto another (the owner's ask): it joins that robot's team and, for
+   * a CPU player, takes the place after it (or the first CPU place, dropped on a person). With a mouse it
+   * lifts as soon as it moves. Only for whoever can change the players (online, the host).
+   */
+  function dragFrom(wrap: HTMLElement, who: string): void {
+    let timer = 0;
+    let x0 = 0;
+    let y0 = 0;
+    let pid = -1;
+    const lift = (e: PointerEvent): void => {
+      window.clearTimeout(timer);
+      timer = 0;
+      if (drag || !canEdit() || !wrap.isConnected) return;
+      const r = wrap.getBoundingClientRect();
+      const ghost = wrap.cloneNode(true) as HTMLElement;
+      ghost.classList.add('drag-ghost');
+      ghost.removeAttribute('data-who');
+      for (const el of ghost.querySelectorAll('[id]')) el.removeAttribute('id');
+      // (the copy's canvases are blank: draw the robot again on it)
+      const src = wrap.querySelector('canvas');
+      const dst = ghost.querySelector('canvas');
+      if (src && dst) {
+        dst.width = src.width;
+        dst.height = src.height;
+        dst.getContext('2d')!.drawImage(src, 0, 0);
+      }
+      Object.assign(ghost.style, { width: `${r.width}px`, height: `${r.height}px`, left: `${r.left}px`, top: `${r.top}px` });
+      document.body.append(ghost);
+      wrap.classList.add('dragging');
+      drag = { who, wrap, ghost, dx: e.clientX - r.left, dy: e.clientY - r.top, over: null, id: e.pointerId };
+      navigator.vibrate?.(12);
+    };
+    wrap.addEventListener('pointerdown', (e) => {
+      if (!canEdit() || drag || (e.pointerType === 'mouse' && e.button !== 0)) return;
+      if ((e.target as HTMLElement).closest('.picks, .bin')) return; // (the arrows and the bin are for tapping)
+      x0 = e.clientX;
+      y0 = e.clientY;
+      pid = e.pointerId;
+      window.clearTimeout(timer);
+      if (e.pointerType !== 'mouse') timer = window.setTimeout(() => lift(e), HOLD_MS);
+    });
+    wrap.addEventListener('pointermove', (e) => {
+      if (e.pointerId !== pid || drag) return;
+      const far = Math.hypot(e.clientX - x0, e.clientY - y0);
+      if (e.pointerType === 'mouse' && e.buttons === 1 && far > 6) lift(e);
+      else if (far > HOLD_SLOP) window.clearTimeout(timer); // scrolling, or a swipe: not a hold
+    });
+    const stop = (): void => {
+      window.clearTimeout(timer);
+      pid = -1;
+    };
+    wrap.addEventListener('pointerup', stop);
+    wrap.addEventListener('pointercancel', stop);
+    wrap.addEventListener('contextmenu', (e) => e.preventDefault()); // (a long press is a drag, not the phone's menu)
+  }
+  // while a card is dragged: it follows the finger, the card under it lights up, and the page scrolls near its edges
+  window.addEventListener('pointermove', (e) => {
+    if (!drag || e.pointerId !== drag.id) return;
+    drag.ghost.style.left = `${e.clientX - drag.dx}px`;
+    drag.ghost.style.top = `${e.clientY - drag.dy}px`;
+    const under = document.elementFromPoint(e.clientX, e.clientY)?.closest<HTMLElement>('#slots .slot-wrap') ?? null;
+    const over = under && under !== drag.wrap ? under : null;
+    if (over !== drag.over) {
+      drag.over?.classList.remove('drop-on');
+      over?.classList.add('drop-on');
+      drag.over = over;
+    }
+    const sc = $('lobby').querySelector<HTMLElement>('.scroll');
+    if (sc) {
+      const r = sc.getBoundingClientRect();
+      if (e.clientY < r.top + 70) sc.scrollTop -= 12;
+      else if (e.clientY > r.bottom - 70) sc.scrollTop += 12;
+    }
+  });
+  const endDrag = (e: PointerEvent, drop: boolean): void => {
+    if (!drag || e.pointerId !== drag.id) return;
+    const { who, wrap, ghost, over } = drag;
+    drag = null;
+    ghost.remove();
+    wrap.classList.remove('dragging');
+    over?.classList.remove('drop-on');
+    quietUntil = performance.now() + 400;
+    if (drop && over?.dataset.who) dropOn(who, over.dataset.who);
+  };
+  window.addEventListener('pointerup', (e) => endDrag(e, true));
+  window.addEventListener('pointercancel', (e) => endDrag(e, false));
+  // (the page must not scroll under a card being dragged)
+  document.addEventListener(
+    'touchmove',
+    (e) => {
+      if (drag) e.preventDefault();
+    },
+    { passive: false },
+  );
+  // the click a drag leaves behind, where the finger lifts, is not a press
+  $('slots').addEventListener(
+    'click',
+    (e) => {
+      if (performance.now() < quietUntil) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+    },
+    true,
+  );
+  /** Card `who` dropped on card `on`: it joins that robot's team, and a CPU player moves to just after it. */
+  function dropOn(who: string, on: string): void {
     if (!canEdit()) return;
-    danceFrom = performance.now(); // its robot dances its dance while the panel is open
-    queueMicrotask(startDancing);
-    editing = i;
-    sheet.hidden = false;
-    refresh();
-    ($('cpuDone') as HTMLButtonElement).focus({ preventScroll: true });
+    const order = inOrder();
+    if (s().teamsOn) joinTeam(s(), order, colourOf(who), teamOf(colourOf(on)), colourOf(on));
+    if (who[0] === 'c') {
+      const from = Number(who.slice(1));
+      const [cpu] = s().cpus.splice(from, 1);
+      let to = 0;
+      if (on[0] === 'c') {
+        const j = Number(on.slice(1));
+        to = j > from ? j : j + 1; // (after it, counting the gap the dragged one left)
+      }
+      s().cpus.splice(to, 0, cpu);
+    }
+    changed();
   }
-  function closeSheet(): void {
-    if (sheet.hidden) return;
-    const was = editing;
-    sheet.hidden = true;
-    editing = -1;
-    $(`slot-${was + 1}`)?.focus({ preventScroll: true });
-  }
-  $('cpuDone').addEventListener('click', closeSheet);
-  sheet.addEventListener('click', (e) => {
-    if (e.target === sheet) closeSheet();
-  });
-  $('cpuRemove').addEventListener('click', () => {
-    const i = editing;
-    sheet.hidden = true;
-    editing = -1;
-    removeCpu(i);
-  });
 
   // ------------------------------------------------------------ removing, and Undo
   /** The CPU player removed last, and where it was, until Undo is pressed or the bar goes away. */
@@ -839,18 +975,6 @@ export function createLobby(host: LobbyHost): {
     hideUndo();
     changed();
   });
-  function refreshSheet(): void {
-    if (editing < 0 || !s().cpus[editing]) return;
-    const c = s().cpus[editing];
-    $('cpuTitle').textContent = botName(colorById(c.colorId));
-    $('cpuDesc').textContent = `CPU player · P${cpuP(editing)} · ${s().randLevels ? 'Random level' : LEVELS[c.level].label}. Changes are saved as you make them.`;
-    drawBotOn($<HTMLCanvasElement>('cpuBot'), c.colorId);
-    const only = s().cpus.length + guests().length <= 1;
-    ($('cpuRemove') as HTMLButtonElement).disabled = only;
-    $('cpuRemove').title = only ? 'A match needs someone to play against' : '';
-    refreshCpu();
-  }
-
   // ------------------------------------------------------------ the Match page
   $('arenaPrev').addEventListener('click', () => stepArena(-1));
   $('arenaNext').addEventListener('click', () => stepArena(1));
@@ -1302,7 +1426,6 @@ export function createLobby(host: LobbyHost): {
     $('rulesReset').hidden = !canEdit();
     go.hidden = ro;
     ($('arenaStart') as HTMLButtonElement).hidden = ro;
-    refreshSheet();
   }
 
   return {
@@ -1327,13 +1450,9 @@ export function createLobby(host: LobbyHost): {
     hide(): void {
       hideUndo();
       $('lobby').hidden = true;
-      sheet.hidden = true;
-      editing = -1;
     },
     page: () => page,
     turn,
-    sheetOpen: () => !sheet.hidden,
-    closeSheet,
     redraw: refresh,
     isReady: () => ready && pick === host.myColor,
     setReady(r: boolean, moved: boolean): void {
