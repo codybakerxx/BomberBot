@@ -1,8 +1,16 @@
 /**
- * Tiny synthesised sound effects. No audio files: each sound is a short tone
- * or burst of noise made with the Web Audio API.
+ * The sound effects, made in code (no sound files: rule 4 in CLAUDE.md). Each sound is a few layers played
+ * together with the Web Audio API: tones that slide in pitch (`voice`) and bursts of filtered noise (`hiss`),
+ * timed on the audio clock so their parts land exactly. Everything goes through one master volume and a
+ * compressor, so a chain of blasts is loud without crackling.
+ *
+ * Upgraded in November 2026 (the owner's list: "Sound FX upgrade"): each sound used to be one or two plain
+ * beeps. The ids and when they play are unchanged.
  */
 let ac: AudioContext | null = null;
+let master: GainNode | null = null;
+let noiseBuf: AudioBuffer | null = null;
+let crunch: WaveShaperNode | null = null;
 
 /**
  * Your sound settings (Settings › Sound, `Prefs` in setup.ts): every sound is scaled by `level` (0 to 1),
@@ -13,94 +21,219 @@ let muted = new Set<string>();
 export function setSound(on: boolean, volume: number, off: string[]): void {
   level = on ? Math.max(0, Math.min(1, volume / 100)) : 0;
   muted = new Set(off);
+  if (master) master.gain.value = level;
 }
 
 /** Switch sound on. Browsers only allow this from a tap or key press, so it is called from those. */
 export function initAudio(): void {
   try {
-    ac = ac ?? new AudioContext();
+    if (!ac) {
+      ac = new AudioContext();
+      const squash = ac.createDynamicsCompressor();
+      squash.threshold.value = -16;
+      squash.knee.value = 10;
+      squash.ratio.value = 5;
+      squash.attack.value = 0.003;
+      squash.release.value = 0.18;
+      master = ac.createGain();
+      master.gain.value = level;
+      master.connect(squash).connect(ac.destination);
+      // a second of white noise, used by every hiss from a random point in it
+      noiseBuf = ac.createBuffer(1, ac.sampleRate, ac.sampleRate);
+      const d = noiseBuf.getChannelData(0);
+      for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+      // a gentle overdrive, for the grit in blasts
+      crunch = ac.createWaveShaper();
+      const curve = new Float32Array(1024);
+      for (let i = 0; i < curve.length; i++) {
+        const x = (i / (curve.length - 1)) * 2 - 1;
+        curve[i] = Math.tanh(x * 3);
+      }
+      crunch.curve = curve;
+      crunch.connect(master);
+    }
     void ac.resume();
   } catch {
     ac = null;
   }
 }
 
-/** A tone that slides from one pitch to another while fading out. */
-function tone(from: number, to: number, dur: number, type: OscillatorType, vol: number): void {
-  if (!ac || ac.state !== 'running' || level <= 0) return;
-  vol *= level;
-  const t = ac.currentTime;
-  const o = ac.createOscillator();
-  const g = ac.createGain();
-  o.type = type;
-  o.frequency.setValueAtTime(from, t);
-  o.frequency.exponentialRampToValueAtTime(Math.max(20, to), t + dur);
-  g.gain.setValueAtTime(vol, t);
-  g.gain.exponentialRampToValueAtTime(0.001, t + dur);
-  o.connect(g).connect(ac.destination);
+const ready = (): boolean => !!ac && !!master && ac.state === 'running' && level > 0;
+/** a little variety, so the same sound twice in a row is not identical (pitch ±`by`) */
+const vary = (by = 0.06): number => 1 + (Math.random() * 2 - 1) * by;
+
+interface Voice {
+  type: OscillatorType;
+  /** pitch at the start and the end (Hz); it slides between them */
+  from: number;
+  to?: number;
+  dur: number;
+  vol: number;
+  /** seconds from now */
+  at?: number;
+  /** seconds to reach full volume */
+  attack?: number;
+  /** a lowpass filter, falling from `lp` to `lpTo` (Hz) */
+  lp?: number;
+  lpTo?: number;
+  /** a wobble in pitch: [rate Hz, depth Hz] */
+  wobble?: [number, number];
+  /** through the overdrive */
+  grit?: boolean;
+}
+/** A tone that slides in pitch and dies away. */
+function voice(v: Voice): void {
+  if (!ready()) return;
+  const a = ac!;
+  const t = a.currentTime + (v.at ?? 0);
+  const o = a.createOscillator();
+  const g = a.createGain();
+  o.type = v.type;
+  o.frequency.setValueAtTime(v.from, t);
+  if (v.to !== undefined && v.to !== v.from) o.frequency.exponentialRampToValueAtTime(Math.max(20, v.to), t + v.dur);
+  const atk = v.attack ?? 0.004;
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(v.vol, t + atk);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + v.dur);
+  let out: AudioNode = o;
+  if (v.lp) {
+    const f = a.createBiquadFilter();
+    f.type = 'lowpass';
+    f.frequency.setValueAtTime(v.lp, t);
+    if (v.lpTo) f.frequency.exponentialRampToValueAtTime(v.lpTo, t + v.dur);
+    out = out.connect(f);
+  }
+  if (v.wobble) {
+    const lfo = a.createOscillator();
+    const depth = a.createGain();
+    lfo.frequency.value = v.wobble[0];
+    depth.gain.value = v.wobble[1];
+    lfo.connect(depth).connect(o.frequency);
+    lfo.start(t);
+    lfo.stop(t + v.dur + 0.02);
+  }
+  out.connect(g).connect(v.grit ? crunch! : master!);
   o.start(t);
-  o.stop(t + dur);
+  o.stop(t + v.dur + 0.02);
 }
 
-/** A burst of low rumbling noise, for blasts. */
-function noise(dur: number, vol: number): void {
-  if (!ac || ac.state !== 'running' || level <= 0) return;
-  vol *= level;
-  const n = Math.floor(ac.sampleRate * dur);
-  const buf = ac.createBuffer(1, n, ac.sampleRate);
-  const d = buf.getChannelData(0);
-  for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / n) ** 2;
-  const src = ac.createBufferSource();
-  src.buffer = buf;
-  const f = ac.createBiquadFilter();
-  f.type = 'lowpass';
-  f.frequency.value = 900;
-  const g = ac.createGain();
-  g.gain.value = vol;
-  src.connect(f).connect(g).connect(ac.destination);
-  src.start();
+interface Hiss {
+  dur: number;
+  vol: number;
+  at?: number;
+  /** the filter: its kind, and its frequency at the start and the end (Hz) */
+  kind: BiquadFilterType;
+  from: number;
+  to?: number;
+  q?: number;
+  attack?: number;
+  grit?: boolean;
+}
+/** A burst of noise through a sweeping filter: blasts, thuds, whooshes, clicks. */
+function hiss(h: Hiss): void {
+  if (!ready() || !noiseBuf) return;
+  const a = ac!;
+  const t = a.currentTime + (h.at ?? 0);
+  const src = a.createBufferSource();
+  src.buffer = noiseBuf;
+  const f = a.createBiquadFilter();
+  f.type = h.kind;
+  f.Q.value = h.q ?? 0.8;
+  f.frequency.setValueAtTime(h.from, t);
+  if (h.to) f.frequency.exponentialRampToValueAtTime(h.to, t + h.dur);
+  const g = a.createGain();
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(h.vol, t + (h.attack ?? 0.003));
+  g.gain.exponentialRampToValueAtTime(0.0001, t + h.dur);
+  src.connect(f).connect(g).connect(h.grit ? crunch! : master!);
+  src.start(t, Math.random() * 0.5, h.dur + 0.02);
 }
 
 /** The sounds themselves, one function each, by id. */
 const sounds = {
-  place: (): void => tone(300, 160, 0.09, 'square', 0.06),
-  kick: (): void => tone(220, 520, 0.12, 'square', 0.07),
-  lift: (): void => tone(180, 260, 0.07, 'triangle', 0.12),
+  /** a bomb set down: a soft iron clunk, and the fuse catching */
+  place: (): void => {
+    const p = vary();
+    voice({ type: 'sine', from: 210 * p, to: 95 * p, dur: 0.14, vol: 0.32 });
+    voice({ type: 'triangle', from: 640 * p, to: 420 * p, dur: 0.05, vol: 0.08 });
+    hiss({ kind: 'highpass', from: 4200, dur: 0.16, vol: 0.05, at: 0.05, attack: 0.04 });
+  },
+  /** a bomb kicked: a thwack and a whoosh as it slides away */
+  kick: (): void => {
+    const p = vary();
+    voice({ type: 'triangle', from: 190 * p, to: 70 * p, dur: 0.09, vol: 0.35 });
+    hiss({ kind: 'bandpass', from: 1200, dur: 0.05, vol: 0.18 });
+    hiss({ kind: 'bandpass', from: 500, to: 2600, q: 1.6, dur: 0.24, vol: 0.12, at: 0.03, attack: 0.06 });
+  },
+  /** a bomb lifted overhead: a springy rise */
+  lift: (): void => {
+    const p = vary(0.04);
+    voice({ type: 'sine', from: 180 * p, to: 470 * p, dur: 0.16, vol: 0.26, wobble: [28, 18] });
+    voice({ type: 'triangle', from: 360 * p, to: 940 * p, dur: 0.1, vol: 0.06 });
+  },
+  /** a blast: a deep boom, a crack on top, and a rumble that rolls off */
   explode: (): void => {
-    noise(0.45, 0.5);
-    tone(140, 40, 0.3, 'sawtooth', 0.12);
+    const p = vary(0.1);
+    voice({ type: 'sine', from: 110 * p, to: 32, dur: 0.7, vol: 0.9 });
+    voice({ type: 'triangle', from: 70 * p, to: 30, dur: 0.45, vol: 0.4, grit: true });
+    hiss({ kind: 'highpass', from: 2400, dur: 0.06, vol: 0.32 });
+    hiss({ kind: 'lowpass', from: 4200 * p, to: 180, dur: 0.75, vol: 0.75, grit: true });
+    hiss({ kind: 'lowpass', from: 500, to: 90, dur: 1.1, vol: 0.35, at: 0.06, attack: 0.08 });
   },
+  /** a power-up: a quick bright arpeggio with a sparkle */
   pickup: (): void => {
-    tone(520, 780, 0.09, 'triangle', 0.12);
-    setTimeout(() => tone(780, 1170, 0.12, 'triangle', 0.12), 80);
+    const notes = [659, 880, 1319];
+    notes.forEach((f, i) => {
+      voice({ type: 'triangle', from: f, dur: 0.14, vol: 0.14, at: i * 0.055 });
+      voice({ type: 'sine', from: f * 2, dur: 0.1, vol: 0.06, at: i * 0.055 });
+    });
+    voice({ type: 'sine', from: 2637, to: 3520, dur: 0.18, vol: 0.05, at: 0.16 });
   },
-  /** picking up a curse: a sour falling note */
+  /** picking up a curse: a sour, wobbling slide down */
   curse: (): void => {
-    tone(330, 150, 0.3, 'sawtooth', 0.09);
-    setTimeout(() => tone(250, 110, 0.35, 'square', 0.06), 110);
+    voice({ type: 'sawtooth', from: 330, to: 140, dur: 0.42, vol: 0.13, lp: 1800, lpTo: 400, wobble: [7, 14] });
+    voice({ type: 'sawtooth', from: 349, to: 148, dur: 0.42, vol: 0.1, lp: 1800, lpTo: 400 });
+    voice({ type: 'square', from: 220, to: 92, dur: 0.38, vol: 0.06, at: 0.12, lp: 900 });
   },
-  /** a shield taking a blast: a bright ping that falls away */
+  /** a shield taking a blast: a ringing metal ping that falls away */
   shield: (): void => {
-    tone(1500, 500, 0.25, 'triangle', 0.14);
-    noise(0.12, 0.15);
+    voice({ type: 'sine', from: 1480, to: 1320, dur: 0.6, vol: 0.22 });
+    voice({ type: 'sine', from: 2290, to: 2100, dur: 0.4, vol: 0.12 });
+    voice({ type: 'sine', from: 3710, dur: 0.22, vol: 0.06 });
+    hiss({ kind: 'highpass', from: 3000, dur: 0.1, vol: 0.14 });
   },
-  /** a falling block landing: a short low thud */
+  /** a falling block landing: a heavy stone thud */
   block: (): void => {
-    tone(110, 45, 0.14, 'square', 0.09);
-    noise(0.08, 0.2);
+    const p = vary();
+    voice({ type: 'sine', from: 130 * p, to: 42, dur: 0.26, vol: 0.6 });
+    voice({ type: 'square', from: 90 * p, to: 50, dur: 0.1, vol: 0.08, lp: 600 });
+    hiss({ kind: 'lowpass', from: 1400, to: 200, dur: 0.18, vol: 0.4 });
+    hiss({ kind: 'bandpass', from: 2500, dur: 0.04, vol: 0.1 });
   },
-  /** blocks are about to start falling: two rising notes */
+  /** blocks are about to start falling: an alarm, twice */
   hurry: (): void => {
-    tone(440, 660, 0.14, 'square', 0.08);
-    setTimeout(() => tone(660, 990, 0.2, 'square', 0.08), 150);
+    for (const at of [0, 0.32]) {
+      voice({ type: 'square', from: 587, to: 880, dur: 0.14, vol: 0.12, at, lp: 2600 });
+      voice({ type: 'square', from: 880, to: 1175, dur: 0.14, vol: 0.12, at: at + 0.15, lp: 2600 });
+    }
   },
-  /** a round is won: three rising notes */
+  /** a round is won: a little fanfare ending on a chord */
   win: (): void => {
-    tone(523, 523, 0.12, 'square', 0.08);
-    setTimeout(() => tone(659, 659, 0.12, 'square', 0.08), 120);
-    setTimeout(() => tone(784, 1046, 0.3, 'square', 0.09), 240);
+    const lead = [523, 659, 784];
+    lead.forEach((f, i) => {
+      voice({ type: 'square', from: f, dur: 0.13, vol: 0.09, at: i * 0.12, lp: 3000 });
+      voice({ type: 'triangle', from: f, dur: 0.14, vol: 0.14, at: i * 0.12 });
+    });
+    for (const f of [523, 659, 784, 1047]) voice({ type: 'triangle', from: f, dur: 0.75, vol: 0.12, at: 0.36, attack: 0.02 });
+    voice({ type: 'square', from: 1047, dur: 0.7, vol: 0.06, at: 0.36, lp: 2400, lpTo: 900, wobble: [6, 6] });
+    hiss({ kind: 'highpass', from: 6000, dur: 0.5, vol: 0.04, at: 0.36, attack: 0.05 });
   },
-  death: (): void => tone(600, 60, 0.6, 'sawtooth', 0.1),
+  /** knocked out: a robot powering down, wobbling as it goes */
+  death: (): void => {
+    voice({ type: 'sawtooth', from: 640, to: 55, dur: 0.75, vol: 0.14, lp: 2600, lpTo: 220, wobble: [11, 30] });
+    voice({ type: 'square', from: 320, to: 40, dur: 0.7, vol: 0.06, lp: 800 });
+    hiss({ kind: 'bandpass', from: 1800, to: 300, dur: 0.3, vol: 0.12, q: 2 });
+  },
 };
 
 export type SoundId = keyof typeof sounds;

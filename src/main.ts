@@ -14,7 +14,7 @@ import { createWorld, step, ticksLeft, World, PlayerInput, Dir, TICK_HZ, DEATH_T
 import { Bot, BotLevel, BOT_LEVELS, LEVELS, createBot, botInput } from './bot';
 import { COLORS, NOBODY, botName, colorById, drawAngels, drawHead, drawStatic, drawDynamic, drawGhosts, warmSprites } from './render';
 import { Input, PadReader, typing } from './input';
-import { drawTitle, closeTitle } from './title';
+import { drawTitle, closeTitle, drawIcon } from './title';
 import { initAudio, preview, setSound, sfx } from './audio';
 import { createLobby, LobbyHost } from './lobby';
 import { readDance, type DanceId } from './dances';
@@ -25,6 +25,7 @@ import { Guest, MatchSetup, Prefs, SHARPNESS, SOUND_NAMES, arenaOf, clockText, d
 import { Opt, answerConfirm, choice, confirmFirst, confirmOpen, heading, mount, note, slider, toggle, wireConfirm, wireFlash } from './ui';
 import { Hand, SENSITIVITY, DEFAULT_SENS, STRAIGHT, standardAims } from './swipe';
 import { Online } from './online';
+import { canInstall, howToAdd, install, isApple, myEndpoint, onWebsite, pushOff, pushOn, pushState, type PushState } from './app';
 import { decodeWorld, packInput, readCode, unpackInput, type Score, type Seat, type ServerMsg } from './net';
 /** Look up an element of src/page.html by its id. */
 const $ = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T;
@@ -553,8 +554,32 @@ function drawTimer(): void {
   timer.className = state;
 }
 
+/**
+ * A small shake of the arena when a bomb goes off (the owner's ask): a few page pixels, dying away over a fifth
+ * of a second. Whole pixels only, so the arena stays sharp. None with Settings › Graphics › Less movement.
+ */
+const SHAKE_PX = 3;
+const SHAKE_S = 0.2;
+let shakeAt = -1;
+let shaken = false;
+function shake(time: number): void {
+  const t = time - shakeAt;
+  const on = shakeAt >= 0 && t >= 0 && t < SHAKE_S && !prefs.calm && (mode === 'playing' || mode === 'over');
+  if (!on) {
+    if (shaken) canvas.style.transform = ghosts.style.transform = '';
+    shaken = false;
+    return;
+  }
+  const k = SHAKE_PX * (1 - t / SHAKE_S);
+  const x = Math.round(Math.sin(t * 95) * k);
+  const y = Math.round(Math.cos(t * 71) * k * 0.7);
+  canvas.style.transform = ghosts.style.transform = x || y ? `translate(${x}px, ${y}px)` : '';
+  shaken = true;
+}
+
 /** Draw one frame. */
 function render(time: number): void {
+  shake(time);
   // (online the drawn world runs a little ahead of the server's: a block that has landed in it is drawn in now)
   const w = shownWorld();
   if (landedIn(w) !== staticLanded) redrawStatic();
@@ -635,7 +660,10 @@ function nameOf(i: number): string {
 /** The sound of something the rules report. */
 function soundOf(e: GameEvent): void {
   if (e.type === 'place') sfx.place();
-  else if (e.type === 'explode') sfx.explode();
+  else if (e.type === 'explode') {
+    sfx.explode();
+    shakeAt = clock; // the screen shakes a little (render)
+  }
   else if (e.type === 'pickup') e.kind === 'curse' ? sfx.curse() : sfx.pickup();
   else if (e.type === 'shield') sfx.shield();
   else if (e.type === 'kick' || e.type === 'throw') sfx.kick();
@@ -1305,6 +1333,7 @@ function joinOnline(code: string | null): void {
 function leaveOnline(bye = true): void {
   if (net && bye) net.leave();
   net = null;
+  $('roomTell').hidden = $('roomShare').hidden = true;
   try {
     sessionStorage.removeItem('onlineRoom');
   } catch {
@@ -1350,6 +1379,7 @@ function onRoom(m: Extract<ServerMsg, { t: 'room' }>): void {
   $('lobbyMode').textContent = `Online · ${m.code}`;
   $('lobbyHostNote').textContent = net.isHost ? 'You are the host' : `${hostName()} is the host`;
   $('roomShare').hidden = false;
+  $('roomTell').hidden = !net.isHost || m.playing;
   const inMatch = m.playing && mine.playing;
   if (mode === 'title') {
     // just joined: on to the room's lobby. A reload of this page comes straight back here (sessionStorage).
@@ -1420,6 +1450,13 @@ function onRound(w: World, s: Seat[], score: Score, fresh: boolean): void {
   if (w.over) announce();
 }
 
+// Tell friends: a notification to everyone who turned them on (Settings › App), that this room is open
+$('roomTell').addEventListener('click', async () => {
+  if (!net || !net.isHost) return;
+  sayNet('Telling friends…', 4000);
+  net.send({ t: 'invite', me: await myEndpoint() });
+});
+
 // share the room: the phone's share sheet, or the link copied
 $('roomShare').addEventListener('click', async () => {
   if (!net) return;
@@ -1437,14 +1474,15 @@ $('roomShare').addEventListener('click', async () => {
 
 // ------------------------------------------------ Settings
 
-type SetTab = 'sound' | 'controls' | 'gamepad' | 'graphics';
-const SET_TABS: SetTab[] = ['controls', 'gamepad', 'sound', 'graphics']; // the owner's order (Gamepad its own page, after Controls)
-const SET_NAMES: Record<SetTab, string> = { sound: 'Sound', controls: 'Controls', gamepad: 'Gamepad', graphics: 'Graphics' };
+type SetTab = 'sound' | 'controls' | 'gamepad' | 'graphics' | 'app';
+const SET_TABS: SetTab[] = ['controls', 'gamepad', 'sound', 'graphics', 'app']; // the owner's order (Gamepad its own page, after Controls); App last
+const SET_NAMES: Record<SetTab, string> = { sound: 'Sound', controls: 'Controls', gamepad: 'Gamepad', graphics: 'Graphics', app: 'App' };
 const SET_IDS: Record<SetTab, [string, string]> = {
   sound: ['pgSound', 'setSound'],
   controls: ['pgControls', 'setControls'],
   gamepad: ['pgGamepad', 'setGamepad'],
   graphics: ['pgGraphics', 'setGraphics'],
+  app: ['pgApp', 'setApp'],
 };
 let setTab: SetTab = 'controls';
 /** where Settings goes back to: the lobby, or the menu during a match */
@@ -1465,6 +1503,7 @@ function showSetTab(t: SetTab): void {
   setTab = t;
   if (t !== 'controls' && t !== 'gamepad') remap?.cancel();
   if (t === 'gamepad') remap?.refresh(); // says which controllers are connected now
+  if (t === 'app') showApp();
   const i = SET_TABS.indexOf(t);
   for (const k of SET_TABS) {
     $(SET_IDS[k][0]).setAttribute('aria-selected', String(k === t));
@@ -1627,6 +1666,75 @@ const refreshSound = mount($('soundOpts'), soundOpts);
 const refreshPad = mount($('padOpts'), padOpts);
 refreshSens = mount($('sensOpts'), sensOpts);
 const refreshGfx = mount($('gfxOpts'), gfxOpts);
+
+// Settings › App: putting the game on the home screen, and notifications (app.ts)
+const SHARE_GLYPH = '<svg class="glyph" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15V3M7.5 7.5 12 3l4.5 4.5M5 11v9h14v-9"/></svg>';
+const APP_LEAD: Record<ReturnType<typeof howToAdd>, string> = {
+  app: 'You are playing the app. It opens full screen from your home screen, and Local play works with no connection at all (Online needs one).',
+  file: 'This copy was opened as a file. To put BomberBot on your home screen, open its website first: <b>bomberbot.bomberbot.workers.dev</b>.',
+  apple: 'Put BomberBot on your Home Screen and it opens full screen, like an app. Local play works with no connection, too.',
+  android: 'Put BomberBot on your home screen and it opens full screen, like an app. Local play works with no connection, too.',
+  computer: 'BomberBot can be installed as an app on a computer too, in its own window. Local play works with no connection.',
+};
+const APP_STEPS: Record<ReturnType<typeof howToAdd>, string[]> = {
+  app: [],
+  file: [],
+  apple: [
+    'Open this page in <b>Safari</b>.',
+    `Tap <b>Share</b> ${SHARE_GLYPH} (on newer iPhones it is under <b>⋯</b> at the bottom first).`,
+    'Scroll down and tap <b>Add to Home Screen</b>.',
+    'If you see <b>Open as Web App</b>, leave it on. Tap <b>Add</b>.',
+    'Open BomberBot from your Home Screen.',
+  ],
+  android: ['In Chrome, tap <b>⋮</b> at the top right.', 'Tap <b>Install app</b> (or <b>Add to Home screen</b>).', 'Open BomberBot from your home screen.'],
+  computer: ['In Chrome or Edge: the install button at the right of the address bar, or <b>⋮</b> › <b>Install</b>.', 'In Safari on a Mac: <b>File</b> › <b>Add to Dock</b>.'],
+};
+let pushNow: PushState = 'cannot';
+let pushBusy = false;
+const notifyOpts: Opt[] = [
+  toggle({
+    label: 'Room invites',
+    hint: () =>
+      pushNow === 'cannot'
+        ? isApple() && onWebsite()
+          ? 'Put BomberBot on your Home Screen first (above) and open it from there. Needs iOS 16.4 or newer.'
+          : 'This browser cannot show notifications.'
+        : pushNow === 'blocked'
+          ? 'Blocked for BomberBot: turn them on in the phone’s Settings › Notifications.'
+          : 'A notification when a friend opens a room and taps the bell (Tell friends).',
+    get: () => pushNow === 'on',
+    locked: () => pushNow === 'cannot' || pushNow === 'blocked' || pushBusy,
+    set: (on) => void setPush(on),
+  }),
+];
+const refreshNotify = mount($('notifyOpts'), notifyOpts);
+async function setPush(on: boolean): Promise<void> {
+  pushBusy = true;
+  pushNow = on ? 'on' : 'off'; // the switch moves at once
+  refreshNotify();
+  $('notifyNote').textContent = on ? 'Turning on…' : '';
+  const why = on ? await pushOn() : (await pushOff(), '');
+  pushBusy = false;
+  pushNow = await pushState();
+  $('notifyNote').textContent = why || (pushNow === 'on' ? 'On. Hosts tap the bell in an online lobby to tell everyone.' : '');
+  refreshNotify();
+}
+function showApp(): void {
+  const where = howToAdd();
+  $('appLead').innerHTML = APP_LEAD[where];
+  $('appSteps').innerHTML = APP_STEPS[where].map((t) => `<li><span>${t}</span></li>`).join('');
+  const offer = (): void => {
+    $('appInstall').hidden = !canInstall() || where === 'app';
+  };
+  canInstall(offer);
+  offer();
+  void pushState().then((st) => {
+    if (!pushBusy) pushNow = st;
+    refreshNotify();
+  });
+}
+$('appInstall').addEventListener('click', () => void install());
+
 function refreshPrefs(): void {
   remap?.refresh();
   refreshSound();
@@ -1784,6 +1892,25 @@ wireConfirm();
 wireFlash(); // every menu button lights up for a moment when pressed
 applyPrefs();
 applySettings(false);
+// On the website: the home-screen icon and the app's description (files beside the page), and the service
+// worker that keeps a copy of the game for playing with no connection, and shows notifications (src/sw.js)
+if (onWebsite()) {
+  for (const [rel, href] of [
+    ['apple-touch-icon', '/icon-180.png'],
+    ['manifest', '/manifest.webmanifest'],
+  ])
+    document.head.appendChild(Object.assign(document.createElement('link'), { rel, href }));
+  if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => {});
+}
+// the browser tab's icon: drawn now, so the game opened as a file has it too (on the website the same picture
+// is also served as a file, for the home screen: page.html)
+try {
+  const link = document.querySelector<HTMLLinkElement>('link[rel="icon"]') ?? document.head.appendChild(Object.assign(document.createElement('link'), { rel: 'icon' }));
+  link.type = 'image/png';
+  link.href = drawIcon(64).toDataURL('image/png');
+} catch {
+  /* the tab keeps the browser's own icon */
+}
 showTitle();
 requestAnimationFrame(frame);
 // a link to a room (?room=CODE): straight to joining it
@@ -1842,6 +1969,10 @@ requestAnimationFrame(frame);
   },
   get net() {
     return net;
+  },
+  /** the icon at a size, as a PNG data URL (tools/icons.py saves them for the home screen) */
+  icon(size: number): string {
+    return drawIcon(size).toDataURL('image/png');
   },
   /** the world that is drawn (online: the picture ahead of the server's world) */
   get view() {

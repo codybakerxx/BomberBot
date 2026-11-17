@@ -213,6 +213,9 @@ export class Online {
         if (m.d !== undefined) this.pred?.pong(m.c, m.d);
         return;
       }
+      case 'note':
+        this.hooks.error(m.why, false);
+        return;
       case 'error': {
         if (m.fatal && this.creating && !this.joined && m.why.includes('taken') && this.tries++ < 6) {
           // that code was in use: another

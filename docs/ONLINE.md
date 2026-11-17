@@ -3,6 +3,10 @@
 BomberBot is online at **https://bomberbot.bomberbot.workers.dev**, on Cloudflare (chosen in November 2026).
 The same address serves the game page and runs online rooms.
 
+## Notifications (Tell friends)
+
+In an online lobby the host has a bell beside the share button. It sends a notification to every phone that turned on Settings › App › Room invites (not the host's own): "Cody wants to play · Room BKTW is open. Tap to join." Tapping it opens the game at that room's join panel. The room's server object passes it to `Friends` (`worker.ts`), one object for the whole game, which keeps the list of phones and its own signing key on its disk, and sends through each phone's push service (Apple's or Google's) with `push.ts`. Limits: once a minute per room, 30 an hour in all, the newest 45 phones. On an iPhone, notifications only work in the home-screen app (iOS 16.4 and newer).
+
 ## How it plays
 
 - **Title › Online** opens a small panel: **Make a room** or type a friend's four-letter code and **Join**.

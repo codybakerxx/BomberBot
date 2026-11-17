@@ -204,3 +204,18 @@ export function closeTitle(): void {
   backdrop.height = 1;
   backdropKey = '';
 }
+
+/**
+ * The game's icon (the owner's ask: a small version of the title screen, not just a letter): the title picture
+ * in a square, the gold robot with its arm up in a wave, its two rivals and the lit bomb, on the arena fading
+ * into the dark. Used for the browser tab, and, saved as pictures by tools/icons.py, for a phone's home screen.
+ */
+export function drawIcon(size: number): HTMLCanvasElement {
+  const c = document.createElement('canvas');
+  c.width = c.height = size;
+  const g = c.getContext('2d')!;
+  // the stage fills the square (a little room over the raised arm); the arm right up, mid-wave
+  drawTitle(g, { x: 0, y: size * 0.04, w: size, h: size * 0.96 }, colorById('gold'), WAVE_FIRST + WAVE_UP + 0.001);
+  backdropKey = ''; // (the title screen draws its own again next time)
+  return c;
+}

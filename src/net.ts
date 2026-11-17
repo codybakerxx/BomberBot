@@ -237,7 +237,9 @@ export type ClientMsg =
   | { t: 'sync' }
   | { t: 'ping'; c: number }
   /** leaving the room for good */
-  | { t: 'bye' };
+  | { t: 'bye' }
+  /** the host: send a notification to everyone who turned them on (Settings › App) that this room is open. `me`: this phone's own sign-up, left out. */
+  | { t: 'invite'; me?: string };
 
 /** What the server sends. */
 export type ServerMsg =
@@ -255,7 +257,9 @@ export type ServerMsg =
   /** `d`, in a round: where the round's clock stood when the ping arrived, in ticks (tick T is stepped when it reaches T) */
   | { t: 'pong'; c: number; d?: number }
   /** something went wrong; `why` is said to the player. `fatal`: the connection is closing. */
-  | { t: 'error'; why: string; fatal?: boolean };
+  | { t: 'error'; why: string; fatal?: boolean }
+  /** a short line for the top of the screen (how a Tell friends went) */
+  | { t: 'note'; why: string };
 
 /** Read a message, or null if it is not one. */
 export function parseMsg<T extends { t: string }>(raw: unknown): T | null {
