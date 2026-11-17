@@ -317,8 +317,10 @@ let scoreHeadMax = 13;
  */
 const MAX_DENSITY = 6;
 function density(): number {
-  // Settings › Graphics › Sharpness can ask for less, to save battery (Sharpest is the usual)
-  return Math.min(screenDensity(), MAX_DENSITY, SHARPNESS[prefs.sharpness].cap);
+  // Settings › Graphics › Sharpness: fewer pixels to save battery, or (Smoothest) more than the
+  // screen has, shrunk to fit
+  const s = SHARPNESS[prefs.sharpness];
+  return Math.min(screenDensity() * s.over, MAX_DENSITY, s.cap * s.over);
 }
 /**
  * How many of the screen's pixels really make one of the page's, as far as the page can tell: what the
@@ -1005,7 +1007,8 @@ function checkSharp(now: number): void {
   if (zoomed) bits.push(`the page is zoomed ×${Math.round(zoom * 100) / 100}`);
   if (stretched) bits.push(`shown ${Math.round(Math.abs(1 / stretch - 1) * 1000) / 10}% ${stretch < 1 ? 'bigger' : 'smaller'} than drawn`);
   if (offGrid) bits.push(`${Math.round(Math.max(Math.abs(dx), Math.abs(dy)) * 100) / 100} of a pixel off the grid`);
-  sharp = bits.length ? { ok: false, text: bits.join('; ') } : { ok: true, text: 'sharp, pixel for pixel' };
+  const shrunk = want > screenDensity() + 0.001;
+  sharp = bits.length ? { ok: false, text: bits.join('; ') } : { ok: true, text: shrunk ? `drawn at ${Math.round((want / screenDensity()) * 100) / 100}× the screen and shrunk to fit` : 'sharp, pixel for pixel' };
   // stretched (the window changed under it without a resize): laid out again, a few times at most, as before
   if (stretched && sharpTries < SHARP_TRIES) {
     sharpTries++;
@@ -1848,9 +1851,13 @@ const gfxOpts: Opt[] = [
       const screen = Math.round(screenDensity() * 100) / 100;
       const drawn = Math.round(density() * 100) / 100;
       const now = ` This screen: ${screen}×, drawn at ${drawn}×. Arena: ${sharp.text}.${siteZoomed() ? ` ${ZOOM_TIP}` : ''}`;
-      return prefs.sharpness === SHARPNESS.length - 1
-        ? `Uses every pixel of the screen. The usual setting.${now}`
-        : `Draws the game with fewer pixels, which uses less battery on big, sharp screens. It looks a little softer.${now}`;
+      const what = [
+        'Draws the game with fewer pixels, which uses less battery on big, sharp screens. It looks a little softer.',
+        'Draws the game with fewer pixels, which uses less battery on big, sharp screens. It looks a little softer.',
+        'One pixel drawn for each of the screen’s: crisp edges. The usual setting.',
+        'Drawn with twice the screen’s pixels each way and shrunk to fit, like a desktop site on a phone: smoother edges and movement, but more work for the phone.',
+      ][prefs.sharpness];
+      return `${what}${now}`;
     },
     min: 0,
     max: SHARPNESS.length - 1,

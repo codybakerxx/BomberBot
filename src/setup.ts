@@ -383,12 +383,23 @@ export const SOUND_NAMES: [string, string][] = [
   ['win', 'Round won'],
 ];
 
-/** How sharp the game is drawn: the most of the screen's pixels it uses for each of the page's. */
+/**
+ * How sharp the game is drawn: the most of the screen's pixels it uses for each of the page's (`cap`), and
+ * `over`: drawn with that many times the screen's own pixels each way, and shrunk to fit by the browser.
+ * Smoothest (November 2026) is the owner's report that the arena looked best on his iPhone with Safari's
+ * Request Desktop Website, which shows a page shrunk from a bigger one: drawn with more pixels than the
+ * screen has, edges and moving robots come out smoother. It draws four times the pixels, so it is offered,
+ * not the default, until it has been tried on his phone (on a slow computer without a graphics chip it fell
+ * from 60 frames a second to 20 in an eight-player round).
+ */
 export const SHARPNESS = [
-  { name: 'Battery saver', cap: 1.5 },
-  { name: 'Balanced', cap: 2 },
-  { name: 'Sharpest', cap: 6 },
+  { name: 'Battery saver', cap: 1.5, over: 1 },
+  { name: 'Balanced', cap: 2, over: 1 },
+  { name: 'Sharpest', cap: 6, over: 1 },
+  { name: 'Smoothest', cap: 6, over: 2 },
 ];
+/** The Sharpness a player has unless they pick another. */
+export const DEFAULT_SHARPNESS = 2;
 
 export interface Prefs {
   soundOn: boolean;
@@ -398,6 +409,7 @@ export interface Prefs {
   muted: string[];
   /** index into SHARPNESS */
   sharpness: number;
+
   /** the ghosts of knocked-out robots floating up the screen */
   ghosts: boolean;
   /** less movement in the menus: no pulsing buttons, no waving robot on the title */
@@ -412,7 +424,7 @@ export interface Prefs {
 }
 
 export function defaultPrefs(): Prefs {
-  return { soundOn: true, volume: 80, muted: [], sharpness: 2, ghosts: true, calm: false, padShow: 100, keys: defaultKeys(), padKeys: defaultPad(), rumble: true };
+  return { soundOn: true, volume: 80, muted: [], sharpness: DEFAULT_SHARPNESS, ghosts: true, calm: false, padShow: 100, keys: defaultKeys(), padKeys: defaultPad(), rumble: true };
 }
 
 export function readPrefs(raw: unknown): Prefs {
