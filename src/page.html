@@ -690,6 +690,24 @@
   #pause[hidden] { display: none; }
   #pause .pause-card { margin: auto; } /* centred, but scrolls from its top when the screen is too short for it */
   .pause-card { width: min(100%, 420px); display: flex; flex-direction: column; gap: 10px; padding: 18px 16px 16px; background: var(--panel); border: 1px solid var(--line); border-radius: 20px; }
+  /* kept compact so the whole menu, its last button included, fits on a phone in Safari with its bars showing
+     (the owner's ask, November 2026): chips and gear on one row, smaller rows and buttons, and with more than
+     four players the standings in two columns */
+  .pause-card { gap: 8px; padding: 12px 12px 12px; }
+  .pause-card h2 { font-size: 22px !important; margin: 0; }
+  .pause-card #pauseInfo { margin: -4px 0 0; font-size: 12px; }
+  .pause-head { justify-content: flex-start !important; flex-wrap: nowrap !important; padding: 0 44px 0 0 !important; min-height: 36px !important; gap: 6px !important; }
+  .pause-head .mode-chip, .pause-head .state-chip { font-size: 11px; letter-spacing: 0.1em; padding: 4px 8px; white-space: nowrap; }
+  .pause-gear { right: -4px !important; top: -2px !important; width: 38px !important; height: 38px !important; }
+  .standings li { grid-template-columns: 28px minmax(0, 1fr) auto auto; gap: 8px; padding: 4px 8px 4px 5px; }
+  .standings canvas { width: 28px; height: 28px; }
+  .standings .wins { font-size: 18px; }
+  .standings.many { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .standings.many li { grid-template-columns: 24px minmax(0, 1fr) auto; gap: 6px; }
+  .standings.many canvas { width: 24px; height: 24px; }
+  .standings.many small, .standings.many .st { display: none; }
+  .pause-card .go { padding-top: 11px; padding-bottom: 11px; }
+  .pause-card .divider { margin: 0; }
   .pause-card h2 { text-align: center; font-size: 26px; }
   .pause-head { position: relative; display: flex; justify-content: center; align-items: center; gap: 8px; flex-wrap: wrap; min-height: 40px; padding: 0 46px; }
   .pause-gear { position: absolute; right: -6px; top: -6px; width: 40px; height: 40px; }

@@ -1163,6 +1163,10 @@ const lobby = createLobby(lobbyHost);
  * arriving from the title or a match (Ready has to be pressed again); not when coming back from Settings.
  */
 function showLobby(fresh = false): void {
+  if (siteZoomed() && !zoomTold) {
+    zoomTold = true; // (once a visit)
+    setTimeout(() => sayNet(ZOOM_TIP, 9000), 400);
+  }
   rolled = null; // (the match is over: the lobby's CPU players are the ones on their cards)
   hideScreens();
   mode = 'lobby';
@@ -1256,6 +1260,7 @@ function fillPause(): void {
   $('pauseInfo').textContent = `${summary(setup, guests.length)}${time}${net && net.rtt ? ` · ping ${net.rtt} ms` : ''}`;
   $('pauseResume').textContent = 'Resume'; // (the owner's word, whether the round is going on or over)
   const list = $('standings');
+  list.classList.toggle('many', world.players.length > 4); // (two columns, so the menu still fits)
   list.textContent = '';
   const dpr = density();
   world.players.forEach((p, i) => {
@@ -1383,6 +1388,19 @@ function hostName(): string {
 const netNote = $('netNote');
 let netNoteTimer = 0;
 /** A line at the top about the connection: "Reconnecting…" until it is back, or a short note for a while. */
+/**
+ * Safari on an iPhone is zooming this website (its aA menu, set per website). An iPhone's screen is always a
+ * whole 2× or 3×; zoomed, the page reports a fraction (3.45× at 115%), and no arena size then lands on whole
+ * screen pixels: the browser stretches it by a hair and smooths it all, so it looks soft. The same game
+ * opened elsewhere (the file in the Claude app, the home-screen app) is not zoomed and looks sharp: what the
+ * owner saw in November 2026. Nothing the page does can undo a browser's zoom, so it says how to.
+ */
+function siteZoomed(): boolean {
+  return isApple() && !Number.isInteger(window.devicePixelRatio || 1);
+}
+const ZOOM_TIP = 'Safari is zooming this site, which softens the arena: tap aA in the address bar and set it to 100%.';
+let zoomTold = false;
+
 function sayNet(text: string, ms = 0): void {
   clearTimeout(netNoteTimer);
   netNote.textContent = text;
@@ -1829,7 +1847,7 @@ const gfxOpts: Opt[] = [
       // what the screen reports and what the game draws at, so a blurry screen can be told apart
       const screen = Math.round(screenDensity() * 100) / 100;
       const drawn = Math.round(density() * 100) / 100;
-      const now = ` This screen: ${screen}×, drawn at ${drawn}×. Arena: ${sharp.text}.`;
+      const now = ` This screen: ${screen}×, drawn at ${drawn}×. Arena: ${sharp.text}.${siteZoomed() ? ` ${ZOOM_TIP}` : ''}`;
       return prefs.sharpness === SHARPNESS.length - 1
         ? `Uses every pixel of the screen. The usual setting.${now}`
         : `Draws the game with fewer pixels, which uses less battery on big, sharp screens. It looks a little softer.${now}`;
