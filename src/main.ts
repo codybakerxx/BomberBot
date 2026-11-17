@@ -1541,7 +1541,6 @@ function onRoom(m: Extract<ServerMsg, { t: 'room' }>): void {
     });
   });
   modeChip($('lobbyMode'), m.code);
-  $('lobbyHostNote').textContent = net.isHost ? 'You are the host' : `${hostName()} is the host`;
   $('roomShare').hidden = false;
   $('roomTell').hidden = !net.isHost || m.playing;
   const inMatch = m.playing && mine.playing;
@@ -1629,7 +1628,7 @@ function modeChip(chip: HTMLElement, code: string | null): void {
     chip.textContent = 'Local match';
     return;
   }
-  chip.textContent = 'Online';
+  chip.innerHTML = '<span class="chip-word">Online</span>';
   const b = document.createElement('button');
   b.type = 'button';
   b.className = 'code-copy';

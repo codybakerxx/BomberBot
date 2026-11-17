@@ -264,7 +264,7 @@ async def main():
         context, page = await phone(browser, 393, 740)
         await page.tap("#colOk")
         await page.tap("#colOk")  # Next ›
-        await page.tap("#mapPick button[data-map=western]")
+        await page.tap("#arenaNext")  # (the arrows go through the maps)
         await page.wait_for_timeout(300)
         await page.screenshot(path=str(OUT / "lobby-west.png"))
         await start_round(page)

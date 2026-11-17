@@ -47,15 +47,17 @@ export interface Guest {
 }
 
 /**
- * The arenas to choose from: the same build in three sizes. Classic is the one the game has always had.
+ * The arenas to choose from: the same build in three sizes. Standard is the one the game has always had.
+ * (Shown as Mini, Standard and Big since November 2026, the owner's words; they were Compact, Classic and Big.
+ * The ids, and so saved setups, are unchanged.)
  * Each brings its own round length and closing-in speed (an index into CLOSE_IN), put in whenever it is
  * picked in the lobby and changeable after: the owner's choices, scaled to the arena's size. Compact: 1:00
  * and Quick; Classic: 1:30 and Normal; Big: 2:00 and Normal. Bricks and power-ups are a share of the tiles,
  * so they already scale with the size and are left alone.
  */
 export const ARENAS = [
-  { id: 'compact', name: 'Compact', cols: 11, rows: 9, roundSecs: 60, closeIn: 3, blurb: 'Small and close: you meet the others fast.' },
-  { id: 'classic', name: 'Classic', cols: 13, rows: 11, roundSecs: 90, closeIn: 2, blurb: 'The standard arena.' },
+  { id: 'compact', name: 'Mini', cols: 11, rows: 9, roundSecs: 60, closeIn: 3, blurb: 'Small and close: you meet the others fast.' },
+  { id: 'classic', name: 'Standard', cols: 13, rows: 11, roundSecs: 90, closeIn: 2, blurb: 'The standard arena.' },
   { id: 'big', name: 'Big', cols: 15, rows: 13, roundSecs: 120, closeIn: 2, blurb: 'More room to run, more bricks to clear.' },
 ] as const;
 export type ArenaId = (typeof ARENAS)[number]['id'];

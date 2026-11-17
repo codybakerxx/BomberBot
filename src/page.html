@@ -416,10 +416,25 @@
   body.calm .code-copy.copied .done-glyph { animation: none; }
   .code-copy:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   /* the Match page's maps: a button each, with a strip of its floor and blocks */
-  .map-pick { align-self: stretch; display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 8px; }
-  .map-pick button { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 8px 6px 7px; cursor: pointer; color: var(--ink-dim); background: #121726; border: 1.5px solid var(--line); border-radius: 12px; font: 700 13px/1 var(--font-display); letter-spacing: 0.1em; text-transform: uppercase; }
-  .map-pick canvas { width: 66px; height: 22px; border-radius: 4px; display: block; }
-  .map-pick button[aria-pressed="true"] { color: var(--accent); border-color: var(--accent); background: rgba(255, 197, 106, 0.1); box-shadow: 0 0 0 1px var(--accent) inset; }
+  /* the Match page's sizes: three bubbles under the map, each its name with the size in blocks under it */
+  .size-pick { align-self: stretch; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+  .size-pick button { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 9px 4px 8px; cursor: pointer; color: var(--ink); background: #121726; border: 1.5px solid var(--line); border-radius: 999px; font: 700 clamp(12px, 3.6vw, 14px)/1 var(--font-display); letter-spacing: clamp(0.02em, 0.5vw, 0.08em); text-transform: uppercase; }
+  .size-pick small { font: 500 11.5px/1 var(--font-body); letter-spacing: 0.02em; text-transform: none; color: var(--ink-dim); }
+  .size-pick button[aria-pressed="true"] { color: #05060b; border-color: var(--accent); background: var(--accent); box-shadow: 0 2px 10px rgba(255, 197, 106, 0.3); }
+  .size-pick button[aria-pressed="true"] small { color: rgba(5, 6, 11, 0.72); }
+  #lobbyMatch.readonly .size-pick button { pointer-events: none; }
+  #lobbyMatch.readonly .size-pick button:not([aria-pressed="true"]) { opacity: 0.45; }
+  /* the lobby's top bar: back on the left, the mode in the very middle, the buttons on the right, all on one line */
+  #lobby > .bar { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; }
+  #lobby > .bar > .icon-btn { justify-self: start; }
+  #lobby > .bar > .bar-end { justify-self: end; align-items: center; }
+  /* in a room there are more buttons on the right than fit both sides of a centred chip: the chip then sits in the
+     middle of the room left between the two sides, and on a phone it shows the dot and the code without the word */
+  #lobby > .bar:has(#roomShare:not([hidden])) { grid-template-columns: auto minmax(0, 1fr) auto; }
+  @media (max-width: 430px) {
+    #lobby .mode-chip.online .chip-word { display: none; }
+    #lobby .mode-chip.online { padding-left: 9px; }
+  }
   .summary { margin: 2px 14px 8px; text-align: center; font: 500 13px/1.3 var(--font-body); color: var(--ink-dim); }
   .pages { flex: 0 0 auto; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); margin: 0 14px; border-bottom: 1px solid var(--line); }
   .pages.three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
@@ -842,7 +857,6 @@
     <button id="lobbyBack" class="icon-btn" type="button" aria-label="Back to the title screen" data-pad="B" data-key="Esc"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></button>
     <div class="bar-mid">
       <span class="mode-chip" id="lobbyMode">Local match</span>
-      <span class="bar-sub" id="lobbyHostNote">You are the host</span>
     </div>
     <div class="bar-end">
       <button id="roomTell" class="icon-btn" type="button" aria-label="Tell friends: a notification that this room is open" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 16.5V11a6 6 0 0 1 12 0v5.5l1.5 2h-15z"/><path d="M10 20.5a2 2 0 0 0 4 0"/></svg></button>
@@ -851,7 +865,6 @@
       <button id="lobbySettings" class="icon-btn" type="button" aria-label="Settings"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19.29 10.73 L21.95 10.98 L21.95 13.02 L19.29 13.27 L18.05 16.26 L19.75 18.31 L18.31 19.75 L16.26 18.05 L13.27 19.29 L13.02 21.95 L10.98 21.95 L10.73 19.29 L7.74 18.05 L5.69 19.75 L4.25 18.31 L5.95 16.26 L4.71 13.27 L2.05 13.02 L2.05 10.98 L4.71 10.73 L5.95 7.74 L4.25 5.69 L5.69 4.25 L7.74 5.95 L10.73 4.71 L10.98 2.05 L13.02 2.05 L13.27 4.71 L16.26 5.95 L18.31 4.25 L19.75 5.69 L18.05 7.74 Z"/><circle cx="12" cy="12" r="3"/></svg></button>
     </div>
   </header>
-  <p class="summary" id="lobbySummary" aria-live="polite"></p>
   <!-- the way back to Players sits at the top left, beside the page names (the owner's ask) -->
   <div class="pages-row">
     <button id="lobbyPrev" class="tab-back" type="button" aria-label="Back to Players" data-pad="LB" data-key="Q"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></button>
@@ -885,17 +898,18 @@
         <button class="go page-end" id="playersNext" type="button">Next ›</button>
       </section>
       <section id="lobbyMatch" class="page" role="tabpanel" aria-labelledby="pgMatch">
-        <div class="sec-head"><span>Arena</span><span id="arenaCount"></span></div>
+        <div class="sec-head"><span>Map</span><span id="arenaCount"></span></div>
+        <!-- the map's name over its picture; a swipe or the arrows go through the maps; the size under it, in
+             three bubbles (the owner's design, November 2026) -->
         <div class="panel arena">
-          <div class="map-pick" id="mapPick" role="group" aria-label="Map"></div>
-          <div class="you-row">
-            <button class="round-btn" id="arenaPrev" type="button" aria-label="Previous arena"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></button>
-            <canvas id="arenaPic" role="img" aria-label="The arena"></canvas>
-            <button class="round-btn" id="arenaNext" type="button" aria-label="Next arena"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg></button>
-          </div>
           <div class="big-name" id="arenaName"></div>
-          <p class="hint center" id="arenaBlurb"></p>
-          <div class="dots small" id="arenaDots" role="group" aria-label="Arenas"></div>
+          <div class="you-row">
+            <button class="round-btn" id="arenaPrev" type="button" aria-label="Previous map"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></button>
+            <canvas id="arenaPic" role="img" aria-label="The arena"></canvas>
+            <button class="round-btn" id="arenaNext" type="button" aria-label="Next map"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg></button>
+          </div>
+          <div class="dots small" id="arenaDots" role="group" aria-label="Maps"></div>
+          <div class="size-pick" id="sizePick" role="group" aria-label="Size"></div>
           <button class="go arena-start" id="arenaStart" type="button" data-pad="≡">Start</button>
         </div>
         <div class="sec-head"><span>Rules</span><span class="host-tag">Host</span></div>

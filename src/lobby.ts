@@ -21,7 +21,7 @@
  * main.ts owns the match itself; it hands this file a `LobbyHost` to read and change what it needs.
  */
 import { BOT_LEVELS, LEVELS } from './bot';
-import { COLORS, botName, colorById, drawRobot, drawStatic, drawDynamic, drawHard, drawSoft, drawFloor, setMap, ROBOT } from './render';
+import { COLORS, botName, colorById, drawRobot, drawStatic, drawDynamic, setMap, ROBOT } from './render';
 import { createWorld, MAX_BOMBS, MAX_FIRE, MAX_LIVES, MAX_SPEED_ITEMS, START_FIRE } from './sim';
 import {
   CpuSlot,
@@ -30,6 +30,8 @@ import {
   type Afterlife,
   ARENAS,
   MAPS,
+  mapOf,
+  type ArenaId,
   BRICKS,
   CLOSE_IN,
   ITEM_AMOUNTS,
@@ -47,7 +49,6 @@ import {
   clockText,
   defaultRules,
   problem,
-  summary,
   worldConfig,
 } from './setup';
 import { DANCES, danceFrame, danceOf, stepDance, type DanceId } from './dances';
@@ -209,10 +210,11 @@ export function createLobby(host: LobbyHost): {
     s().cpus.push({ colorId, level });
     changed();
   }
+  /** The next or last map (the arrows and a swipe on the arena panel go through the maps: the owner's ask). */
   function stepArena(d: number): void {
     if (!canEdit()) return;
-    const i = ARENAS.findIndex((a) => a.id === s().arena);
-    pickArena(s(), ARENAS[(i + d + ARENAS.length) % ARENAS.length].id);
+    const i = MAPS.findIndex((m) => m.id === s().map);
+    s().map = MAPS[(i + d + MAPS.length) % MAPS.length].id;
     changed();
   }
 
@@ -707,17 +709,33 @@ export function createLobby(host: LobbyHost): {
   $('arenaPrev').addEventListener('click', () => stepArena(-1));
   $('arenaNext').addEventListener('click', () => stepArena(1));
   swipeable($('arenaPic').closest<HTMLElement>('.panel')!, stepArena); // the whole arena panel
-  for (const a of ARENAS) {
+  // a dot for each map, under its picture
+  for (const m of MAPS) {
     const b = document.createElement('button');
     b.type = 'button';
     b.className = 'dot';
-    b.setAttribute('aria-label', `${a.name} arena`);
+    b.setAttribute('aria-label', `${m.name} map`);
     b.addEventListener('click', () => {
+      if (!canEdit()) return;
+      s().map = m.id;
+      changed();
+    });
+    b.dataset.map = m.id;
+    $('arenaDots').append(b);
+  }
+  // the sizes: a bubble each, its name and its size in blocks
+  for (const a of ARENAS) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.dataset.arena = a.id;
+    b.innerHTML = `<span></span><small></small>`;
+    b.querySelector('span')!.textContent = a.name;
+    b.addEventListener('click', () => {
+      if (!canEdit() || s().arena === a.id) return;
       pickArena(s(), a.id);
       changed();
     });
-    b.dataset.arena = a.id;
-    $('arenaDots').append(b);
+    $('sizePick').append(b);
   }
   /** The arena picture: a real arena built with the setup's size and bricks, with everyone in their corners. */
   // the arena picture is drawn again whenever the room for it changes: shown, turned sideways, resized
@@ -729,30 +747,6 @@ export function createLobby(host: LobbyHost): {
       drawArena();
     }
   }).observe($('arenaPic').parentElement!);
-  // the map: a button each, with a little picture of its floor, solid block and breakable block
-  for (const m of MAPS) {
-    const b = document.createElement('button');
-    b.type = 'button';
-    b.dataset.map = m.id;
-    b.setAttribute('aria-label', `${m.name} map: ${m.solid} and ${m.soft}`);
-    const cv = document.createElement('canvas');
-    const t = 22 * Math.min(3, Math.ceil(host.density()));
-    cv.width = t * 3;
-    cv.height = t;
-    const g = cv.getContext('2d')!;
-    for (let i = 0; i < 3; i++) drawFloor(g, i, 0, i * t, 0, t, m.id);
-    drawHard(g, 0, 0, t, m.id);
-    drawSoft(g, t * 2, 0, t, m.id);
-    const name = document.createElement('b');
-    name.textContent = m.name;
-    b.append(cv, name);
-    b.addEventListener('click', () => {
-      if (!canEdit() || s().map === m.id) return;
-      s().map = m.id;
-      changed();
-    });
-    $('mapPick').append(b);
-  }
   function drawArena(): void {
     const cv = $<HTMLCanvasElement>('arenaPic');
     // everyone where they will start: online, in the room's order (P1 first), which is the round's
@@ -1110,21 +1104,22 @@ export function createLobby(host: LobbyHost): {
     refreshAll();
     // the arena
     const a = arenaOf(s());
-    const size = arenaSize(s(), G);
-    $('arenaName').textContent = a.name;
-    // just the size in tiles, no other words (the owner's ask); a grown arena shows its grown size
-    $('arenaBlurb').textContent = `${size.cols} × ${size.rows}`;
-    $('arenaBlurb').setAttribute(
-      'aria-label',
-      size.grown ? `${size.cols} by ${size.rows} tiles, grown for more than ${GROW_AFTER} players` : `${size.cols} by ${size.rows} tiles`,
-    );
-    $('arenaCount').textContent = `${ARENAS.indexOf(a) + 1} of ${ARENAS.length}`;
-    for (const b of $('arenaDots').querySelectorAll<HTMLButtonElement>('.dot')) b.setAttribute('aria-pressed', String(b.dataset.arena === a.id));
-    for (const b of $('mapPick').querySelectorAll<HTMLButtonElement>('button')) b.setAttribute('aria-pressed', String(b.dataset.map === s().map));
+    const map = mapOf(s());
+    $('arenaName').textContent = map.name;
+    $('arenaPic').setAttribute('aria-label', `The ${map.name} map, ${a.name} size`);
+    $('arenaCount').textContent = `${MAPS.indexOf(map) + 1} of ${MAPS.length}`;
+    for (const b of $('arenaDots').querySelectorAll<HTMLButtonElement>('.dot')) b.setAttribute('aria-pressed', String(b.dataset.map === map.id));
+    // each size bubble: its name, and its size in blocks (a grown arena shows its grown size)
+    for (const b of $('sizePick').querySelectorAll<HTMLButtonElement>('button')) {
+      const id = b.dataset.arena as ArenaId;
+      const size = arenaSize({ ...s(), arena: id }, G);
+      b.querySelector('small')!.textContent = `${size.cols} × ${size.rows}`;
+      b.setAttribute('aria-pressed', String(id === a.id));
+      b.setAttribute('aria-label', `${ARENAS.find((x) => x.id === id)!.name} size, ${size.cols} by ${size.rows} blocks${size.grown ? `, grown for more than ${GROW_AFTER} players` : ''}`);
+    }
     if (!$('lobbyMatch').hidden || window.matchMedia('(min-width: 820px) and (min-height: 480px)').matches) drawArena();
     refreshRules();
-    // the summary at the top, and whether Start can be pressed
-    $('lobbySummary').textContent = summary(s(), G);
+    // whether Start can be pressed
     // Start at the end of the Match page, Next › at the end of the Players page (lit once you are ready;
     // not needed on a wide screen, which shows both pages)
     const go = $<HTMLButtonElement>('lobbyStart');
