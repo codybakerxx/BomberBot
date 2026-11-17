@@ -508,6 +508,17 @@ const ITEM_BOB_RATE = 2.2;
 /** the dark colour icons are drawn in on a power-up tile */
 const ICON_DARK = '#0b0e18';
 
+/** A power-up as it lies on the floor, on its own: its coloured square, `size` across at (x, y), with its icon. */
+export function drawItemTile(ctx: Ctx, kind: ItemKind, x: number, y: number, size: number): void {
+  ctx.fillStyle = ITEM_COLOR[kind];
+  rr(ctx, x, y, size, size, size * 0.12);
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(255,255,255,0.85)';
+  ctx.lineWidth = Math.max(1, size * 0.05);
+  ctx.stroke();
+  drawItemIcon(ctx, kind, x + size / 2, y + size / 2, size * 0.36, ICON_DARK);
+}
+
 /** Draw a power-up's icon centred on (cx, cy), about `r` pixels in radius, in its own colour unless one is given. */
 export function drawItemIcon(ctx: Ctx, kind: ItemKind, cx: number, cy: number, r: number, color?: string): void {
   const col = color ?? ITEM_COLOR[kind];
@@ -615,6 +626,104 @@ function line(ctx: Ctx, x1: number, y1: number, x2: number, y2: number): void {
  * the tile player `focusId` counts as standing on, bombs on the floor, blasts,
  * robots (those further down the screen in front), then carried and flying bombs.
  */
+/** One blast tile's line, from (x1, y1) to (x2, y2), in pixels: its arm, or a short cross at the centre. */
+function flameLine(f: World['flames'][number], T: number): [number, number, number, number][] {
+  const cx = (f.cx + 0.5) * T;
+  const cy = (f.cy + 0.5) * T;
+  const h = T / 2;
+  if (f.kind === 'c') return [[cx - h * 0.25, cy, cx + h * 0.25, cy], [cx, cy - h * 0.25, cx, cy + h * 0.25]];
+  if (f.tip) {
+    const reach = 0.3;
+    if (f.tip === 4) return [[cx - h, cy, cx + h * reach, cy]];
+    if (f.tip === 3) return [[cx + h, cy, cx - h * reach, cy]];
+    if (f.tip === 2) return [[cx, cy - h, cx, cy + h * reach]];
+    return [[cx, cy + h, cx, cy - h * reach]];
+  }
+  return f.kind === 'h' ? [[cx - h, cy, cx + h, cy]] : [[cx, cy - h, cx, cy + h]];
+}
+
+/** The blasts, drawn as fire (see where drawDynamic calls it). */
+function drawFire(ctx: Ctx, world: World, T: number, time: number, west: boolean): void {
+  if (!world.flames.length) return;
+  ctx.save();
+  const blob = (x: number, y: number, r: number): void => {
+    if (r < 0.4) return;
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.fill();
+  };
+  // each tile's balls of flame: where they sit along its line, how big, how they flicker
+  type Ball = { x: number; y: number; r: number; seed: number };
+  const tiles = world.flames.map((f) => {
+    const t = f.ttl / FLAME_TICKS; // 1 when it bursts, 0 as it dies
+    const k = Math.sqrt(t > 0.8 ? (1 - t) / 0.2 : t / 0.8); // swells fast, then dies down
+    const balls: Ball[] = [];
+    for (const [x1, y1, x2, y2] of flameLine(f, T)) {
+      const n = 5;
+      const len = Math.hypot(x2 - x1, y2 - y1) || 1;
+      const px = -(y2 - y1) / len; // across the line
+      const py = (x2 - x1) / len;
+      for (let i = 0; i <= n; i++) {
+        const u = i / n;
+        const seed = f.cx * 7.13 + f.cy * 3.71 + i * 1.97 + (x2 - x1 > 0 ? 0.5 : 0) + (y2 - y1 > 0 ? 0.25 : 0);
+        // flicker in size, and a churn across the line, so the edge is ragged and never still
+        const flick = 0.72 + 0.2 * Math.sin(time * 17 + seed * 9) + 0.12 * Math.sin(time * 29 + seed * 4) + 0.1 * scatter(seed);
+        const churn = (Math.sin(time * 11 + seed * 7) + 0.6 * Math.sin(time * 23 + seed * 2)) * T * 0.05 * k;
+        // the tip of an arm tapers to a point
+        const taper = f.tip && i === n ? 0.5 : f.tip && i === n - 1 ? 0.8 : 1;
+        balls.push({ x: x1 + (x2 - x1) * u + px * churn, y: y1 + (y2 - y1) * u + py * churn, r: T * 0.44 * k * flick * taper, seed });
+      }
+    }
+    return { f, t, k, balls };
+  });
+  // smoke and scorch under the fire (darker on the sand, which is lighter than the night floor)
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.fillStyle = west ? 'rgba(28,10,2,0.5)' : 'rgba(10,6,4,0.45)';
+  for (const { balls, k } of tiles) for (const b of balls) blob(b.x, b.y + T * 0.04, b.r * 1.08 + T * 0.04 * k);
+  // a faint glow in the colour of whoever placed the bomb
+  ctx.globalCompositeOperation = 'lighter';
+  for (const { f, balls } of tiles) {
+    ctx.fillStyle = colorById(world.players[f.owner]?.colorId ?? 'gold').glow;
+    ctx.globalAlpha = 0.16;
+    for (const b of balls) blob(b.x, b.y, b.r * 1.25);
+  }
+  // the fire, layer by layer: red edge, orange, yellow, a white-hot heart (cooling to red as it dies)
+  ctx.globalAlpha = 1;
+  const layers: [number, string, string, number][] = [
+    // share of the radius, colour, colour as it dies, how far its tongues rise
+    [1, 'rgba(196,40,8,0.5)', 'rgba(110,20,6,0.42)', 0.45],
+    [0.78, 'rgba(240,92,16,0.62)', 'rgba(170,44,10,0.52)', 0.36],
+    [0.56, 'rgba(255,150,36,0.72)', 'rgba(214,80,18,0.6)', 0.26],
+    [0.36, 'rgba(255,214,96,0.82)', 'rgba(240,130,40,0.62)', 0.16],
+    [0.17, 'rgba(255,248,222,0.9)', 'rgba(255,190,100,0.6)', 0.08],
+  ];
+  for (const [share, hot, cool, rise] of layers) {
+    for (const { t, balls } of tiles) {
+      ctx.fillStyle = t > 0.35 ? hot : cool;
+      for (const b of balls) {
+        const r = b.r * share;
+        blob(b.x, b.y, r);
+        // a tongue of flame licking upwards from it, flickering
+        const lick = 0.55 + 0.45 * Math.sin(time * 13 + b.seed * 5);
+        blob(b.x + Math.sin(time * 9 + b.seed * 3) * r * 0.25, b.y - r * rise * 2 * lick - r * 0.15, r * 0.62);
+      }
+    }
+  }
+  // embers: a few sparks rising from each tile as it burns
+  ctx.fillStyle = 'rgba(255,214,120,0.9)';
+  for (const { f, t } of tiles) {
+    for (let e = 0; e < 3; e++) {
+      const seed = f.cx * 5.3 + f.cy * 8.9 + e * 2.1;
+      const age = (1 - t + scatter(seed) * 0.5) % 1;
+      const x = (f.cx + 0.2 + 0.6 * scatter(seed + 1)) * T + Math.sin(time * 6 + seed) * T * 0.05;
+      const y = (f.cy + 0.6) * T - age * T * 0.8;
+      ctx.globalAlpha = Math.max(0, 1 - age) * Math.min(1, t * 3);
+      blob(x, y, T * 0.025 * (1 - age * 0.5));
+    }
+  }
+  ctx.restore();
+}
+
 /**
  * The part of the arena that changes only when a block breaks or lands: the strip of shadow every block
  * casts onto the floor below it, and the breakable blocks themselves. It goes over the floor and solid blocks
@@ -705,41 +814,11 @@ export function drawDynamic(ctx: Ctx, world: World, T: number, time: number, foc
     if (b.state === 'ground') drawBomb(ctx, world, b, (b.x + 0.5) * T, (b.y + 0.5 + BOMB_DROP) * T, T, true);
   }
 
-  // blasts, in the colour of whoever placed the bomb
-  ctx.save();
-  // (on the sand of the Wild West a blast first darkens the ground under it, so its light and its owner's
-  // colour show as they do on Midnight's dark floor: pass -1)
-  for (const pass of west ? [-1, 0, 1, 2] : [0, 1, 2]) {
-    ctx.globalCompositeOperation = pass < 0 ? 'source-over' : 'lighter';
-    for (const f of world.flames) {
-      const col = colorById(world.players[f.owner]?.colorId ?? 'gold');
-      const t = f.ttl / FLAME_TICKS;
-      const k = Math.sqrt(t > 0.8 ? (1 - t) / 0.2 : t / 0.8);
-      const width = T * (pass < 0 ? 0.92 : [0.92, 0.62, 0.3][pass]) * k;
-      if (width < 0.5) continue;
-      ctx.strokeStyle = pass < 0 ? '#1c0b04' : pass === 2 ? '#ffffff' : col.glow;
-      ctx.globalAlpha = pass < 0 ? 0.5 : [0.3, 0.75, 0.95][pass];
-      ctx.lineWidth = width;
-      const cx = (f.cx + 0.5) * T;
-      const cy = (f.cy + 0.5) * T;
-      const h = T / 2;
-      ctx.lineCap = 'butt';
-      if (f.kind === 'c') {
-        ctx.lineCap = 'round';
-        line(ctx, cx - h * 0.2, cy, cx + h * 0.2, cy);
-        line(ctx, cx, cy - h * 0.2, cx, cy + h * 0.2);
-      } else if (f.tip) {
-        ctx.lineCap = 'round';
-        const reach = 0.25;
-        if (f.tip === 4) line(ctx, cx - h, cy, cx + h * reach, cy);
-        else if (f.tip === 3) line(ctx, cx + h, cy, cx - h * reach, cy);
-        else if (f.tip === 2) line(ctx, cx, cy - h, cx, cy + h * reach);
-        else line(ctx, cx, cy + h, cx, cy - h * reach);
-      } else if (f.kind === 'h') line(ctx, cx - h, cy, cx + h, cy);
-      else line(ctx, cx, cy - h, cx, cy + h);
-    }
-  }
-  ctx.restore();
+  // blasts: fire (the owner's ask, November 2026, for more realistic fire; it was three bars of light in the
+  // bomb owner's colour). Each tile of a blast is a row of flickering balls of flame along its line, red at
+  // the edge, orange, then yellow-white at the heart, with tongues licking upwards and embers rising, over a
+  // scorch of smoke. A faint glow round it in the colour of whoever placed the bomb still says whose it is.
+  drawFire(ctx, world, T, time, west);
 
   // where a block is about to land: a shadow that darkens and fills the tile as the block comes down
   for (const f of world.falling) {

@@ -12,7 +12,7 @@
  */
 import { createWorld, step, ticksLeft, World, PlayerInput, Dir, TICK_HZ, DEATH_TICKS, type GameEvent } from './sim';
 import { Bot, BotLevel, BOT_LEVELS, LEVELS, createBot, botInput } from './bot';
-import { COLORS, NOBODY, botName, colorById, drawAngels, drawGround, drawHead, drawStatic, drawDynamic, drawGhosts, groundKey, setMap, warmSprites } from './render';
+import { COLORS, NOBODY, botName, colorById, drawAngels, drawGround, drawHead, drawItemTile, drawStatic, drawDynamic, drawGhosts, groundKey, setMap, warmSprites } from './render';
 import { Input, PadReader, typing } from './input';
 import { drawTitle, closeTitle, drawIcon } from './title';
 import { initAudio, preview, setSound, sfx, wakeAudio } from './audio';
@@ -21,7 +21,7 @@ import { readDance, type DanceId } from './dances';
 import { createPadNav } from './padnav';
 import { PAD } from './bindings';
 import { createRemap } from './remap';
-import { CpuSlot, Guest, MatchSetup, Prefs, SHARPNESS, SOUND_NAMES, arenaOf, clockText, defaultSetup, load, readPrefs, readSetup, rollCpus, save, summary, wholeTile, worldConfig } from './setup';
+import { CpuSlot, Guest, ITEM_NAMES, MatchSetup, Prefs, SHARPNESS, SOUND_NAMES, arenaOf, clockText, defaultSetup, load, readPrefs, readSetup, rollCpus, save, summary, wholeTile, worldConfig } from './setup';
 import { Opt, answerConfirm, choice, confirmFirst, confirmOpen, heading, mount, note, slider, toggle, wireConfirm, wireFlash } from './ui';
 import { Hand, SENSITIVITY, DEFAULT_SENS, STRAIGHT, standardAims } from './swipe';
 import { Online } from './online';
@@ -1079,6 +1079,7 @@ function hideScreens(): void {
   $('pause').hidden = true;
   result.hidden = true;
   $('onlineSheet').hidden = true;
+  $('keySheet').hidden = true;
   document.body.classList.remove('menu-open');
 }
 
@@ -1242,6 +1243,7 @@ function showPause(): void {
 }
 /** Resume: back into the round, or back to its result if it is over for you. */
 function closePause(): void {
+  closeKey();
   if (roundLive) resume();
   else watch();
 }
@@ -1305,6 +1307,64 @@ function fillPause(): void {
 $('menuBtn').addEventListener('click', openPause);
 $('pauseResume').addEventListener('click', closePause);
 $('pauseSettings').addEventListener('click', () => showSettings(undefined, 'pause'));
+
+/**
+ * The key (the owner's ask, November 2026): from the menu during a match, a list of every power-up as it
+ * looks in the arena, with what it does, then the marks you see on the robots and the floor. Drawn with the
+ * game's own drawing, so it always matches the arena.
+ */
+function showKey(): void {
+  const list = $('keyList');
+  list.textContent = '';
+  const dpr = Math.min(density(), 4);
+  const px = Math.round(32 * dpr);
+  const row = (name: string, what: string, draw: (g: CanvasRenderingContext2D, s: number) => void): void => {
+    const li = document.createElement('li');
+    const cv = document.createElement('canvas');
+    cv.width = cv.height = px;
+    draw(cv.getContext('2d')!, px);
+    const text = document.createElement('div');
+    const b = document.createElement('b');
+    b.textContent = name;
+    const small = document.createElement('small');
+    small.textContent = what;
+    text.append(b, small);
+    li.append(cv, text);
+    list.append(li);
+  };
+  const head = (t: string): void => {
+    const li = document.createElement('li');
+    li.className = 'key-sec';
+    li.textContent = t;
+    list.append(li);
+  };
+  head('Power-ups');
+  for (const [kind, name, what] of ITEM_NAMES) row(name, what, (g, s) => drawItemTile(g, kind, s * 0.08, s * 0.08, s * 0.84));
+  head('In the arena');
+  row('Falling block', 'After the timer: a block lands on the marked tile. Move off!', (g, s) => {
+    g.fillStyle = '#0e1220';
+    g.fillRect(0, 0, s, s);
+    g.fillStyle = 'rgba(0,0,0,0.55)';
+    g.fillRect(s * 0.15, s * 0.15, s * 0.7, s * 0.7);
+    g.strokeStyle = 'rgba(255,90,110,0.85)';
+    g.lineWidth = Math.max(1, s * 0.06);
+    g.strokeRect(s * 0.06, s * 0.06, s * 0.88, s * 0.88);
+  });
+  row('Crown', 'The player in the lead', (g, s) => {
+    const col = colorById(world.players[myIdx()]?.colorId ?? 'gold');
+    drawHead(g, s / 2, s * 0.58, s * 0.36, col, { xEyes: false, crown: true });
+  });
+  $('keySheet').hidden = false;
+  ($('keyDone') as HTMLButtonElement).focus({ preventScroll: true });
+}
+function closeKey(): void {
+  $('keySheet').hidden = true;
+}
+$('pauseKey').addEventListener('click', showKey);
+$('keyDone').addEventListener('click', closeKey);
+$('keySheet').addEventListener('click', (e) => {
+  if (e.target === $('keySheet')) closeKey(); // a tap outside the panel
+});
 $('pauseRestart').addEventListener('click', () =>
   confirmFirst(
     'Restart the match?',
@@ -1346,11 +1406,9 @@ function settleUnfinished(): boolean {
   wins[w]++;
   if (leader < 0 || wins[w] > wins[leader]) leader = w;
   if (wins[w] < setup.firstTo) return true;
-  // That point won the match. No second panel (the owner's ask): a new match starts at once, as Rematch would,
-  // and a line over the arena says who took it.
-  const name = nameOf(w);
+  // That point won the match. No panel and no note (the owner's ask): a new match starts at once, as Rematch
+  // would.
   newMatch();
-  showTip(`${name} won the match (picked at random)`);
   return false;
 }
 // the result panel: Next round and Lobby while the match goes on (Lobby asks first: the match would end);
@@ -2014,6 +2072,7 @@ function refreshPrefs(): void {
 function goBack(): void {
   if (confirmOpen()) answerConfirm(false);
   else if (mode === 'title' && !$('onlineSheet').hidden) closeOnlineSheet();
+  else if (!$('keySheet').hidden) closeKey();
   else if (mode === 'lobby' && lobby.sheetOpen()) lobby.closeSheet();
   else if (mode === 'lobby') lobbyHost.back();
   else if (mode === 'settings') closeSettings();
@@ -2086,6 +2145,7 @@ input.onFirstGesture = initAudio;
 function padTop(): HTMLElement | null {
   if (confirmOpen()) return $('confirm');
   if (mode === 'title' && !$('onlineSheet').hidden) return $('onlineSheet');
+  if (!$('keySheet').hidden) return $('keySheet');
   if (mode === 'lobby' && lobby.sheetOpen()) return $('cpuSheet');
   const screens: Partial<Record<typeof mode, string>> = { title: 'title', lobby: 'lobby', settings: 'settings', pause: 'pause', over: 'result' };
   const id = screens[mode];
