@@ -423,14 +423,46 @@
   .pages.five { grid-template-columns: repeat(5, minmax(0, auto)); justify-content: space-between; }
   .pages.five button { padding-left: 3px; padding-right: 3px; font-size: 13px; letter-spacing: 0.06em; }
   @media (min-width: 520px) { .pages.five { grid-template-columns: repeat(5, minmax(0, 1fr)); } .pages.five button { font-size: 14px; } }
-  /* Settings › App: the steps to put the game on the home screen */
-  .app-steps { margin: 0; padding: 0 0 0 4px; list-style: none; counter-reset: step; display: grid; gap: 8px; }
-  .app-steps li { counter-increment: step; display: grid; grid-template-columns: 26px 1fr; gap: 10px; align-items: start; font: 500 14px/1.4 var(--font-body); color: var(--ink); }
-  .app-steps li::before { content: counter(step); display: grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; background: var(--accent); color: #05060b; font: 700 13px/1 var(--font-display); }
-  .app-steps b { color: var(--accent); font-weight: 700; }
-  .app-steps .glyph { display: inline-block; width: 1.15em; height: 1.15em; vertical-align: -0.2em; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
-  #appInstall { justify-self: start; }
-  #setApp .sec-head:not(:first-child) { margin-top: 10px; }
+  /* Settings › App: a bright card with the game's icon, the steps as cards, and the invites explained */
+  #setApp { display: flex; flex-direction: column; gap: 14px; }
+  .app-hero {
+    position: relative; overflow: hidden; display: flex; flex-direction: column; align-items: center; text-align: center; gap: 8px;
+    padding: 20px 16px 16px; border-radius: 20px; border: 1px solid rgba(255, 197, 106, 0.45);
+    background: radial-gradient(120% 90% at 50% 0%, rgba(255, 197, 106, 0.28), rgba(255, 120, 60, 0.08) 45%, transparent 70%), linear-gradient(160deg, #1a1530, #0d1019 60%);
+  }
+  .app-hero::before, .app-hero::after { content: ''; position: absolute; border-radius: 50%; background: rgba(255, 197, 106, 0.12); }
+  .app-hero::before { width: 120px; height: 120px; left: -40px; bottom: -50px; }
+  .app-hero::after { width: 70px; height: 70px; right: -18px; top: 30px; background: rgba(120, 170, 255, 0.12); }
+  .app-icon { width: 84px; height: 84px; border-radius: 20px; box-shadow: 0 6px 22px rgba(255, 197, 106, 0.35), 0 0 0 2px rgba(255, 255, 255, 0.12); animation: icon-bob 3s ease-in-out infinite; }
+  @keyframes icon-bob { 0%, 100% { transform: translateY(0) rotate(-3deg); } 50% { transform: translateY(-5px) rotate(3deg); } }
+  body.calm .app-icon { animation: none; }
+  .app-title { margin: 4px 0 0; font: 700 23px/1.15 var(--font-display); color: var(--accent); text-shadow: 0 2px 12px rgba(255, 197, 106, 0.35); }
+  .app-lead { margin: 0; font: 500 14px/1.4 var(--font-body); color: var(--ink); opacity: 0.85; max-width: 32em; }
+  .app-lead b { color: var(--accent); }
+  .app-perks { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; margin: 4px 0 0; padding: 0; list-style: none; position: relative; z-index: 1; }
+  .app-perks li { display: inline-flex; align-items: center; gap: 5px; padding: 5px 10px; border-radius: 999px; font: 700 12px/1 var(--font-display); letter-spacing: 0.06em; color: var(--ink); background: rgba(255, 255, 255, 0.07); border: 1px solid rgba(255, 255, 255, 0.12); }
+  .app-perks svg, .step-ico svg, .invite-bell svg { width: 15px; height: 15px; fill: none; stroke: var(--accent); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  .app-steps { margin: 0; padding: 0; list-style: none; counter-reset: step; display: grid; gap: 8px; }
+  .app-steps li { counter-increment: step; display: grid; grid-template-columns: 44px 1fr; gap: 12px; align-items: center; padding: 10px 12px; border-radius: 14px; background: var(--panel); border: 1px solid var(--line); font: 500 14px/1.4 var(--font-body); color: var(--ink); }
+  .step-ico { position: relative; display: grid; place-items: center; width: 44px; height: 44px; border-radius: 12px; background: rgba(255, 197, 106, 0.12); border: 1px solid rgba(255, 197, 106, 0.3); }
+  .step-ico svg { width: 22px; height: 22px; }
+  .step-ico::after { content: counter(step); position: absolute; top: -7px; left: -7px; display: grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; background: var(--accent); color: #05060b; font: 700 12px/1 var(--font-display); box-shadow: 0 0 0 3px var(--panel); }
+  .app-steps b, .invite-how b { color: var(--accent); font-weight: 700; }
+  .app-steps .glyph { display: inline-block; width: 1.1em; height: 1.1em; vertical-align: -0.18em; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  #appInstall { align-self: center; }
+  .invite-card { display: flex; flex-direction: column; gap: 10px; padding: 14px; border-radius: 18px; background: linear-gradient(160deg, rgba(120, 170, 255, 0.1), var(--panel) 55%); border: 1px solid var(--line); }
+  .invite-head { display: flex; gap: 12px; align-items: center; }
+  .invite-bell { flex: 0 0 auto; display: grid; place-items: center; width: 44px; height: 44px; border-radius: 50%; background: rgba(255, 197, 106, 0.15); border: 1px solid rgba(255, 197, 106, 0.4); }
+  .invite-bell svg { width: 22px; height: 22px; transform-origin: 50% 10%; animation: ring 4s ease-in-out infinite; }
+  @keyframes ring { 0%, 80%, 100% { transform: rotate(0); } 84% { transform: rotate(14deg); } 88% { transform: rotate(-12deg); } 92% { transform: rotate(8deg); } 96% { transform: rotate(-4deg); } }
+  body.calm .invite-bell svg { animation: none; }
+  .invite-head h3 { margin: 0 0 2px; font: 700 18px/1.1 var(--font-display); color: var(--ink); }
+  .invite-head p { margin: 0; font: 500 13.5px/1.35 var(--font-body); color: var(--ink-dim); }
+  .invite-how { margin: 0; padding: 0; list-style: none; counter-reset: how; display: grid; gap: 7px; }
+  .invite-how li { counter-increment: how; display: grid; grid-template-columns: 22px 1fr; gap: 9px; font: 500 13.5px/1.4 var(--font-body); color: var(--ink); }
+  .invite-how li::before { content: counter(how); display: grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; border: 1.5px solid var(--accent); color: var(--accent); font: 700 12px/1 var(--font-display); }
+  .invite-how q { color: var(--accent); font-style: italic; quotes: '“' '”'; }
+  .invite-fine { margin: 0; font: 500 12px/1.4 var(--font-body); color: var(--ink-dim); }
   .pages button {
     padding: 11px 0 9px; margin-bottom: -1px; border: 0; border-bottom: 3px solid transparent; background: transparent; cursor: pointer;
     font: 700 15px/1 var(--font-display); letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-dim);
@@ -941,13 +973,32 @@
         <div class="opts" id="gfxOpts"></div>
       </section>
       <section id="setApp" class="page" role="tabpanel" aria-labelledby="pgApp">
-        <div class="sec-head"><span>On your home screen</span><span></span></div>
-        <p class="hint" id="appLead"></p>
+        <div class="app-hero">
+          <img id="appIcon" class="app-icon" alt="" width="84" height="84">
+          <h3 class="app-title" id="appTitle">How to add the BomberBot app!</h3>
+          <p class="app-lead" id="appLead"></p>
+          <ul class="app-perks" aria-label="What you get">
+            <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5"/></svg>Full screen</li>
+            <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2.5 9a15 15 0 0 1 19 0M5.5 12.5a10 10 0 0 1 13 0M9 16a5 5 0 0 1 6 0M3 3l18 18"/></svg>Plays offline</li>
+            <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 16.5V11a6 6 0 0 1 12 0v5.5l1.5 2h-15z"/><path d="M10 20.5a2 2 0 0 0 4 0"/></svg>Room invites</li>
+          </ul>
+        </div>
         <ol class="app-steps" id="appSteps"></ol>
-        <button class="go" id="appInstall" type="button" hidden>Install BomberBot</button>
-        <div class="sec-head"><span>Notifications</span><span></span></div>
-        <div class="opts" id="notifyOpts"></div>
-        <p class="hint" id="notifyNote" role="status" aria-live="polite"></p>
+        <button class="go big" id="appInstall" type="button" hidden>Install BomberBot</button>
+        <div class="invite-card">
+          <div class="invite-head">
+            <span class="invite-bell"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 16.5V11a6 6 0 0 1 12 0v5.5l1.5 2h-15z"/><path d="M10 20.5a2 2 0 0 0 4 0"/></svg></span>
+            <div><h3>Room invites</h3><p>Get a ping when a friend opens an online room and wants you in.</p></div>
+          </div>
+          <ol class="invite-how">
+            <li><span>Switch on <b>Get room invites</b> below. Your phone asks first: tap <b>Allow</b>.</span></li>
+            <li><span>A friend makes an online room and taps the <b>bell</b> at the top of their lobby.</span></li>
+            <li><span>You get <q>Cody wants to play · Room BKTW is open.</q> Tap it to jump straight into their room.</span></li>
+          </ol>
+          <div class="opts" id="notifyOpts"></div>
+          <p class="hint" id="notifyNote" role="status" aria-live="polite"></p>
+          <p class="invite-fine">Hosting? Tap the bell yourself to call everyone in. Room invites are the only notifications BomberBot sends, a room can ring once a minute, and you can turn them off here any time.</p>
+        </div>
       </section>
     </div>
   </div>
@@ -1021,7 +1072,7 @@
   <div class="title-grid">
     <header class="title-head">
       <h1 class="logo"><span>Bomber</span><span class="logo-bot">Bot</span></h1>
-      <p class="tagline">Last bot standing</p>
+      <p class="tagline">Battle Royale</p>
     </header>
     <div id="titleStage" role="img" aria-label="Your robot waving, with two rivals behind it and a lit bomb at its feet"></div>
     <div class="title-actions">

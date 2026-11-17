@@ -1730,39 +1730,68 @@ const refreshGfx = mount($('gfxOpts'), gfxOpts);
 
 // Settings › App: putting the game on the home screen, and notifications (app.ts)
 const SHARE_GLYPH = '<svg class="glyph" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15V3M7.5 7.5 12 3l4.5 4.5M5 11v9h14v-9"/></svg>';
-const APP_LEAD: Record<ReturnType<typeof howToAdd>, string> = {
-  app: 'You are playing the app. It opens full screen from your home screen, and Local play works with no connection at all (Online needs one).',
-  file: 'This copy was opened as a file. To put BomberBot on your home screen, open its website first: <b>bomberbot.bomberbot.workers.dev</b>.',
-  apple: 'Put BomberBot on your Home Screen and it opens full screen, like an app. Local play works with no connection, too.',
-  android: 'Put BomberBot on your home screen and it opens full screen, like an app. Local play works with no connection, too.',
-  computer: 'BomberBot can be installed as an app on a computer too, in its own window. Local play works with no connection.',
+/** a step's picture, beside its words */
+const ICO: Record<string, string> = {
+  safari: '<circle cx="12" cy="12" r="9"/><path d="M15.5 8.5l-2 5-5 2 2-5z"/>',
+  share: '<path d="M12 15V3M7.5 7.5 12 3l4.5 4.5M5 11v9h14v-9"/>',
+  add: '<rect x="4" y="4" width="16" height="16" rx="4"/><path d="M12 8v8M8 12h8"/>',
+  toggle: '<rect x="3" y="7" width="18" height="10" rx="5"/><circle cx="16" cy="12" r="2.6"/>',
+  play: '<path d="M8 5.5l11 6.5-11 6.5z"/>',
+  menu: '<path d="M12 5h.01M12 12h.01M12 19h.01" stroke-width="3.2"/>',
+  install: '<path d="M12 4v11M7.5 10.5 12 15l4.5-4.5M5 19.5h14"/>',
+  screen: '<rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/>',
+  globe: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/>',
 };
-const APP_STEPS: Record<ReturnType<typeof howToAdd>, string[]> = {
+type Step = [keyof typeof ICO, string];
+const APP_TITLE: Record<ReturnType<typeof howToAdd>, string> = {
+  app: 'You’ve got the BomberBot app!',
+  file: 'How to add the BomberBot app!',
+  apple: 'How to add the BomberBot app!',
+  android: 'How to add the BomberBot app!',
+  computer: 'How to add the BomberBot app!',
+};
+const APP_LEAD: Record<ReturnType<typeof howToAdd>, string> = {
+  app: 'It opens full screen from your home screen, and Local play works with no connection at all. Online needs one.',
+  file: 'This copy was opened as a file. Open the game’s website first, then follow the steps there.',
+  apple: 'Put it on your Home Screen in a few taps and it plays like a real app.',
+  android: 'Put it on your home screen in a few taps and it plays like a real app.',
+  computer: 'Install it on your computer and it gets a window of its own.',
+};
+const APP_STEPS: Record<ReturnType<typeof howToAdd>, Step[]> = {
   app: [],
-  file: [],
+  file: [['globe', 'Go to <b>bomberbot.bomberbot.workers.dev</b> in your browser.']],
   apple: [
-    'Open this page in <b>Safari</b>.',
-    `Tap <b>Share</b> ${SHARE_GLYPH} (on newer iPhones it is under <b>⋯</b> at the bottom first).`,
-    'Scroll down and tap <b>Add to Home Screen</b>.',
-    'If you see <b>Open as Web App</b>, leave it on. Tap <b>Add</b>.',
-    'Open BomberBot from your Home Screen.',
+    ['safari', 'Open this page in <b>Safari</b>.'],
+    ['share', `Tap <b>Share</b> ${SHARE_GLYPH}. On newer iPhones, tap <b>⋯</b> at the bottom first.`],
+    ['add', 'Scroll down and tap <b>Add to Home Screen</b>.'],
+    ['toggle', 'If you see <b>Open as Web App</b>, leave it on. Then tap <b>Add</b>.'],
+    ['play', 'Open <b>BomberBot</b> from your Home Screen and play!'],
   ],
-  android: ['In Chrome, tap <b>⋮</b> at the top right.', 'Tap <b>Install app</b> (or <b>Add to Home screen</b>).', 'Open BomberBot from your home screen.'],
-  computer: ['In Chrome or Edge: the install button at the right of the address bar, or <b>⋮</b> › <b>Install</b>.', 'In Safari on a Mac: <b>File</b> › <b>Add to Dock</b>.'],
+  android: [
+    ['menu', 'In Chrome, tap <b>⋮</b> at the top right.'],
+    ['install', 'Tap <b>Install app</b> (or <b>Add to Home screen</b>).'],
+    ['play', 'Open <b>BomberBot</b> from your home screen and play!'],
+  ],
+  computer: [
+    ['install', 'In Chrome or Edge: the install button at the right of the address bar, or <b>⋮</b> › <b>Install</b>.'],
+    ['screen', 'In Safari on a Mac: <b>File</b> › <b>Add to Dock</b>.'],
+  ],
 };
 let pushNow: PushState = 'cannot';
 let pushBusy = false;
 const notifyOpts: Opt[] = [
   toggle({
-    label: 'Room invites',
+    label: 'Get room invites',
     hint: () =>
       pushNow === 'cannot'
         ? isApple() && onWebsite()
-          ? 'Put BomberBot on your Home Screen first (above) and open it from there. Needs iOS 16.4 or newer.'
+          ? 'On iPhone, add the app first (the steps above), then open it from your Home Screen and switch this on. Needs iOS 16.4 or newer.'
           : 'This browser cannot show notifications.'
         : pushNow === 'blocked'
           ? 'Blocked for BomberBot: turn them on in the phone’s Settings › Notifications.'
-          : 'A notification when a friend opens a room and taps the bell (Tell friends).',
+          : pushNow === 'on'
+            ? 'On: you will hear about friends’ rooms.'
+            : 'Off: switch on to hear about friends’ rooms.',
     get: () => pushNow === 'on',
     locked: () => pushNow === 'cannot' || pushNow === 'blocked' || pushBusy,
     set: (on) => void setPush(on),
@@ -1777,13 +1806,19 @@ async function setPush(on: boolean): Promise<void> {
   const why = on ? await pushOn() : (await pushOff(), '');
   pushBusy = false;
   pushNow = await pushState();
-  $('notifyNote').textContent = why || (pushNow === 'on' ? 'On. Hosts tap the bell in an online lobby to tell everyone.' : '');
+  $('notifyNote').textContent = why || (pushNow === 'on' ? 'All set! Next time a friend rings the bell, you will know.' : '');
   refreshNotify();
 }
 function showApp(): void {
   const where = howToAdd();
+  $('appTitle').textContent = APP_TITLE[where];
   $('appLead').innerHTML = APP_LEAD[where];
-  $('appSteps').innerHTML = APP_STEPS[where].map((t) => `<li><span>${t}</span></li>`).join('');
+  const icon = $('appIcon') as HTMLImageElement;
+  if (!icon.src) icon.src = drawIcon(168).toDataURL('image/png');
+  $('appSteps').innerHTML = APP_STEPS[where]
+    .map(([ico, t]) => `<li><span class="step-ico"><svg viewBox="0 0 24 24" aria-hidden="true">${ICO[ico]}</svg></span><span>${t}</span></li>`)
+    .join('');
+  $('appSteps').hidden = !APP_STEPS[where].length;
   const offer = (): void => {
     $('appInstall').hidden = !canInstall() || where === 'app';
   };
