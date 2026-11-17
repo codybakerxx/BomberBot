@@ -687,7 +687,7 @@ function finish(title: string, text: string): void {
   $('resultText').hidden = !text;
   const done = matchWinner >= 0;
   $('again').textContent = done ? 'Rematch' : 'Next round';
-  $('change').textContent = done ? 'Lobby' : 'Menu';
+  $('change').textContent = 'Lobby'; // (on this screen: Next round and Lobby, the owner's words; it was Menu)
   $('again').hidden = false;
   if (net) {
     // online the round is played out, and only the host moves everyone on
@@ -1335,7 +1335,7 @@ $('pauseLeave').addEventListener('click', () =>
  * Next round while you are out and the CPU players are still fighting: the round is not left without a
  * winner. One of the CPU players still in gets it, at random, and a point on the scoreboard (the owner's
  * call: solo against CPU players only; online, the round will be played out). Returns false if that point
- * has won it the match, so the result of the match is shown instead of a new round.
+ * has won it the match: a new match has then been started (no panel for it: the owner's ask).
  */
 function settleUnfinished(): boolean {
   if (counted || world.over) return true;
@@ -1346,15 +1346,15 @@ function settleUnfinished(): boolean {
   wins[w]++;
   if (leader < 0 || wins[w] > wins[leader]) leader = w;
   if (wins[w] < setup.firstTo) return true;
-  matchWinner = w;
-  scoreKey = '';
-  finish(
-    `${nameOf(w)} wins the match`,
-    `First to ${setup.firstTo}. Final score ${scoreLine()}. ${guests.length ? 'Everyone here was' : 'You were'} out, so the last round went to ${nameOf(w)}, picked at random from the CPU players still in.`,
-  );
+  // That point won the match. No second panel (the owner's ask): a new match starts at once, as Rematch would,
+  // and a line over the arena says who took it.
+  const name = nameOf(w);
+  newMatch();
+  showTip(`${name} won the match (picked at random)`);
   return false;
 }
-// the result panel: Next round and Menu while the match goes on; Rematch and Lobby once it is won
+// the result panel: Next round and Lobby while the match goes on (Lobby asks first: the match would end);
+// Rematch and Lobby once it is won
 $('again').addEventListener('click', () => {
   if (net) net.send({ t: 'next' }); // (the host's: the next round, or a rematch)
   else if (matchWinner >= 0) newMatch();
@@ -1365,7 +1365,10 @@ $('change').addEventListener('click', () => {
     if (matchWinner >= 0 && net.isHost) net.send({ t: 'lobby' });
     else openPause();
   } else if (matchWinner >= 0) showLobby(true);
-  else openPause();
+  else
+    confirmFirst('Leave to the lobby?', 'This match ends and its score is not kept. In the lobby you can change the players and the rules.', 'Leave match', (yes) => {
+      if (yes) showLobby(true);
+    });
 });
 
 
