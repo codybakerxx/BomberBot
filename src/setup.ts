@@ -198,15 +198,21 @@ export interface MatchSetup {
    */
   seats: string[];
   /**
-   * The team of each row of the Players page (the owner's design, 17 November 2026: the row a robot sits in
-   * is its team): an index into TEAMS. Rows with the same colour are one team. With a team size, each team is
-   * that many rows' worth (Teams of 4: two rows), the same colour (`rowTeams`).
+   * With Teams of 2 or 4: the team of each row of the Players page (the owner's design, 17 November 2026: the
+   * row a robot sits in is its team), an index into TEAMS. Each team is that many rows' worth (Teams of 4: two
+   * rows), all one colour (`rowTeams`).
    */
   rowTeams: number[];
   /**
-   * Team size (the lobby's Custom, Teams of 2, Teams of 4): 0 is Custom, the default, where each row has a
-   * colour of its own (rows of one colour are one team). Otherwise every team is this many robots, rows of two
-   * side by side: only offered when the players divide into such teams (`teamSizes`), Custom while they do not.
+   * In Custom: each robot's team by its colour, an index into TEAMS. A robot not in it is on a team of its own,
+   * in a colour nobody has (the owner's ask: everyone on their own until a colour is picked to match another).
+   */
+  teams: Record<string, number>;
+  /**
+   * Team size (the lobby's Custom, Teams of 2, Teams of 4): 0 is Custom, the default, where every robot is on
+   * a team of its own unless its colour is picked to match another's (`teams`). Otherwise every team is this
+   * many robots, rows of two side by side (`rowTeams`): only offered when the players divide into such teams
+   * (`teamSizes`), Custom while they do not.
    */
   teamSize: number;
   /** in a teams match, can a teammate's blast knock you out? */
@@ -286,24 +292,55 @@ export function rowTeams(s: MatchSetup, n: number): number[] {
 }
 
 /**
+ * In Custom, the team of each robot, given where they sit (`seats`): the one picked for it, or else a colour
+ * nobody has (a team of its own), in the order they sit.
+ */
+function customTeams(s: MatchSetup, seats: string[]): Map<string, number> {
+  const out = new Map<string, number>();
+  for (const c of seats) if (isTeam(s.teams[c])) out.set(c, s.teams[c]);
+  const used = new Set(out.values());
+  for (const c of seats) {
+    if (out.has(c)) continue;
+    const t = TEAMS.findIndex((_, k) => !used.has(k));
+    out.set(c, t < 0 ? 0 : t);
+    used.add(t);
+  }
+  return out;
+}
+
+/**
  * The team of each robot in a match, given their colours in player order (you, the other players, the CPU
- * players): the team of the row it sits in (`seating`, `rowTeams`). Always at least two teams, with two
- * robots or more (two robots share one row: the second then plays for another team).
+ * players). With Teams of 2 or 4, the team of the row it sits in (`seating`, `rowTeams`); in Custom, its own
+ * (`teams`). Always at least two teams, with two robots or more.
  */
 export function teamsFor(s: MatchSetup, colours: string[]): number[] {
   const seats = seating(s, colours);
-  const rows = rowTeams(s, colours.length);
-  const out = colours.map((c) => rows[Math.floor(seats.indexOf(c) / 2)]);
+  let out: number[];
+  if (fixedSize(s, colours.length)) {
+    const rows = rowTeams(s, colours.length);
+    out = colours.map((c) => rows[Math.floor(seats.indexOf(c) / 2)]);
+  } else {
+    const t = customTeams(s, seats);
+    out = colours.map((c) => t.get(c)!);
+  }
   if (out.length > 1 && out.every((t) => t === out[0])) out[colours.indexOf(seats[seats.length - 1])] = out[0] === 0 ? 1 : 0;
   return out;
 }
 
-/** Write the seats and the rows' teams down as they are now. */
-function settle(s: MatchSetup, colours: string[]): number[] {
+/**
+ * Write everyone's seat and team down as they are now, so they stay put as players come and go and every
+ * page (and the server, online) works them out the same. Returns the rows' teams.
+ */
+export function settleTeams(s: MatchSetup, colours: string[]): number[] {
   s.seats = seating(s, colours);
   s.rowTeams = rowTeams(s, colours.length);
+  if (!fixedSize(s, colours.length)) {
+    const now = teamsFor(s, colours);
+    s.teams = Object.fromEntries(colours.map((c, i) => [c, now[i]]));
+  }
   return s.rowTeams;
 }
+const settle = settleTeams;
 
 /** The rows that are one team with row `row` for the colour changes: its team's rows with a team size, else just it. */
 function rowsOf(s: MatchSetup, n: number, row: number): number[] {
@@ -314,51 +351,91 @@ function rowsOf(s: MatchSetup, n: number, row: number): number[] {
   return Array.from({ length: span }, (_, k) => b * span + k).filter((r) => r < Math.ceil(n / 2));
 }
 
-/**
- * The colours the ‹ › on a card in row `row` goes through, in TEAMS order: in Custom every colour (the same
- * colour as another row makes them one team), except one that would leave only one team; with a team size,
- * the colours no other team has.
- */
+/** With Teams of 2 or 4: the colours the ‹ › on a card in row `row` goes through: the ones no other team has. */
 export function rowChoices(s: MatchSetup, colours: string[], row: number): number[] {
   const now = rowTeams(s, colours.length);
   const mine = rowsOf(s, colours.length, row);
   const others = now.filter((_, r) => !mine.includes(r));
-  if (fixedSize(s, colours.length)) return TEAMS.map((_, t) => t).filter((t) => !others.includes(t));
-  return TEAMS.map((_, t) => t).filter((t) => t === now[row] || others.length === 0 || others.some((o) => o !== t));
+  return TEAMS.map((_, t) => t).filter((t) => !others.includes(t));
 }
 
-/** Give row `row` (with a team size, its whole team's rows) the team colour `team`. False if not allowed (see rowChoices). */
-export function setRowTeam(s: MatchSetup, colours: string[], row: number, team: number): boolean {
-  if (!rowChoices(s, colours, row).includes(team)) return false;
+/**
+ * The colours the Team ‹ › on a robot's card goes through, in TEAMS order. In Custom every colour: one another
+ * robot has puts it on that robot's team; one nobody has, a team of its own. But not one that would leave only
+ * one team. With Teams of 2 or 4, its row's team colour (`rowChoices`).
+ */
+export function teamChoices(s: MatchSetup, colours: string[], colour: string): number[] {
+  if (fixedSize(s, colours.length)) return rowChoices(s, colours, Math.floor(seating(s, colours).indexOf(colour) / 2));
+  const now = teamsFor(s, colours);
+  const i = colours.indexOf(colour);
+  return TEAMS.map((_, t) => t).filter((t) => t === now[i] || colours.length < 2 || new Set(now.map((x, k) => (k === i ? t : x))).size >= 2);
+}
+
+/** In Custom: seat `colour` just after the last robot of team `team` (so teammates sit together). */
+function seatBeside(s: MatchSetup, colour: string, team: number): void {
+  const rest = s.seats.filter((c) => c !== colour);
+  let at = -1;
+  rest.forEach((c, k) => {
+    if (s.teams[c] === team) at = k;
+  });
+  if (at >= 0) s.seats = [...rest.slice(0, at + 1), colour, ...rest.slice(at + 1)];
+}
+
+/**
+ * Put a robot on team `team` with the Team ‹ › on its card. In Custom, it joins whoever has that colour and
+ * moves to sit beside them (the owner's ask); with Teams of 2 or 4, its whole row (its team's rows) takes the
+ * colour. False if not allowed (see teamChoices).
+ */
+export function pickTeam(s: MatchSetup, colours: string[], colour: string, team: number): boolean {
+  if (!teamChoices(s, colours, colour).includes(team)) return false;
   settle(s, colours);
-  for (const r of rowsOf(s, colours.length, row)) s.rowTeams[r] = team;
+  if (fixedSize(s, colours.length)) {
+    for (const r of rowsOf(s, colours.length, Math.floor(s.seats.indexOf(colour) / 2))) s.rowTeams[r] = team;
+    return true;
+  }
+  s.teams[colour] = team;
+  seatBeside(s, colour, team);
   return true;
 }
 
 /**
- * Row `row`'s team takes the next colour along that no other row has (the owner's ask: tap where a robot's
- * name is and the colour changes for everyone in its row; with a team size, its team's rows). Returns it.
+ * A tap where a robot's name is: its team takes the next colour no other team has, for everyone on it (in
+ * Custom, everyone with its colour; with Teams of 2 or 4, everyone in its team's rows). Returns the colour.
  */
-export function recolourRow(s: MatchSetup, colours: string[], row: number): number {
-  const now = settle(s, colours);
-  const mine = rowsOf(s, colours.length, row);
-  const others = now.filter((_, r) => !mine.includes(r));
+export function recolour(s: MatchSetup, colours: string[], colour: string): number {
+  const rows = settle(s, colours);
+  const now = teamsFor(s, colours);
+  const mine = now[colours.indexOf(colour)];
+  const others = new Set(now.filter((t) => t !== mine));
   for (let d = 1; d < TEAMS.length; d++) {
-    const t = (now[row] + d) % TEAMS.length;
-    if (others.includes(t)) continue;
-    for (const r of mine) s.rowTeams[r] = t;
+    const t = (mine + d) % TEAMS.length;
+    if (others.has(t)) continue;
+    if (fixedSize(s, colours.length)) rows.forEach((x, r) => x === mine && (s.rowTeams[r] = t));
+    else for (const c of colours) if (s.teams[c] === mine) s.teams[c] = t;
     return t;
   }
-  return now[row];
+  return mine;
 }
 
-/** Two robots swap seats (one card dragged onto the other): each then plays for the other's row's team. */
-export function swapSeats(s: MatchSetup, colours: string[], a: string, b: string): void {
+/**
+ * Card `a` dragged onto card `b`. With Teams of 2 or 4 they swap seats, so each plays for the other's row.
+ * In Custom (and with teams off) `a` moves to sit beside `b` and, in a teams match, joins its team (unless
+ * that would leave only one team).
+ */
+export function dropOnto(s: MatchSetup, colours: string[], a: string, b: string, teamsOn: boolean): void {
   settle(s, colours);
   const i = s.seats.indexOf(a);
   const j = s.seats.indexOf(b);
-  if (i < 0 || j < 0) return;
-  [s.seats[i], s.seats[j]] = [b, a];
+  if (i < 0 || j < 0 || a === b) return;
+  if (fixedSize(s, colours.length)) {
+    [s.seats[i], s.seats[j]] = [b, a];
+    return;
+  }
+  const t = s.teams[b];
+  if (teamsOn && teamChoices(s, colours, a).includes(t)) s.teams[a] = t;
+  const rest = s.seats.filter((c) => c !== a);
+  const k = rest.indexOf(b);
+  s.seats = [...rest.slice(0, k + 1), a, ...rest.slice(k + 1)];
 }
 
 /** A robot moves to the last seat (a card dragged onto the empty place at the end). */
@@ -367,21 +444,43 @@ export function seatLast(s: MatchSetup, colours: string[], a: string): void {
   s.seats = [...s.seats.filter((c) => c !== a), a];
 }
 
-/** Everyone in two teams again: the first half of the rows one colour, the rest another (with a team size, its teams). */
-export function splitTeams(s: MatchSetup, colours: string[]): void {
-  const now = settle(s, colours);
-  if (fixedSize(s, colours.length)) return;
-  const rows = now.length;
-  const a = now[0] ?? 0;
-  const b = now.find((t) => t !== a) ?? (a === 0 ? 1 : 0);
-  const half = Math.max(1, Math.floor(rows / 2));
-  s.rowTeams = now.map((_, r) => (r < half ? a : b));
+/**
+ * Picking a team size. Into Custom, everyone keeps the team they had; into Teams of 2 or 4, each row takes
+ * the team of whoever sits first in it, and the rows are then kept to that size's rules.
+ */
+export function setTeamSize(s: MatchSetup, colours: string[], size: number): void {
+  const before = teamsFor(s, colours);
+  const seats = seating(s, colours);
+  s.seats = seats;
+  s.teamSize = size;
+  if (fixedSize(s, colours.length)) s.rowTeams = Array.from({ length: Math.ceil(seats.length / 2) }, (_, r) => before[colours.indexOf(seats[r * 2])]);
+  else s.teams = Object.fromEntries(colours.map((c, i) => [c, before[i]]));
+  settle(s, colours);
 }
 
-/** The teams in play and how many are on each, biggest first: "2 v 2 v 1". */
+/** Split evenly, in Custom: two teams, the first half of the seats and the rest. (Teams of 2 or 4 are even already.) */
+export function splitTeams(s: MatchSetup, colours: string[]): void {
+  settle(s, colours);
+  if (fixedSize(s, colours.length)) return;
+  const now = teamsFor(s, colours);
+  const a = now[colours.indexOf(s.seats[0])] ?? 0;
+  const b = a === 0 ? 1 : 0;
+  const half = Math.ceil(s.seats.length / 2);
+  s.seats.forEach((c, k) => (s.teams[c] = k < half ? a : b));
+}
+
+/** Teams on: everyone on a team of their own in Custom (the owner's ask), or the rows as the team size makes them. */
+export function startTeams(s: MatchSetup, colours: string[]): void {
+  s.teams = {};
+  s.rowTeams = [];
+  settle(s, colours);
+}
+
+/** The teams in play and how many are on each, biggest first: "2 v 2 v 1"; with more than four teams, "6 teams". */
 export function lineUp(s: MatchSetup, colours: string[]): string {
   const n = new Map<number, number>();
   for (const t of teamsFor(s, colours)) n.set(t, (n.get(t) ?? 0) + 1);
+  if (n.size > 4) return `${n.size} teams`;
   return [...n.values()].sort((a, b) => b - a).join(' v ');
 }
 
@@ -391,6 +490,12 @@ export function lineUp(s: MatchSetup, colours: string[]): string {
  */
 export function swapTeams(s: MatchSetup, a: string, b: string): void {
   s.seats = s.seats.map((c) => (c === a ? b : c === b ? a : c));
+  const ta = s.teams[a];
+  const tb = s.teams[b];
+  delete s.teams[a];
+  delete s.teams[b];
+  if (tb !== undefined) s.teams[a] = tb;
+  if (ta !== undefined) s.teams[b] = ta;
 }
 
 export function defaultSetup(myColor: string): MatchSetup {
@@ -420,6 +525,7 @@ export function defaultSetup(myColor: string): MatchSetup {
     teamsOn: false,
     seats: [],
     rowTeams: [],
+    teams: {},
     teamSize: 0, // Custom (the owner's call)
     friendlyFire: false, // teammates are safe from each other's blasts unless it is switched on
   };
@@ -440,7 +546,7 @@ export function pickArena(s: MatchSetup, id: ArenaId): void {
  */
 export function defaultRules(s: MatchSetup, myColor: string): MatchSetup {
   // (the Players page's settings stay: the players, Randomize CPUs and the teams)
-  const out = { ...defaultSetup(myColor), cpus: s.cpus, map: s.map, randEmotes: s.randEmotes, randLevels: s.randLevels, teamsOn: s.teamsOn, seats: s.seats, rowTeams: s.rowTeams, teamSize: s.teamSize, friendlyFire: s.friendlyFire };
+  const out = { ...defaultSetup(myColor), cpus: s.cpus, map: s.map, randEmotes: s.randEmotes, randLevels: s.randLevels, teamsOn: s.teamsOn, seats: s.seats, rowTeams: s.rowTeams, teams: s.teams, teamSize: s.teamSize, friendlyFire: s.friendlyFire };
   pickArena(out, s.arena);
   return out;
 }
@@ -584,6 +690,9 @@ export function readSetup(raw: unknown, myColor: string, colorIds: string[]): Ma
   if (typeof r.friendlyFire === 'boolean') out.friendlyFire = r.friendlyFire;
   if (Array.isArray(r.seats)) out.seats = r.seats.filter((c, i, all) => typeof c === 'string' && colorIds.includes(c) && all.indexOf(c) === i).slice(0, 9);
   if (Array.isArray(r.rowTeams)) out.rowTeams = r.rowTeams.slice(0, 5).map((t) => (isTeam(t) ? t : 0));
+  if (r.teams && typeof r.teams === 'object') {
+    for (const [c, t] of Object.entries(r.teams)) if (colorIds.includes(c) && isTeam(t)) out.teams[c] = t;
+  }
   out.teamSize = clampInt(r.teamSize, 0, 4, d.teamSize);
   if (out.teamSize % 2) out.teamSize = 0; // (whole rows of two: Teams of 2 or 4)
   return out;

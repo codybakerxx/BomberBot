@@ -51,13 +51,15 @@ import {
   problem,
   fixedSize,
   lineUp,
-  recolourRow,
-  rowChoices,
-  rowTeams,
+  dropOnto,
+  pickTeam,
+  recolour,
+  settleTeams,
+  setTeamSize,
+  startTeams,
+  teamChoices,
   seatLast,
   seating,
-  setRowTeam,
-  swapSeats,
   teamSizes,
   splitTeams,
   swapTeams,
@@ -173,6 +175,9 @@ export function createLobby(host: LobbyHost): {
   // ------------------------------------------------------------ changes
   /** After any change: save, and redraw everything that shows it. */
   function changed(): void {
+    // in a teams match, everyone's seat and team written down as they are, so they stay put as players come
+    // and go, and the server (online) works them out the same
+    if (s().teamsOn && canEdit()) settleTeams(s(), inOrder());
     host.save();
     refresh();
   }
@@ -481,7 +486,7 @@ export function createLobby(host: LobbyHost): {
       get: () => s().teamsOn,
       set: (on) => {
         s().teamsOn = on;
-        if (on) splitTeams(s(), inOrder()); // (switched on: split evenly to start with)
+        if (on) startTeams(s(), inOrder()); // (switched on: in Custom everyone on a team of their own)
         changed();
       },
       under: [
@@ -491,8 +496,7 @@ export function createLobby(host: LobbyHost): {
           values: () => ['Custom', ...teamSizes(inOrder().length).map((k) => `Teams of ${k}`)],
           get: () => Math.max(0, [0, ...teamSizes(inOrder().length)].indexOf(fixedSize(s(), inOrder().length))),
           set: (i) => {
-            s().teamSize = [0, ...teamSizes(inOrder().length)][i] ?? 0;
-            if (s().teamSize) splitTeams(s(), inOrder()); // (writes the rows down as that size makes them)
+            setTeamSize(s(), inOrder(), [0, ...teamSizes(inOrder().length)][i] ?? 0);
             changed();
           },
           wrap: false,
@@ -550,14 +554,10 @@ export function createLobby(host: LobbyHost): {
     const order = inOrder();
     return teamsFor(s(), order)[order.indexOf(colour)] ?? 0;
   }
-  /** The row of the Players page a robot sits in (two to a row; the row is its team). */
-  function rowOf(colour: string): number {
-    return Math.floor(seating(s(), inOrder()).indexOf(colour) / 2);
-  }
   /** The next colour for the row `colour` sits in (with a team size, its team's rows): everyone there changes with it (the owner's ask). */
   function nextTeamColour(colour: string): void {
     if (!canEdit() || !s().teamsOn) return;
-    recolourRow(s(), inOrder(), rowOf(colour));
+    recolour(s(), inOrder(), colour);
     changed();
   }
   function drawBotOn(cv: HTMLCanvasElement, colorId: string, fill = 0.92): void {
@@ -629,17 +629,19 @@ export function createLobby(host: LobbyHost): {
     swipeable(row, step);
     return row;
   }
-  /** The Team row on a card: ‹ its row's team colour ›, through the colours the row can have (`rowChoices`); the whole row changes with it. */
+  /**
+   * The Team row on a card: ‹ its team colour ›, through `teamChoices`. In Custom a colour another robot has
+   * puts it on that team, beside it; with Teams of 2 or 4 its whole row (its team's rows) changes colour.
+   */
   function teamRow(who: string): HTMLElement {
     const colour = colourOf(who);
     const t = teamOf(colour);
     const step = (d: number): void => {
       const order = inOrder();
-      const row = rowOf(colour);
-      const list = rowChoices(s(), order, row);
-      const at = list.indexOf(rowTeams(s(), order.length)[row]);
+      const list = teamChoices(s(), order, colour);
+      const at = list.indexOf(teamOf(colour));
       const next = list[(at + d + list.length) % list.length];
-      if (next !== undefined && setRowTeam(s(), order, row, next)) changed();
+      if (next !== undefined && pickTeam(s(), order, colour, next)) changed();
     };
     return pickRow(`tp-${who}`, 'Team', TEAMS[t].short, canEdit() ? step : null, TEAMS[t].color);
   }
@@ -832,7 +834,8 @@ export function createLobby(host: LobbyHost): {
       row.className = 'slot-row';
       row.append(...items.slice(r * 2, r * 2 + 2));
       const first = made[r * 2];
-      if (s().teamsOn && first) {
+      // (the rows are tinted only with Teams of 2 or 4, where the row is the team; in Custom each card shows its own)
+      if (s().teamsOn && first && fixedSize(s(), order.length)) {
         const t = teams[order.indexOf(first[0])];
         row.classList.add('teamed');
         row.style.setProperty('--team', TEAMS[t].color);
@@ -962,13 +965,14 @@ export function createLobby(host: LobbyHost): {
     true,
   );
   /**
-   * Card `who` dropped on card `on`: the two swap seats, so each then plays for the other's row's team (the
-   * owner's design: the row is the team). Dropped on the empty place at the end (Add CPU player): the last seat.
+   * Card `who` dropped on card `on` (`dropOnto`): with Teams of 2 or 4 the two swap seats, so each plays for
+   * the other's row (the owner's design: the row is the team); in Custom it sits beside `on` and joins its
+   * team. Dropped on the empty place at the end (Add CPU player): the last seat.
    */
   function dropOn(who: string, on: string): void {
     if (!canEdit()) return;
     if (on === 'add') seatLast(s(), inOrder(), colourOf(who));
-    else swapSeats(s(), inOrder(), colourOf(who), colourOf(on));
+    else dropOnto(s(), inOrder(), colourOf(who), colourOf(on), s().teamsOn);
     changed();
   }
 
