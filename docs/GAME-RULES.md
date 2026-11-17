@@ -201,13 +201,16 @@ The blocks were made 20% faster on 11 November 2026, after play-testing: they to
 
 *`teams` and `friendlyFire` in `WorldConfig`, `allies`, `blastHurts`, `winnersOf` in sim.ts; `teamsFor`, `splitTeams` in setup.ts*
 
-- With **Teams** switched on (the Players page), the robots play on two sides, the **Red team** and the **Blue team**. Switched on, it splits everyone half and half in player order (P1, P2… red, the rest blue; with an odd number red has one more). **Split evenly** does it again. The badge under each robot's feet on its card says its side, and a tap moves it to the other (a CPU player's panel has a Team row too). A side is never left empty: the last robot on one stays.
-- A robot that joins goes on the smaller side. A robot keeps its side when it swaps colours with another.
-- The round is won by the **last side** with a robot in it. Every robot on that side wins the round and gets the point, those knocked out included, so teammates always have the same score and reach Rounds to win together. The result panel names the side (Red team wins the round; Your team wins the round).
+- With **Teams** switched on (the Players page), the robots play in teams. A team is its colour: Red, Blue, Green, Yellow, Purple, Orange, Pink or Cyan (`TEAMS`).
+- **Team size**: Teams of 2, 3 or 4, as the number of players allows (up to four teams; `maxTeams`). Switching Teams on, changing the size, or **Split evenly** puts everyone in teams as evenly as can be, in player order: P1 and the next ones in the first team, and so on (7 in teams of 3 is 3 v 2 v 2). The row beside Split evenly shows the teams as they are (2 v 2 v 2 v 2).
+- **A team's colour**: tap the badge under any robot on its card, or tap your own card, and that team takes the next colour no other team has. Everyone on it changes with it. Splitting again keeps the teams' colours.
+- **Moving a CPU player** to another team: the Team row on its panel. There are always at least two teams.
+- A robot that joins goes on the smallest team. A robot keeps its team when it swaps colours with another.
+- The round is won by the **last team** with a robot in it. Every robot on that team wins the round and gets the point, those knocked out included, so teammates always have the same score and reach Rounds to win together. The result panel names the team (Green team wins the round; Your team wins the round).
 - **Friendly fire** (off unless switched on): off, a teammate's blast does not knock you out; your own blast still does. On, it does, like anyone's.
-- Angels and zombies keep their side. An angel coming back takes the place of a robot of the other side only.
+- Angels and zombies keep their team. An angel coming back takes the place of a robot of another team only.
 - CPU players do not go after their teammates, and with friendly fire on do not drop a bomb that would leave a teammate caught with no way out.
-- In the arena each robot stands on a ring in its side's colour; the scoreboard rings its head in that colour, and the menu during a match marks each line.
+- In the arena each robot stands on a ring in its team's colour, filled with a faint, dull wash of it; the names along the top are written in the team colours (faded once out); the menu during a match marks each line.
 
 ## Lives and angels
 
@@ -333,7 +336,7 @@ The host can change these before a match. Left alone, every one is the usual rul
 | Custom power-ups | For each kind: Off, Rare (half), Normal, Lots (double) | Its chance under a brick (`itemChance`). A boot and a glove are only made sure of when they are not Off |
 | Lives | 1 to 5 | Lives each robot has in a round (`lives`); see Lives and angels |
 | Post-Mortem Behavior | Off (the default: watch) or on: Angel (with Angels come back) or Zombie | What a robot out of lives does: watches, haunts the wall throwing bombs in (`angels`: 'on'; 'revive' with Angels come back), or gets up as a zombie (`zombies`) |
-| Teams (Players page) | Off, or on: Red and Blue, Split evenly, each robot's side; Friendly fire off or on | The last side standing wins (`teams`, `friendlyFire`); see Teams |
+| Teams (Players page) | Off, or on: Teams of 2, 3 or 4, Split evenly, each team's colour, each CPU player's team; Friendly fire off or on | The last team standing wins (`teams`, `friendlyFire`); see Teams |
 
 ## Not in the game yet
 

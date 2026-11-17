@@ -1237,3 +1237,21 @@ for (let seed = 1; seed <= 40; seed++) {
     assert.ok(w.players[2].alive);
   }
 }
+
+// 24. more than two teams (and any team colour): the round goes on until one team is left
+{
+  const six = Array.from({ length: 6 }, (_, i) => ({ colorId: String(i) }));
+  const w = createWorld({ seed: 4, players: six, softDensity: 0, roundTicks: 0, teams: [5, 5, 2, 2, 7, 7], cols: 15, rows: 13 });
+  assert.ok(w.teams);
+  const out = (...ids: number[]): void => ids.forEach((i) => Object.assign(w.players[i], { alive: false, lives: 0, respawnAt: -1 }));
+  out(0, 1);
+  run(w, 60, none);
+  assert.equal(w.over, null, 'two teams still in');
+  out(2);
+  run(w, 60, none);
+  assert.equal(w.over, null, 'still two teams');
+  out(3);
+  run(w, 60, none);
+  assert.deepStrictEqual(w.over, { winner: 4, team: 7 }, 'only the cyan team is left: it wins');
+  assert.deepStrictEqual(winnersOf(w), [4, 5]);
+}

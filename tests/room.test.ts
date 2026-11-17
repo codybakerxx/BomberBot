@@ -23,7 +23,7 @@ import {
   type ServerMsg,
 } from '../src/net';
 import { makeRng } from '../src/sim';
-import { ARENAS, MAPS, defaultRules, itemChances, defaultSetup, readSetup, rollCpus, splitTeams, summary, swapTeams, teamsFor, wholeTile, worldConfig } from '../src/setup';
+import { ARENAS, MAPS, defaultRules, itemChances, defaultSetup, lineUp, maxTeams, moveToTeam, readSetup, recolourTeam, rollCpus, splitTeams, summary, swapTeams, teamSizes, teamsFor, wholeTile, worldConfig } from '../src/setup';
 import { BOT_LEVELS } from '../src/bot';
 import { DANCE_IDS } from '../src/dances';
 import type { World } from '../src/sim';
@@ -396,9 +396,41 @@ assert.strictEqual(back.last('room')!.host, back.last('room')!.you, 'the friend 
   assert.equal(back.teamsOn, true);
   assert.equal(back.friendlyFire, true);
   assert.deepStrictEqual(back.teams, s.teams);
-  assert.deepStrictEqual(readSetup({ ...s, teams: { gold: 3, nope: 1, blue: 1 } }, 'pink', COLOR_IDS).teams, { blue: 1 }, 'only real colours and sides are kept');
+  assert.deepStrictEqual(readSetup({ ...s, teams: { gold: 9, nope: 1, blue: 1 } }, 'pink', COLOR_IDS).teams, { blue: 1 }, 'only real colours and teams are kept');
   assert.equal(defaultRules(s, 'pink').teamsOn, true, 'Reset to Default on the Match page leaves the teams alone');
   assert.ok(summary(s).includes('Teams, friendly fire'));
+
+  // teams of 2, 3 or 4: with eight robots, up to four teams; the teams keep their colours when split again
+  const eight = ['gold', 'black', 'pink', 'blue', 'red', 'orange', 'white', 'green'];
+  assert.deepStrictEqual([2, 3, 4, 5, 6, 7, 8].map(maxTeams), [2, 2, 2, 3, 3, 4, 4]);
+  assert.deepStrictEqual(teamSizes(7, 3), [3, 2, 2]);
+  const t = defaultSetup('gold');
+  t.teamsOn = true;
+  t.teamCount = 4;
+  splitTeams(t, eight);
+  assert.deepStrictEqual(teamsFor(t, eight), [0, 0, 1, 1, 2, 2, 3, 3], 'four teams of two');
+  assert.equal(lineUp(t, eight), '2 v 2 v 2 v 2');
+  t.teamCount = 3;
+  splitTeams(t, eight);
+  assert.deepStrictEqual(teamsFor(t, eight), [0, 0, 0, 1, 1, 1, 2, 2], 'teams of three: 3 v 3 v 2');
+  // a tap on a card: the whole team takes the next colour no other team has
+  assert.equal(recolourTeam(t, eight, 0), 3, 'red becomes yellow (blue and green are taken)');
+  assert.deepStrictEqual(teamsFor(t, eight), [3, 3, 3, 1, 1, 1, 2, 2], 'and everyone on it changes with it');
+  t.teamCount = 2;
+  splitTeams(t, eight);
+  assert.deepStrictEqual(teamsFor(t, eight), [3, 3, 3, 3, 1, 1, 1, 1], 'split again: the teams keep their colours');
+  // moving a robot to another team, but never down to one team
+  assert.ok(moveToTeam(t, eight, 'green', 3));
+  assert.equal(lineUp(t, eight), '5 v 3');
+  const two = ['gold', 'black'];
+  const u = defaultSetup('gold');
+  u.teamsOn = true;
+  splitTeams(u, two);
+  assert.ok(!moveToTeam(u, two, 'black', 0), 'one against one: neither can join the other');
+  // too many teams asked for the robots there are: as many as there is room for
+  u.teamCount = 4;
+  splitTeams(u, ['gold', 'black', 'pink']);
+  assert.equal(lineUp(u, ['gold', 'black', 'pink']), '2 v 1');
 }
 
 console.log('room checks passed');

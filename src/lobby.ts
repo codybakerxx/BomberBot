@@ -49,6 +49,10 @@ import {
   clockText,
   defaultRules,
   problem,
+  lineUp,
+  maxTeams,
+  moveToTeam,
+  recolourTeam,
   splitTeams,
   swapTeams,
   TEAMS,
@@ -471,29 +475,53 @@ export function createLobby(host: LobbyHost): {
         }),
       ],
     }),
-    // Teams (the owner's ask, November 2026): two sides, split half and half with one tap, or each robot put on
-    // a side by hand with the badge on its card; and whether teammates' blasts can knock each other out.
+    // Teams (the owner's ask, November 2026): the robots split evenly into teams of 2, 3 or 4 with one tap, a
+    // CPU player moved to another team on its panel, a team's colour changed by tapping its badge (or your own
+    // card); and whether teammates' blasts can knock each other out.
     toggle({
       label: 'Teams',
       get: () => s().teamsOn,
       set: (on) => {
         s().teamsOn = on;
-        if (on) splitTeams(s(), inOrder()); // (switched on: half and half to start with)
+        if (on) splitTeams(s(), inOrder()); // (switched on: split evenly to start with)
         changed();
       },
-      under: [splitRow(), toggle({
-        label: 'Friendly fire',
-        get: () => s().friendlyFire,
-        set: (on) => {
-          s().friendlyFire = on;
-          changed();
-        },
-      })],
+      under: [
+        choice({
+          label: 'Team size',
+          // (from the smallest teams to the biggest: with 8 players, Teams of 2, 3, 4)
+          values: () => teamCounts().map((k) => `Teams of ${Math.ceil(inOrder().length / k)}`),
+          get: () => teamCounts().indexOf(Math.min(Math.max(2, s().teamCount), maxTeams(inOrder().length))),
+          set: (i) => {
+            s().teamCount = teamCounts()[i];
+            splitTeams(s(), inOrder());
+            changed();
+          },
+          disabled: () => teamCounts().length < 2,
+          wrap: false,
+        }),
+        splitRow(),
+        toggle({
+          label: 'Friendly fire',
+          get: () => s().friendlyFire,
+          set: (on) => {
+            s().friendlyFire = on;
+            changed();
+          },
+        }),
+      ],
     }),
   ];
   const refreshAll = mount($('allCpus'), allCpus);
 
-  /** The Split evenly row under Teams: everyone half and half, in player order (the first half red). */
+  /** How many teams the players here can be split into, most first (so the smallest teams come first). */
+  function teamCounts(): number[] {
+    const out: number[] = [];
+    for (let k = maxTeams(inOrder().length); k >= 2; k--) out.push(k);
+    return out;
+  }
+
+  /** The row under Team size: the teams as they are (2 v 2), and Split evenly, which splits everyone afresh in player order. */
   function splitRow(): Opt {
     const row = document.createElement('div');
     row.className = 'opt opt-split';
@@ -516,9 +544,7 @@ export function createLobby(host: LobbyHost): {
     return {
       el: row,
       refresh(): void {
-        const t = teamsFor(s(), inOrder());
-        const red = t.filter((x) => x === 0).length;
-        label.textContent = `${red} vs ${t.length - red}`;
+        label.textContent = lineUp(s(), inOrder());
       },
     };
   }
@@ -528,34 +554,22 @@ export function createLobby(host: LobbyHost): {
     const all: [number, string][] = [[myP(), host.myColor], ...guests().map((g): [number, string] => [guestP(g), g.colorId]), ...s().cpus.map((c, i): [number, string] => [cpuP(i), c.colorId])];
     return all.sort((a, b) => a[0] - b[0]).map(([, c]) => c);
   }
-  /** The side a robot is on, by its colour. */
+  /** The team a robot is on (an index into TEAMS), by its colour. */
   function teamOf(colour: string): number {
     const order = inOrder();
     return teamsFor(s(), order)[order.indexOf(colour)] ?? 0;
   }
-  /**
-   * Put a robot on a side. Everyone's side is written down, so it stays put as players come and go. A side
-   * is never left empty: the last robot on one stays there.
-   */
-  function setTeam(colour: string, team: number): void {
+  /** The teams in play, in TEAMS order. */
+  function teamsInPlay(): number[] {
+    return [...new Set(teamsFor(s(), inOrder()))].sort((a, b) => a - b);
+  }
+  /** The next colour for the team `colour` is on: everyone on it changes with it (the owner's ask). */
+  function nextTeamColour(colour: string): void {
     if (!canEdit() || !s().teamsOn) return;
-    const order = inOrder();
-    const now = teamsFor(s(), order);
-    const i = order.indexOf(colour);
-    if (i < 0 || now[i] === team) return;
-    if (now.filter((t) => t === now[i]).length <= 1) {
-      // the only one on its side: the badge gives a little shake instead
-      const chip = document.querySelector<HTMLElement>(`.team-chip[data-colour="${colour}"]`);
-      chip?.classList.remove('no');
-      void chip?.offsetWidth;
-      chip?.classList.add('no');
-      return;
-    }
-    order.forEach((c, k) => (s().teams[c] = now[k]));
-    s().teams[colour] = team;
+    recolourTeam(s(), inOrder(), teamOf(colour));
     changed();
   }
-  /** The badge on a card in a teams match: its side, and a tap switches it. */
+  /** The badge on a card in a teams match: its team's colour, and a tap changes the colour of the whole team. */
   function teamChip(wrap: HTMLElement, colour: string, who: string): void {
     if (!s().teamsOn) return;
     const t = teamOf(colour);
@@ -565,11 +579,11 @@ export function createLobby(host: LobbyHost): {
     chip.dataset.colour = colour;
     chip.style.setProperty('--team', TEAMS[t].color);
     chip.textContent = TEAMS[t].short;
-    chip.setAttribute('aria-label', `${who}: ${TEAMS[t].name}.${canEdit() ? ` Tap to move to the ${TEAMS[1 - t].name}.` : ''}`);
+    chip.setAttribute('aria-label', `${who}: ${TEAMS[t].name}.${canEdit() ? ' Tap to change the team’s colour, for everyone on it.' : ''}`);
     if (!canEdit()) chip.disabled = true;
     chip.addEventListener('click', (e) => {
       e.stopPropagation();
-      setTeam(colour, 1 - t);
+      nextTeamColour(colour);
     });
     wrap.classList.add('teamed');
     wrap.style.setProperty('--team', TEAMS[t].color);
@@ -606,6 +620,11 @@ export function createLobby(host: LobbyHost): {
     mt.querySelector('b')!.textContent = host.myName || 'You'; // typed by the player: set as text, never as markup
     me.append(mc, mt);
     mc.dataset.who = 'me';
+    // a teams match: a tap on your card changes your team's colour, your teammates' with it (the owner's ask)
+    if (s().teamsOn && canEdit()) {
+      me.classList.add('tap-team');
+      me.addEventListener('click', () => nextTeamColour(host.myColor));
+    }
     const meWrap = document.createElement('div');
     meWrap.className = 'slot-wrap';
     meWrap.append(me);
@@ -732,13 +751,15 @@ export function createLobby(host: LobbyHost): {
       },
       wrap: false,
     }),
+    // which team it plays on: one of the teams in play (it cannot leave only one team)
     choice({
       label: 'Team',
       hint: () => (s().teamsOn ? '' : 'Switch Teams on first, on the Players page'),
-      values: () => TEAMS.map((t) => t.name),
-      get: () => (s().cpus[editing] ? teamOf(s().cpus[editing].colorId) : 0),
+      values: () => (s().teamsOn ? teamsInPlay().map((t) => TEAMS[t].name) : ['Off']),
+      get: () => (s().teamsOn && s().cpus[editing] ? Math.max(0, teamsInPlay().indexOf(teamOf(s().cpus[editing].colorId))) : 0),
       set: (i) => {
-        if (s().cpus[editing]) setTeam(s().cpus[editing].colorId, i);
+        const c = s().cpus[editing];
+        if (c && moveToTeam(s(), inOrder(), c.colorId, teamsInPlay()[i])) changed();
       },
       disabled: () => !s().teamsOn,
       wrap: false,

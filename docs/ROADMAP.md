@@ -12,7 +12,7 @@ Each step is played on a phone before the next one starts.
 | 2 | **Computer players.** The other bots move, avoid blasts and fight back, so the game can be played alone. | Built: three levels (Beginner, Normal, Hard). Being play-tested. |
 | 3 | **Round flow.** Last one standing wins, blocks fall to shrink the arena as time runs out, and a results screen. | Built: a timer of 1 minute 30, then 50 seconds of falling blocks, then a fight in the square that is left; a scoreboard of rounds won, with a crown for the leader; knock-out and winning animations. Being play-tested. Choosing the round length is still to come. |
 | 4 | **Menus.** A proper character select, a choice of round length, a colour picker, level select, and choosing which power-ups are in a custom game. | Planned |
-| 5 | **Teams.** Red and Blue sides, split evenly or by hand, friendly fire on or off. | Built (November 2026) |
+| 5 | **Teams.** Teams of 2, 3 or 4 in eight colours, split evenly or by hand, friendly fire on or off. | Built (November 2026) |
 | 6 | **Online.** Rooms for up to eight players. | Built (November 2026): see docs/ONLINE.md. Being play-tested. |
 | 7 | **Polish.** Final look, colours and sound, then putting it online for friends. | Planned |
 

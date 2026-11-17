@@ -524,7 +524,7 @@ function fitText(c: CanvasRenderingContext2D, text: string, max: number): string
 function drawScore(): void {
   const places = Array.from({ length: Math.max(4, world.players.length) }, (_, i) => world.players[i]);
   const winner = world.over ? world.over.winner : -1;
-  const key = places.map((p, i) => (p ? `${p.colorId}${p.alive ? '' : 'x'}${p.zombie ? 'z' : ''}${wins[i]}l${p.lives}${scoreName(i)}` : '-')).join('|') + `|${winner}|${leader}|${score.width}x${score.height}`;
+  const key = places.map((p, i) => (p ? `${p.colorId}t${p.team}${p.alive ? '' : 'x'}${p.zombie ? 'z' : ''}${wins[i]}l${p.lives}${scoreName(i)}` : '-')).join('|') + `|${winner}|${leader}|${score.width}x${score.height}`;
   if (key === scoreKey) return;
   scoreKey = key;
   const k = score.width / (parseFloat(score.style.width) || score.width); // screen pixels to canvas pixels
@@ -560,16 +560,6 @@ function drawScore(): void {
     drawHead(sctx, cx, cy, r, col, { xEyes: !!p && !p.alive });
     sctx.globalAlpha = 1;
     if (!p) return;
-    // a teams match: a ring round the head in its side's colour
-    if (p.team >= 0) {
-      sctx.strokeStyle = TEAMS[p.team].color;
-      sctx.lineWidth = Math.max(1.5, r * 0.16);
-      sctx.globalAlpha = dim < 1 ? 0.6 : 1;
-      sctx.beginPath();
-      sctx.arc(cx, cy, r + sctx.lineWidth * 0.9, 0, Math.PI * 2);
-      sctx.stroke();
-      sctx.globalAlpha = 1;
-    }
     // the crown goes on last, and is not dimmed
     if (i === leader) drawHead(sctx, cx, cy, r, col, { crownOnly: true });
     sctx.fillStyle = winner >= 0 && onSide(i, winner) ? col.glow : p.alive ? '#eef1fb' : '#8a90a3';
@@ -590,11 +580,16 @@ function drawScore(): void {
     const name = scoreName(i);
     sctx.font = `600 ${scoreNameSize}px "Chakra Petch", system-ui, sans-serif`;
     sctx.textAlign = 'center';
-    sctx.fillStyle = i === myIdx() ? col.glow : p.alive && !p.zombie ? '#c9cfdf' : '#6f7588';
+    // (a teams match: every name in its team's colour, faded once out of the round; the owner's ask)
+    if (p.team >= 0) {
+      sctx.fillStyle = TEAMS[p.team].color;
+      if (!(p.alive && !p.zombie)) sctx.globalAlpha = 0.5;
+    } else sctx.fillStyle = i === myIdx() ? col.glow : p.alive && !p.zombie ? '#c9cfdf' : '#6f7588';
     const shown = fitText(sctx, name, cell.w - 4);
     const half = sctx.measureText(shown).width / 2;
     // centred under the head, kept inside its own place
     sctx.fillText(shown, Math.max(cell.x + 2 + half, Math.min(cx, cell.x + cell.w - 2 - half)), cell.ny);
+    sctx.globalAlpha = 1;
     sctx.textAlign = 'left';
     said.push(`${nameOf(i)}${p.team >= 0 ? `, ${TEAMS[p.team].name},` : ''} ${wins[i]}${i === leader ? ' (in the lead)' : ''}`);
   });

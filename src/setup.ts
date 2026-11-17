@@ -187,47 +187,139 @@ export interface MatchSetup {
   /** with angels: an angel whose bomb knocks a robot out comes back in its place */
   angelsBack: boolean;
   /**
-   * Teams (the Players page; the owner's ask, November 2026): two sides, the Red team and the Blue team
-   * (TEAMS), and the last side standing wins the round. Every robot on it gets the point.
+   * Teams (the Players page; the owner's ask, November 2026): the robots play in teams, and the last team
+   * standing wins the round. Every robot on it gets the point. A team is its colour (TEAMS): changing a
+   * team's colour changes it for everyone on it.
    */
   teamsOn: boolean;
-  /** each robot's side by its colour (one colour is one robot in a match). A robot not in it is put on the smaller side (`teamsFor`). */
+  /** each robot's team by its colour (one colour is one robot in a match): an index into TEAMS. A robot not in it joins the smallest team (`teamsFor`). */
   teams: Record<string, number>;
+  /** how many teams Split evenly makes, 2 to MAX_TEAMS (the lobby offers it as Teams of 2, 3, 4) */
+  teamCount: number;
   /** in a teams match, can a teammate's blast knock you out? */
   friendlyFire: boolean;
 }
 
-/** The two sides of a teams match. */
+/** The colours a team can have. A team is known by its colour: the Red team, the Green team... */
 export const TEAMS = [
   { name: 'Red team', short: 'Red', color: '#ff5a5f' },
   { name: 'Blue team', short: 'Blue', color: '#3fa7ff' },
+  { name: 'Green team', short: 'Green', color: '#3ddc84' },
+  { name: 'Yellow team', short: 'Yellow', color: '#ffd23f' },
+  { name: 'Purple team', short: 'Purple', color: '#b07cff' },
+  { name: 'Orange team', short: 'Orange', color: '#ff9440' },
+  { name: 'Pink team', short: 'Pink', color: '#ff6ec7' },
+  { name: 'Cyan team', short: 'Cyan', color: '#3ee6e0' },
 ];
+/** The most teams a match can be split into: four teams of two, with eight players. */
+export const MAX_TEAMS = 4;
+const isTeam = (t: unknown): t is number => typeof t === 'number' && Number.isInteger(t) && t >= 0 && t < TEAMS.length;
 
-/**
- * The side of each robot in a match, given their colours in player order (you, the other players, the CPU
- * players): the side picked for it, or the smaller side for one with none yet. Always two sides that each
- * have someone on them (with two robots or more): if everyone is on one side, the last one goes to the other.
- */
-export function teamsFor(s: MatchSetup, colours: string[]): number[] {
+/** How many teams there can be with `n` robots: 2 up to one team for every two robots (4 at most). */
+export function maxTeams(n: number): number {
+  return Math.max(2, Math.min(MAX_TEAMS, Math.ceil(n / 2)));
+}
+
+/** The teams' colours, first one picked for the players in order, then the rest of TEAMS in its order. */
+function teamOrder(s: MatchSetup, colours: string[]): number[] {
   const out: number[] = [];
-  const count = [0, 0];
-  for (const c of colours) {
-    const t = s.teams[c];
-    if (t === 0 || t === 1) count[t]++;
-  }
-  for (const c of colours) {
-    let t = s.teams[c];
-    if (t !== 0 && t !== 1) {
-      t = count[1] < count[0] ? 1 : 0;
-      count[t]++;
-    }
-    out.push(t);
-  }
-  if (out.length > 1 && out.every((t) => t === out[0])) out[out.length - 1] = 1 - out[0];
+  for (const c of colours) if (isTeam(s.teams[c]) && !out.includes(s.teams[c])) out.push(s.teams[c]);
+  for (let t = 0; t < TEAMS.length; t++) if (!out.includes(t)) out.push(t);
   return out;
 }
 
-/** Two robots swap colours (a CPU player gives its colour up to you): each keeps its side, so their sides swap with the colours. */
+/** `n` robots in `k` teams as evenly as can be, the bigger teams first: 7 in 3 is [3, 2, 2]. */
+export function teamSizes(n: number, k: number): number[] {
+  return Array.from({ length: k }, (_, i) => Math.floor(n / k) + (i < n % k ? 1 : 0));
+}
+
+/**
+ * The team of each robot in a match, given their colours in player order (you, the other players, the CPU
+ * players): the one picked for it or, for one with none yet, the smallest team. With nobody on a team yet,
+ * an even split. Always at least two teams (with two robots or more).
+ */
+export function teamsFor(s: MatchSetup, colours: string[]): number[] {
+  if (!colours.some((c) => isTeam(s.teams[c]))) {
+    const k = Math.min(Math.max(2, s.teamCount), maxTeams(colours.length));
+    const order = teamOrder(s, colours);
+    const sizes = teamSizes(colours.length, k);
+    const out: number[] = [];
+    sizes.forEach((n, i) => {
+      for (let j = 0; j < n; j++) out.push(order[i]);
+    });
+    return out;
+  }
+  const count = new Map<number, number>();
+  for (const c of colours) if (isTeam(s.teams[c])) count.set(s.teams[c], (count.get(s.teams[c]) ?? 0) + 1);
+  const out = colours.map((c) => {
+    if (isTeam(s.teams[c])) return s.teams[c];
+    let best = -1;
+    for (const [t, n] of count) if (best < 0 || n < count.get(best)!) best = t;
+    count.set(best, count.get(best)! + 1);
+    return best;
+  });
+  if (out.length > 1 && out.every((t) => t === out[0])) out[out.length - 1] = teamOrder(s, colours).find((t) => t !== out[0])!;
+  return out;
+}
+
+/** Write everyone's team down as it is now, so it stays put as players come and go. */
+function settle(s: MatchSetup, colours: string[]): number[] {
+  const now = teamsFor(s, colours);
+  colours.forEach((c, i) => (s.teams[c] = now[i]));
+  return now;
+}
+
+/**
+ * Split the robots into `s.teamCount` teams (as many as there is room for) as evenly as can be, in player
+ * order: P1 and the next ones in the first team, and so on. The teams keep the colours they have.
+ */
+export function splitTeams(s: MatchSetup, colours: string[]): void {
+  const k = Math.min(Math.max(2, s.teamCount), maxTeams(colours.length));
+  const order = teamOrder(s, colours);
+  const sizes = teamSizes(colours.length, k);
+  s.teams = {};
+  let i = 0;
+  sizes.forEach((n, t) => {
+    for (let j = 0; j < n; j++) s.teams[colours[i++]] = order[t];
+  });
+}
+
+/**
+ * A team takes the next colour along that no other team has (the owner's ask: tap your card and your
+ * team's colour changes, your teammates' with it). Returns its new colour.
+ */
+export function recolourTeam(s: MatchSetup, colours: string[], team: number): number {
+  const now = settle(s, colours);
+  for (let d = 1; d < TEAMS.length; d++) {
+    const t = (team + d) % TEAMS.length;
+    if (now.includes(t)) continue;
+    colours.forEach((c, i) => {
+      if (now[i] === team) s.teams[c] = t;
+    });
+    return t;
+  }
+  return team;
+}
+
+/** Move one robot to another team. Not if that would leave fewer than two teams: false then. */
+export function moveToTeam(s: MatchSetup, colours: string[], colour: string, team: number): boolean {
+  const now = settle(s, colours);
+  const i = colours.indexOf(colour);
+  if (i < 0 || !isTeam(team)) return false;
+  const after = now.map((t, k) => (k === i ? team : t));
+  if (new Set(after).size < 2) return false;
+  s.teams[colour] = team;
+  return true;
+}
+
+/** The teams in play and how many are on each, biggest first: "2 v 2 v 1". */
+export function lineUp(s: MatchSetup, colours: string[]): string {
+  const n = new Map<number, number>();
+  for (const t of teamsFor(s, colours)) n.set(t, (n.get(t) ?? 0) + 1);
+  return [...n.values()].sort((a, b) => b - a).join(' v ');
+}
+
+/** Two robots swap colours (a CPU player gives its colour up to you): each keeps its team, so their teams swap with the colours. */
 export function swapTeams(s: MatchSetup, a: string, b: string): void {
   const ta = s.teams[a];
   const tb = s.teams[b];
@@ -235,13 +327,6 @@ export function swapTeams(s: MatchSetup, a: string, b: string): void {
   delete s.teams[b];
   if (tb !== undefined) s.teams[a] = tb;
   if (ta !== undefined) s.teams[b] = ta;
-}
-
-/** Split the robots into two sides, half and half: the first half (P1, P2...) red, the rest blue. With an odd number, red has one more. */
-export function splitTeams(s: MatchSetup, colours: string[]): void {
-  const half = Math.ceil(colours.length / 2);
-  s.teams = {};
-  colours.forEach((c, i) => (s.teams[c] = i < half ? 0 : 1));
 }
 
 export function defaultSetup(myColor: string): MatchSetup {
@@ -270,6 +355,7 @@ export function defaultSetup(myColor: string): MatchSetup {
     angelsBack: false,
     teamsOn: false,
     teams: {},
+    teamCount: 2,
     friendlyFire: false, // teammates are safe from each other's blasts unless it is switched on
   };
 }
@@ -289,7 +375,7 @@ export function pickArena(s: MatchSetup, id: ArenaId): void {
  */
 export function defaultRules(s: MatchSetup, myColor: string): MatchSetup {
   // (the Players page's settings stay: the players, Randomize CPUs and the teams)
-  const out = { ...defaultSetup(myColor), cpus: s.cpus, map: s.map, randEmotes: s.randEmotes, randLevels: s.randLevels, teamsOn: s.teamsOn, teams: s.teams, friendlyFire: s.friendlyFire };
+  const out = { ...defaultSetup(myColor), cpus: s.cpus, map: s.map, randEmotes: s.randEmotes, randLevels: s.randLevels, teamsOn: s.teamsOn, teams: s.teams, teamCount: s.teamCount, friendlyFire: s.friendlyFire };
   pickArena(out, s.arena);
   return out;
 }
@@ -432,8 +518,9 @@ export function readSetup(raw: unknown, myColor: string, colorIds: string[]): Ma
   if (typeof r.teamsOn === 'boolean') out.teamsOn = r.teamsOn;
   if (typeof r.friendlyFire === 'boolean') out.friendlyFire = r.friendlyFire;
   if (r.teams && typeof r.teams === 'object') {
-    for (const [c, t] of Object.entries(r.teams)) if (colorIds.includes(c) && (t === 0 || t === 1)) out.teams[c] = t;
+    for (const [c, t] of Object.entries(r.teams)) if (colorIds.includes(c) && isTeam(t)) out.teams[c] = t;
   }
+  out.teamCount = clampInt(r.teamCount, 2, MAX_TEAMS, d.teamCount);
   return out;
 }
 

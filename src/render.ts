@@ -1617,22 +1617,34 @@ const GHOST_FADE = 2.5; // it fades over the last few tiles before its head reac
 const ASH = 18; // specks of ash
 
 /**
- * A teams match: a ring on the floor round the robot's feet in its side's colour (TEAMS), so who is on
- * whose side can be seen at a glance.
+ * A teams match: a ring on the floor round the robot's feet in its team's colour (TEAMS), so who is on whose
+ * team can be seen at a glance. Inside it, a faint, dull wash of the same colour (the owner's ask).
  */
 function drawTeamRing(ctx: Ctx, p: Player, x: number, y: number, T: number): void {
-  const c = TEAMS[p.team]?.color ?? '#fff';
+  const c = TEAMS[p.team]?.color ?? '#ffffff';
   const cy = y - T * 0.05;
   ctx.save();
   ctx.globalAlpha = p.safeTicks > 0 ? 0.45 : 0.9;
-  ctx.fillStyle = c + '30';
-  ctx.strokeStyle = c;
-  ctx.lineWidth = Math.max(1.5, T * 0.055);
   ctx.beginPath();
   ctx.ellipse(x, cy, T * 0.4, T * 0.15, 0, 0, Math.PI * 2);
+  ctx.fillStyle = dullWash(c);
   ctx.fill();
+  ctx.strokeStyle = c;
+  ctx.lineWidth = Math.max(1.5, T * 0.055);
   ctx.stroke();
   ctx.restore();
+}
+/** A colour greyed halfway and nearly see-through: the inside of a team ring. */
+const washes = new Map<string, string>();
+function dullWash(hex: string): string {
+  let w = washes.get(hex);
+  if (!w) {
+    const n = parseInt(hex.slice(1), 16);
+    const grey = (v: number): number => Math.round(v * 0.55 + 110 * 0.45);
+    w = `rgba(${grey((n >> 16) & 255)},${grey((n >> 8) & 255)},${grey(n & 255)},0.32)`;
+    washes.set(hex, w);
+  }
+  return w;
 }
 
 /** A robot on its tile; the winner celebrating; or, for a moment after being knocked out, its remains and its ghost. */
