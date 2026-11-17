@@ -481,6 +481,7 @@ function softSprite(map: MapId, T: number): HTMLCanvasElement {
 
 /** Floor and fixed walls. Redrawn only when the screen size changes. */
 export function drawStatic(ctx: Ctx, world: World, T: number): void {
+  fireSprites(); // (made now, at the start of a round, so the first blast does not wait for them)
   for (let y = 0; y < world.h; y++) {
     for (let x = 0; x < world.w; x++) {
       const px = x * T;
@@ -642,83 +643,259 @@ function flameLine(f: World['flames'][number], T: number): [number, number, numb
   return f.kind === 'h' ? [[cx - h, cy, cx + h, cy]] : [[cx, cy - h, cx, cy + h]];
 }
 
-/** The blasts, drawn as fire (see where drawDynamic calls it). */
+// ---------------------------------------------------------------- fire
+
+/**
+ * Fire, as real flames look (the owner's ask, November 2026: "ultra realistic, like real life"). Real fire is
+ * many soft, ragged tongues of glowing gas, white-yellow where it is hottest at the base, orange, then deep
+ * red at the edges where it cools, rising and curling as it goes, with smoke above and sparks thrown off.
+ * Drawn here as particles: a few soft pictures of a lick of flame and a puff of smoke, made once from noise
+ * (`fireSprites`), stamped many times a frame, each rising, swelling and cooling over its short life. A blast
+ * lives under half a second, so each flame tile is born, roars and dies away in that time.
+ */
+const SPRITE_PX = 96;
+interface FireSprites {
+  hot: HTMLCanvasElement[];
+  cool: HTMLCanvasElement[];
+  smoke: HTMLCanvasElement[];
+  glow: HTMLCanvasElement;
+}
+let fireCache: FireSprites | null = null;
+
+/** Smooth value noise in 2-D, 0 to 1, from `scatter` on a grid (the same every time: no Math.random). */
+function noise2(x: number, y: number, seed: number): number {
+  const xi = Math.floor(x);
+  const yi = Math.floor(y);
+  const fx = x - xi;
+  const fy = y - yi;
+  const u = fx * fx * (3 - 2 * fx);
+  const v = fy * fy * (3 - 2 * fy);
+  const h = (i: number, j: number): number => scatter(i * 127.1 + j * 311.7 + seed * 74.7);
+  const a = h(xi, yi) + (h(xi + 1, yi) - h(xi, yi)) * u;
+  const b = h(xi, yi + 1) + (h(xi + 1, yi + 1) - h(xi, yi + 1)) * u;
+  return a + (b - a) * v;
+}
+function fbm(x: number, y: number, seed: number): number {
+  return noise2(x, y, seed) * 0.55 + noise2(x * 2.1, y * 2.1, seed + 1) * 0.3 + noise2(x * 4.3, y * 4.3, seed + 2) * 0.15;
+}
+
+/**
+ * One picture: a lick of flame (taller than wide, ragged, hottest low in its middle), or a puff of smoke.
+ * `cool`: the colours a flame has as it dies (no white heart, more red).
+ */
+function makeSprite(kind: 'hot' | 'cool' | 'smoke', seed: number): HTMLCanvasElement {
+  const n = SPRITE_PX;
+  const c = document.createElement('canvas');
+  c.width = c.height = n;
+  const g = c.getContext('2d')!;
+  const img = g.createImageData(n, n);
+  const d = img.data;
+  for (let y = 0; y < n; y++) {
+    for (let x = 0; x < n; x++) {
+      const u = (x / (n - 1)) * 2 - 1; // -1 to 1 across
+      const w = (y / (n - 1)) * 2 - 1; // -1 top to 1 bottom
+      let heat: number;
+      if (kind === 'smoke') {
+        const r = Math.hypot(u, w) + (fbm(x / 14, y / 14, seed) - 0.5) * 0.7;
+        heat = Math.max(0, 1 - r);
+      } else {
+        // a flame: narrower towards its top, its edge eaten by noise that streams upwards
+        const width = 0.55 + 0.4 * ((w + 1) / 2); // wider at the bottom
+        const r = Math.hypot(u / width, (w - 0.25) / 1.15);
+        const eat = (fbm(x / 11, y / 7 + seed, seed) - 0.5) * 0.9;
+        heat = Math.max(0, 1 - r + eat * (0.4 + 0.6 * (1 - (w + 1) / 2)));
+      }
+      const i = (y * n + x) * 4;
+      if (heat <= 0) continue;
+      let R: number, G: number, B: number, A: number;
+      if (kind === 'smoke') {
+        R = 46;
+        G = 42;
+        B = 40;
+        A = Math.min(1, heat * 1.4) * 0.55;
+      } else {
+        // the colour of fire by its heat: deep red, orange, yellow, white (cooler for a dying flame)
+        const h = kind === 'cool' ? heat * 0.72 : heat;
+        const stops: [number, number, number, number][] = [
+          [0.0, 110, 12, 2],
+          [0.22, 196, 38, 6],
+          [0.42, 246, 98, 14],
+          [0.62, 255, 166, 40],
+          [0.8, 255, 222, 120],
+          [1.0, 255, 250, 228],
+        ];
+        let k = 0;
+        while (k < stops.length - 2 && h > stops[k + 1][0]) k++;
+        const [h0, r0, g0, b0] = stops[k];
+        const [h1, r1, g1, b1] = stops[k + 1];
+        const f = Math.min(1, Math.max(0, (h - h0) / (h1 - h0)));
+        R = r0 + (r1 - r0) * f;
+        G = g0 + (g1 - g0) * f;
+        B = b0 + (b1 - b0) * f;
+        A = Math.min(1, heat * 2.6);
+      }
+      d[i] = R;
+      d[i + 1] = G;
+      d[i + 2] = B;
+      d[i + 3] = A * 255;
+    }
+  }
+  g.putImageData(img, 0, 0);
+  return c;
+}
+function fireSprites(): FireSprites {
+  if (!fireCache) {
+    const glow = document.createElement('canvas');
+    glow.width = glow.height = 64;
+    const gg = glow.getContext('2d')!;
+    const grad = gg.createRadialGradient(32, 32, 0, 32, 32, 32);
+    grad.addColorStop(0, 'rgba(255,170,60,0.5)');
+    grad.addColorStop(0.35, 'rgba(255,100,24,0.24)');
+    grad.addColorStop(0.7, 'rgba(255,70,14,0.07)');
+    grad.addColorStop(1, 'rgba(255,60,10,0)');
+    gg.fillStyle = grad;
+    gg.fillRect(0, 0, 64, 64);
+    fireCache = {
+      hot: [1, 2, 3, 4].map((sd) => makeSprite('hot', sd)),
+      cool: [5, 6, 7].map((sd) => makeSprite('cool', sd)),
+      smoke: [8, 9, 10].map((sd) => makeSprite('smoke', sd)),
+      glow,
+    };
+  }
+  return fireCache;
+}
+
+/** A soft round glow in one colour (whose blast it is), made once per colour. */
+const tints = new Map<string, HTMLCanvasElement>();
+function tintGlow(col: string): HTMLCanvasElement {
+  let c = tints.get(col);
+  if (!c) {
+    c = document.createElement('canvas');
+    c.width = c.height = 64;
+    const g = c.getContext('2d')!;
+    const grad = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+    grad.addColorStop(0, col);
+    grad.addColorStop(1, 'rgba(0,0,0,0)');
+    g.globalAlpha = 0.35;
+    g.fillStyle = grad;
+    g.fillRect(0, 0, 64, 64);
+    tints.set(col, c);
+  }
+  return c;
+}
+
+/** The blasts, drawn as fire (see where drawDynamic calls it, and `fireSprites`). */
 function drawFire(ctx: Ctx, world: World, T: number, time: number, west: boolean): void {
   if (!world.flames.length) return;
+  const sp = fireSprites();
   ctx.save();
-  const blob = (x: number, y: number, r: number): void => {
-    if (r < 0.4) return;
-    ctx.beginPath();
-    ctx.arc(x, y, r, 0, Math.PI * 2);
-    ctx.fill();
+  const stamp = (img: HTMLCanvasElement, x: number, y: number, w: number, h: number, turn: number): void => {
+    if (w < 0.5 || h < 0.5) return;
+    if (turn) {
+      ctx.translate(x, y);
+      ctx.rotate(turn);
+      ctx.drawImage(img, -w / 2, -h * 0.62, w, h);
+      ctx.setTransform(baseTf);
+    } else ctx.drawImage(img, x - w / 2, y - h * 0.62, w, h);
   };
-  // each tile's balls of flame: where they sit along its line, how big, how they flicker
-  type Ball = { x: number; y: number; r: number; seed: number };
+  const baseTf = ctx.getTransform();
+  // each tile: where along its line the fire sits, how far through its life it is
   const tiles = world.flames.map((f) => {
     const t = f.ttl / FLAME_TICKS; // 1 when it bursts, 0 as it dies
-    const k = Math.sqrt(t > 0.8 ? (1 - t) / 0.2 : t / 0.8); // swells fast, then dies down
-    const balls: Ball[] = [];
+    const life = 1 - t;
+    const k = Math.sqrt(t > 0.85 ? (1 - t) / 0.15 : t / 0.85); // bursts fast, then dies down
+    const pts: [number, number][] = [];
     for (const [x1, y1, x2, y2] of flameLine(f, T)) {
-      const n = 5;
-      const len = Math.hypot(x2 - x1, y2 - y1) || 1;
-      const px = -(y2 - y1) / len; // across the line
-      const py = (x2 - x1) / len;
-      for (let i = 0; i <= n; i++) {
-        const u = i / n;
-        const seed = f.cx * 7.13 + f.cy * 3.71 + i * 1.97 + (x2 - x1 > 0 ? 0.5 : 0) + (y2 - y1 > 0 ? 0.25 : 0);
-        // flicker in size, and a churn across the line, so the edge is ragged and never still
-        const flick = 0.72 + 0.2 * Math.sin(time * 17 + seed * 9) + 0.12 * Math.sin(time * 29 + seed * 4) + 0.1 * scatter(seed);
-        const churn = (Math.sin(time * 11 + seed * 7) + 0.6 * Math.sin(time * 23 + seed * 2)) * T * 0.05 * k;
-        // the tip of an arm tapers to a point
-        const taper = f.tip && i === n ? 0.5 : f.tip && i === n - 1 ? 0.8 : 1;
-        balls.push({ x: x1 + (x2 - x1) * u + px * churn, y: y1 + (y2 - y1) * u + py * churn, r: T * 0.44 * k * flick * taper, seed });
-      }
+      const n = 3;
+      for (let i = 0; i <= n; i++) pts.push([x1 + ((x2 - x1) * i) / n, y1 + ((y2 - y1) * i) / n]);
     }
-    return { f, t, k, balls };
+    return { f, t, life, k, pts, seed: f.cx * 13.1 + f.cy * 7.7 };
   });
-  // smoke and scorch under the fire (darker on the sand, which is lighter than the night floor)
+
+  // scorch and the shadow of smoke on the ground
   ctx.globalCompositeOperation = 'source-over';
-  ctx.fillStyle = west ? 'rgba(28,10,2,0.5)' : 'rgba(10,6,4,0.45)';
-  for (const { balls, k } of tiles) for (const b of balls) blob(b.x, b.y + T * 0.04, b.r * 1.08 + T * 0.04 * k);
-  // a faint glow in the colour of whoever placed the bomb
-  ctx.globalCompositeOperation = 'lighter';
-  for (const { f, balls } of tiles) {
-    ctx.fillStyle = colorById(world.players[f.owner]?.colorId ?? 'gold').glow;
-    ctx.globalAlpha = 0.16;
-    for (const b of balls) blob(b.x, b.y, b.r * 1.25);
-  }
-  // the fire, layer by layer: red edge, orange, yellow, a white-hot heart (cooling to red as it dies)
-  ctx.globalAlpha = 1;
-  const layers: [number, string, string, number][] = [
-    // share of the radius, colour, colour as it dies, how far its tongues rise
-    [1, 'rgba(196,40,8,0.5)', 'rgba(110,20,6,0.42)', 0.45],
-    [0.78, 'rgba(240,92,16,0.62)', 'rgba(170,44,10,0.52)', 0.36],
-    [0.56, 'rgba(255,150,36,0.72)', 'rgba(214,80,18,0.6)', 0.26],
-    [0.36, 'rgba(255,214,96,0.82)', 'rgba(240,130,40,0.62)', 0.16],
-    [0.17, 'rgba(255,248,222,0.9)', 'rgba(255,190,100,0.6)', 0.08],
-  ];
-  for (const [share, hot, cool, rise] of layers) {
-    for (const { t, balls } of tiles) {
-      ctx.fillStyle = t > 0.35 ? hot : cool;
-      for (const b of balls) {
-        const r = b.r * share;
-        blob(b.x, b.y, r);
-        // a tongue of flame licking upwards from it, flickering
-        const lick = 0.55 + 0.45 * Math.sin(time * 13 + b.seed * 5);
-        blob(b.x + Math.sin(time * 9 + b.seed * 3) * r * 0.25, b.y - r * rise * 2 * lick - r * 0.15, r * 0.62);
-      }
+  ctx.fillStyle = west ? 'rgba(30,10,2,0.42)' : 'rgba(8,5,4,0.4)';
+  for (const { pts, k } of tiles) {
+    for (const [x, y] of pts) {
+      ctx.beginPath();
+      ctx.arc(x, y + T * 0.05, T * 0.42 * Math.max(0.4, k), 0, Math.PI * 2);
+      ctx.fill();
     }
   }
-  // embers: a few sparks rising from each tile as it burns
-  ctx.fillStyle = 'rgba(255,214,120,0.9)';
-  for (const { f, t } of tiles) {
+  // the light it throws on the ground round it
+  ctx.globalCompositeOperation = 'lighter';
+  for (const { pts, k } of tiles) {
+    // (one per tile, at its middle: soft enough that the tiles of a blast run into one light)
+    const [x, y] = pts[Math.floor(pts.length / 2)];
+    ctx.globalAlpha = 0.5 * k;
+    ctx.drawImage(sp.glow, x - T * 0.9, y - T * 0.9, T * 1.8, T * 1.8);
+  }
+  // a faint glow in the colour of whoever placed the bomb, so it is still clear whose blast it is
+  for (const { f, pts, k } of tiles) {
+    const tint = tintGlow(colorById(world.players[f.owner]?.colorId ?? 'gold').glow);
+    const [x, y] = pts[Math.floor(pts.length / 2)];
+    ctx.globalAlpha = 0.6 * k;
+    ctx.drawImage(tint, x - T * 0.8, y - T * 0.8, T * 1.6, T * 1.6);
+  }
+
+  // the flames: tongues that rise, swell, curl and cool over their short lives, many of them overlapping
+  ctx.globalCompositeOperation = 'source-over';
+  for (const { pts, k, t, seed } of tiles) {
+    pts.forEach(([x, y], i) => {
+      for (let j = 0; j < 2; j++) {
+        const s = seed + i * 3.3 + j * 1.7;
+        // each tongue lives about a fifth of a second and is born again, at its own moment
+        const p = (time * 5.2 + scatter(s)) % 1;
+        const rise = p * T * 0.42;
+        const sway = Math.sin(time * 7 + s * 5) * T * 0.07 * p;
+        const size = T * (0.72 + 0.5 * scatter(s + 9)) * (0.75 + 0.5 * p) * k;
+        const cool = p > 0.55 || t < 0.3;
+        const set = cool ? sp.cool : sp.hot;
+        const img = set[Math.floor(scatter(s + 2) * set.length) % set.length];
+        ctx.globalAlpha = Math.min(1, (1 - p) * 1.6) * Math.min(1, k * 1.5);
+        stamp(img, x + sway + (scatter(s + 4) - 0.5) * T * 0.18, y - rise, size * 0.8, size * 1.15, (scatter(s + 6) - 0.5) * 0.5);
+      }
+    });
+  }
+  // the white-hot heart, added on as light
+  ctx.globalCompositeOperation = 'lighter';
+  for (const { pts, k, t, seed } of tiles) {
+    if (t < 0.25) continue;
+    pts.forEach(([x, y], i) => {
+      if (i % 2) return; // (every other point is enough for the heart)
+      const s = seed + i * 5.1;
+      const img = sp.hot[i % sp.hot.length];
+      ctx.globalAlpha = 0.45 * k * (0.75 + 0.25 * Math.sin(time * 23 + s));
+      stamp(img, x, y + T * 0.04, T * 0.5 * k, T * 0.62 * k, 0);
+    });
+  }
+  // smoke: dark puffs rising off it, more of it as the fire dies
+  ctx.globalCompositeOperation = 'source-over';
+  for (const { pts, life, seed } of tiles) {
+    for (let j = 0; j < 1; j++) {
+      const [x, y] = pts[(j * 2 + 1) % pts.length];
+      const s = seed + j * 4.4;
+      const p = (life * 1.4 + scatter(s) * 0.3) % 1;
+      const img = sp.smoke[j % sp.smoke.length];
+      ctx.globalAlpha = Math.sin(Math.PI * Math.min(1, p)) * (0.25 + 0.5 * life);
+      const size = T * (0.5 + 0.7 * p);
+      stamp(img, x + Math.sin(time * 2 + s) * T * 0.08, y - T * (0.3 + 0.7 * p), size, size, 0);
+    }
+  }
+  // sparks thrown up and out
+  ctx.globalCompositeOperation = 'lighter';
+  ctx.fillStyle = 'rgb(255,214,140)';
+  for (const { f, t, life } of tiles) {
     for (let e = 0; e < 3; e++) {
-      const seed = f.cx * 5.3 + f.cy * 8.9 + e * 2.1;
-      const age = (1 - t + scatter(seed) * 0.5) % 1;
-      const x = (f.cx + 0.2 + 0.6 * scatter(seed + 1)) * T + Math.sin(time * 6 + seed) * T * 0.05;
-      const y = (f.cy + 0.6) * T - age * T * 0.8;
-      ctx.globalAlpha = Math.max(0, 1 - age) * Math.min(1, t * 3);
-      blob(x, y, T * 0.025 * (1 - age * 0.5));
+      const s = f.cx * 5.3 + f.cy * 8.9 + e * 2.1;
+      const age = (life * 1.6 + scatter(s) * 0.6) % 1;
+      const dx = (scatter(s + 1) - 0.5) * T * 0.9 * age;
+      const x = (f.cx + 0.5) * T + dx;
+      const y = (f.cy + 0.5) * T - age * T * (0.6 + 0.6 * scatter(s + 3)) + age * age * T * 0.25;
+      ctx.globalAlpha = Math.max(0, 1 - age) * Math.min(1, t * 4);
+      ctx.beginPath();
+      ctx.arc(x, y, T * 0.022 * (1 - age * 0.6), 0, Math.PI * 2);
+      ctx.fill();
     }
   }
   ctx.restore();
