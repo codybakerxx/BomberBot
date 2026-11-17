@@ -180,11 +180,10 @@ export function drawHard(ctx: Ctx, px: number, py: number, T: number, map: MapId
 
 /** Breakable block: fills its whole tile. `variant` 0 or 1 gives neighbours a little variety. */
 export function drawSoft(ctx: Ctx, px: number, py: number, T: number, map: MapId = mapNow, variant = 0): void {
-  void variant;
   // a whole size (every tile of an arena): stamped from a picture made once. Any other size: drawn here.
-  if (Number.isInteger(T) && T <= 200) ctx.drawImage(softSprite(map, T), px, py);
+  if (Number.isInteger(T) && T <= 200) ctx.drawImage(softSprite(map, T, variant & 3), px, py);
   else if (map === 'western') drawCrate(ctx, px, py, T);
-  else drawBricks(ctx, px, py, T);
+  else drawBricks(ctx, px, py, T, variant & 3);
 }
 
 /** One tile of floor, at column x and row y of the arena. */
@@ -227,13 +226,20 @@ function drawSteel(ctx: Ctx, px: number, py: number, T: number): void {
   ctx.fillRect(px + i + w - e, py + i, e, w);
 }
 
-/** Four staggered courses of bricks. */
-function drawBricks(ctx: Ctx, px: number, py: number, T: number): void {
-  ctx.fillStyle = '#232a45'; // mortar
+/**
+ * Four staggered courses of bricks (made more real at the owner's ask, November 2026): each brick its own
+ * shade of the blue, lit along its top and left and shaded along its bottom and right, set back from the
+ * mortar so the joints look sunk; specks and a chipped corner here and there, now and then a hairline
+ * crack. `variant` (0 to 3) shuffles the shades and marks, so neighbouring blocks are not copies.
+ */
+function drawBricks(ctx: Ctx, px: number, py: number, T: number, variant = 0): void {
+  ctx.fillStyle = '#1d2340'; // mortar, in shadow
   ctx.fillRect(px, py, T, T);
   const rows = 4;
   const h = T / rows;
-  const g = Math.max(1, Math.round(T * 0.045));
+  const g = Math.max(1, Math.round(T * 0.045)); // a joint's width
+  const e = Math.max(1, Math.round(T * 0.03)); // a lit or shaded edge
+  let n = 0;
   for (let row = 0; row < rows; row++) {
     const y = Math.round(py + row * h);
     const bh = Math.round(py + (row + 1) * h) - y - g;
@@ -243,11 +249,58 @@ function drawBricks(ctx: Ctx, px: number, py: number, T: number): void {
       const x1 = Math.round(px + edges[k + 1] * T);
       const last = k === edges.length - 2;
       const bw = x1 - x0 - (last ? 0 : g);
-      ctx.fillStyle = '#7383b6';
+      const r = scatter(variant * 17.3 + n++ * 3.71 + 0.2); // this brick's own luck
+      // its face: a shade of the blue, a little lighter or darker than its neighbours
+      const l = Math.round((r - 0.5) * 22);
+      ctx.fillStyle = `rgb(${115 + l},${131 + l},${182 + l})`;
       ctx.fillRect(x0, y, bw, bh);
-      ctx.fillStyle = '#9aa8d4';
-      ctx.fillRect(x0, y, bw, Math.max(1, Math.round(g * 0.8)));
+      // a soft fall of light down its face
+      ctx.fillStyle = 'rgba(255,255,255,0.06)';
+      ctx.fillRect(x0, y, bw, Math.round(bh * 0.45));
+      // lit along the top and left, shaded along the bottom and right
+      ctx.fillStyle = 'rgba(214,224,255,0.55)';
+      ctx.fillRect(x0, y, bw, e);
+      ctx.fillStyle = 'rgba(214,224,255,0.25)';
+      ctx.fillRect(x0, y, e, bh);
+      ctx.fillStyle = 'rgba(22,26,52,0.45)';
+      ctx.fillRect(x0, y + bh - e, bw, e);
+      if (!last) ctx.fillRect(x0 + bw - e, y, e, bh);
+      // specks in the clay
+      for (let sp = 0; sp < 3; sp++) {
+        const q = scatter(r * 91.3 + sp * 7.7);
+        const q2 = scatter(r * 53.1 + sp * 3.3);
+        ctx.fillStyle = sp % 2 ? 'rgba(30,36,70,0.35)' : 'rgba(200,212,250,0.3)';
+        const d = Math.max(1, Math.round(T * 0.025));
+        ctx.fillRect(Math.round(x0 + e + q * (bw - e * 2 - d)), Math.round(y + e + q2 * (bh - e * 2 - d)), d, d);
+      }
+      // a chipped corner on some
+      if (r > 0.78) {
+        const c = Math.max(2, Math.round(T * 0.06));
+        ctx.fillStyle = '#1d2340';
+        ctx.beginPath();
+        const right = r > 0.89;
+        const cx = right ? x0 + bw : x0;
+        ctx.moveTo(cx, y);
+        ctx.lineTo(cx + (right ? -c : c), y);
+        ctx.lineTo(cx, y + c);
+        ctx.closePath();
+        ctx.fill();
+      }
+      // now and then a hairline crack
+      if (r < 0.12 && bw > T * 0.3) {
+        ctx.strokeStyle = 'rgba(22,26,52,0.6)';
+        ctx.lineWidth = Math.max(0.6, T * 0.012);
+        ctx.beginPath();
+        const sx = x0 + bw * (0.3 + r * 2);
+        ctx.moveTo(sx, y + e);
+        ctx.lineTo(sx + bw * 0.08, y + bh * 0.45);
+        ctx.lineTo(sx - bw * 0.03, y + bh - e);
+        ctx.stroke();
+      }
     }
+    // the joint under this course catches a little light at its lower edge
+    ctx.fillStyle = 'rgba(120,134,190,0.18)';
+    ctx.fillRect(px, y + bh + g - 1, T, 1);
   }
 }
 
@@ -464,16 +517,17 @@ function drawCrate(ctx: Ctx, px: number, py: number, T: number): void {
 }
 /** A breakable block is drawn once at each size and stamped from then on (an arena has a hundred of them). */
 const softs = new Map<string, HTMLCanvasElement>();
-function softSprite(map: MapId, T: number): HTMLCanvasElement {
-  const key = `${map}|${T}`;
+function softSprite(map: MapId, T: number, variant = 0): HTMLCanvasElement {
+  const v = map === 'western' ? 0 : variant; // (crates are all alike)
+  const key = `${map}|${T}|${v}`;
   let c = softs.get(key);
   if (!c) {
-    if (softs.size > 24) softs.clear();
+    if (softs.size > 48) softs.clear();
     c = document.createElement('canvas');
     c.width = c.height = T;
     const g = c.getContext('2d')!;
     if (map === 'western') drawCrate(g, 0, 0, T);
-    else drawBricks(g, 0, 0, T);
+    else drawBricks(g, 0, 0, T, v);
     softs.set(key, c);
   }
   return c;
@@ -641,6 +695,119 @@ function flameLine(f: World['flames'][number], T: number): [number, number, numb
     return [[cx, cy + h, cx, cy - h * reach]];
   }
   return f.kind === 'h' ? [[cx - h, cy, cx + h, cy]] : [[cx, cy - h, cx, cy + h]];
+}
+
+// ---------------------------------------------------------------- breaking blocks
+
+/**
+ * A breakable block breaking (the owner's ask, November 2026: a realistic crumbling effect; it used to flash
+ * white and vanish). Over the time a blast lasts (FLAME_TICKS) the block shudders and cracks, then bursts:
+ * its own picture is cut into chunks that fly outwards and up, tumble, land and fade, with small chips thrown
+ * further and a cloud of dust rolling out. Bricks break into blue-grey rubble, crates into splinters and
+ * planks with tan dust. All of it from the block's own picture, so it matches whatever the block looks like.
+ */
+function drawCrumble(ctx: Ctx, b: { cx: number; cy: number; ttl: number }, T: number, time: number): void {
+  const west = mapNow === 'western';
+  const e = 1 - b.ttl / FLAME_TICKS; // 0 as it is hit, 1 as it is gone
+  const x0 = b.cx * T;
+  const y0 = b.cy * T;
+  const v = softVariant(b.cx, b.cy);
+  const img = Number.isInteger(T) && T <= 200 ? softSprite(mapNow, T, v) : null;
+  const seed = b.cx * 12.9 + b.cy * 78.2;
+  const CRACK = 0.16; // the share of the time it shudders before it bursts
+  ctx.save();
+  const base = ctx.getTransform();
+  if (e < CRACK || !img) {
+    // shuddering, with cracks spreading over it
+    const j = Math.max(1, T * 0.03) * (e / CRACK);
+    const dx = Math.round(Math.sin(time * 90 + seed) * j);
+    const dy = Math.round(Math.cos(time * 77 + seed) * j);
+    if (img) ctx.drawImage(img, x0 + dx, y0 + dy);
+    else drawSoft(ctx, x0 + dx, y0 + dy, T, mapNow, v);
+    ctx.strokeStyle = west ? 'rgba(40,20,6,0.85)' : 'rgba(12,14,30,0.85)';
+    ctx.lineWidth = Math.max(1, T * 0.03);
+    ctx.lineCap = 'round';
+    const grow = Math.min(1, e / CRACK + 0.25);
+    for (let c = 0; c < 4; c++) {
+      const a = (c / 4) * Math.PI * 2 + scatter(seed + c) * 1.2;
+      ctx.beginPath();
+      ctx.moveTo(x0 + dx + T / 2, y0 + dy + T / 2);
+      const mx = T / 2 + Math.cos(a) * T * 0.25 * grow;
+      const my = T / 2 + Math.sin(a) * T * 0.25 * grow;
+      ctx.lineTo(x0 + dx + mx + Math.cos(a + 0.6) * T * 0.06, y0 + dy + my + Math.sin(a + 0.6) * T * 0.06);
+      ctx.lineTo(x0 + dx + T / 2 + Math.cos(a) * T * 0.48 * grow, y0 + dy + T / 2 + Math.sin(a) * T * 0.48 * grow);
+      ctx.stroke();
+    }
+    ctx.restore();
+    return;
+  }
+  const u = (e - CRACK) / (1 - CRACK); // 0 as it bursts, 1 as the last of it fades
+  // dust rolling out from where it stood
+  const dust = west ? [196, 160, 110] : [128, 140, 182];
+  for (let d = 0; d < 4; d++) {
+    const a = (d / 4) * Math.PI * 2 + scatter(seed + d * 3) * 1.4;
+    const r = T * (0.15 + 0.45 * Math.sqrt(u));
+    const size = T * (0.4 + 0.5 * u) * (0.8 + 0.4 * scatter(seed + d));
+    const cx = x0 + T / 2 + Math.cos(a) * r;
+    const cy = y0 + T / 2 + Math.sin(a) * r * 0.8 - u * T * 0.1;
+    const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, size);
+    const al = 0.38 * (1 - u) * Math.min(1, u * 6 + 0.3);
+    grad.addColorStop(0, `rgba(${dust[0]},${dust[1]},${dust[2]},${al})`);
+    grad.addColorStop(1, `rgba(${dust[0]},${dust[1]},${dust[2]},0)`);
+    ctx.fillStyle = grad;
+    ctx.fillRect(cx - size, cy - size, size * 2, size * 2);
+  }
+  // the chunks: the block's picture cut in a 3 by 3 grid (a little uneven), each flying out from the middle
+  const n = 3;
+  const cut = (i: number): number => Math.round((T * i) / n);
+  for (let gy = 0; gy < n; gy++) {
+    for (let gx = 0; gx < n; gx++) {
+      const s = seed + gx * 3.1 + gy * 5.3;
+      const sx = cut(gx);
+      const sy = cut(gy);
+      const sw = cut(gx + 1) - sx;
+      const sh = cut(gy + 1) - sy;
+      // away from the middle (the middle one goes a random way), a little up, then down onto the floor
+      let dx = gx - 1;
+      let dy = gy - 1;
+      if (!dx && !dy) {
+        dx = scatter(s) - 0.5;
+        dy = scatter(s + 1) - 0.5;
+      }
+      const len = Math.hypot(dx, dy) || 1;
+      const speed = T * (0.35 + 0.35 * scatter(s + 2));
+      const out = 1 - (1 - u) * (1 - u); // fast at first, slowing as it skids
+      const hop = Math.sin(Math.min(1, u * 1.6) * Math.PI) * T * (0.18 + 0.12 * scatter(s + 3)); // in the air
+      const px = x0 + sx + sw / 2 + (dx / len) * speed * out;
+      const py = y0 + sy + sh / 2 + (dy / len) * speed * out * 0.8;
+      const turn = (scatter(s + 4) - 0.5) * 4 * out;
+      const shrink = 1 - 0.35 * u;
+      const alpha = u < 0.65 ? 1 : 1 - (u - 0.65) / 0.35;
+      // its shadow on the floor, smaller and fainter the higher it is
+      ctx.globalAlpha = 0.35 * alpha;
+      ctx.fillStyle = '#000';
+      ctx.beginPath();
+      ctx.ellipse(px, py + sh * 0.3, sw * 0.45 * shrink, sh * 0.2 * shrink, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.globalAlpha = alpha;
+      ctx.translate(px, py - hop);
+      ctx.rotate(turn);
+      ctx.drawImage(img, sx, sy, sw, sh, (-sw / 2) * shrink, (-sh / 2) * shrink, sw * shrink, sh * shrink);
+      ctx.setTransform(base);
+    }
+  }
+  // chips thrown further
+  ctx.fillStyle = west ? '#c99554' : '#8d9cd0';
+  for (let c = 0; c < 7; c++) {
+    const s = seed + c * 9.7;
+    const a = scatter(s) * Math.PI * 2;
+    const dist = T * (0.5 + 0.6 * scatter(s + 1)) * (1 - (1 - u) * (1 - u));
+    const hop = Math.sin(Math.min(1, u * 1.3) * Math.PI) * T * 0.25;
+    const sz = Math.max(1, T * (0.04 + 0.04 * scatter(s + 2)));
+    ctx.globalAlpha = u < 0.6 ? 1 : 1 - (u - 0.6) / 0.4;
+    ctx.fillRect(x0 + T / 2 + Math.cos(a) * dist - sz / 2, y0 + T / 2 + Math.sin(a) * dist * 0.8 - hop - sz / 2, sz, sz * (west ? 2.2 : 1));
+  }
+  ctx.restore();
 }
 
 // ---------------------------------------------------------------- fire
@@ -919,15 +1086,23 @@ export function drawGround(ctx: Ctx, world: World, T: number): void {
   }
   for (let y = 0; y < world.h; y++) {
     for (let x = 0; x < world.w; x++) {
-      if (world.tiles[y * world.w + x] === SOFT) drawSoft(ctx, x * T, y * T, T, mapNow, x + y);
+      if (world.tiles[y * world.w + x] !== SOFT) continue;
+      // (a block that is breaking is drawn every frame instead, crumbling: drawCrumble)
+      if (world.burning.some((b) => b.cx === x && b.cy === y)) continue;
+      drawSoft(ctx, x * T, y * T, T, mapNow, softVariant(x, y));
     }
   }
+}
+/** Which of the four looks a breakable block at (x, y) has, so neighbours differ. */
+export function softVariant(x: number, y: number): number {
+  return Math.floor(scatter(x * 3.17 + y * 7.31 + 0.4) * 4);
 }
 /** A number that is different whenever the arena's blocks are (so drawGround's picture would be too). */
 export function groundKey(world: World): number {
   const t = world.tiles;
   let h = world.w * 131 + world.h;
   for (let i = 0; i < t.length; i++) h = (Math.imul(h, 31) + t[i]) | 0;
+  for (const b of world.burning) h = (Math.imul(h, 37) + b.cy * world.w + b.cx + 7) | 0; // (breaking blocks leave the picture)
   return h;
 }
 
@@ -966,11 +1141,7 @@ export function drawDynamic(ctx: Ctx, world: World, T: number, time: number, foc
   }
 
   // breakable blocks that are burning flash as they go
-  for (const b of world.burning) {
-    const k = b.ttl / FLAME_TICKS;
-    ctx.fillStyle = `rgba(255,240,210,${0.25 + 0.6 * k})`;
-    ctx.fillRect(b.cx * T, b.cy * T, T, T);
-  }
+  for (const b of world.burning) drawCrumble(ctx, b, T, time);
 
   // the tile you count as standing on
   const me = world.players[focusId];
