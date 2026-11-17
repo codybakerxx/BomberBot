@@ -24,7 +24,7 @@
               lobbyPrev (‹ beside the page names) and two pages (pgPlayers, pgMatch): lobbyPlayers (your robot youBot with colPrev, colNext and the colour
               dots youDots; the name over them, youName, with editName, the pencil that swaps it for a box (myName) to type your own; the player
               cards in slots, each with its victory dance along its foot (dp-prev-, dp-name-, dp-next-); allCpus) and lobbyMatch (the arena picture arenaPic with
-              arenaPrev, arenaNext, arenaDots, and a Start under it, arenaStart; the rules; rulesReset; startNote and lobbyStart, Start again at the end); playersNext ends lobbyPlayers
+              arenaPrev, arenaNext, arenaDots, the map buttons mapPick over it, and a Start under it, arenaStart; the rules; rulesReset; startNote and lobbyStart, Start again at the end); playersNext ends lobbyPlayers
     cpuSheet  a CPU player's panel, over the lobby: colour and level (cpuRows), cpuRemove, cpuDone
     settings  your own settings, five pages: setControls (Steering thumb: handLeft, handRight; Swipe
               Movement sensitivity: sensOpts; padOpts; keys: remapKeys, resetKeys),
@@ -376,6 +376,7 @@
     background: var(--panel); border: 1px solid var(--line);
   }
   .icon-btn { width: 44px; height: 44px; border-radius: 12px; }
+  .icon-btn[hidden] { display: none; } /* (the room's share and bell buttons, when not in a room) */
   /* the host online has four buttons up there (Tell friends too): narrower, so the room's code stays on one line */
   @media (max-width: 430px) {
     #lobby .bar-end:has(#roomTell:not([hidden])) { gap: 4px; }
@@ -414,6 +415,11 @@
   @keyframes tick-in { from { transform: scale(0.4); opacity: 0; } to { transform: none; opacity: 1; } }
   body.calm .code-copy.copied .done-glyph { animation: none; }
   .code-copy:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  /* the Match page's maps: a button each, with a strip of its floor and blocks */
+  .map-pick { align-self: stretch; display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 8px; }
+  .map-pick button { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 8px 6px 7px; cursor: pointer; color: var(--ink-dim); background: #121726; border: 1.5px solid var(--line); border-radius: 12px; font: 700 13px/1 var(--font-display); letter-spacing: 0.1em; text-transform: uppercase; }
+  .map-pick canvas { width: 66px; height: 22px; border-radius: 4px; display: block; }
+  .map-pick button[aria-pressed="true"] { color: var(--accent); border-color: var(--accent); background: rgba(255, 197, 106, 0.1); box-shadow: 0 0 0 1px var(--accent) inset; }
   .summary { margin: 2px 14px 8px; text-align: center; font: 500 13px/1.3 var(--font-body); color: var(--ink-dim); }
   .pages { flex: 0 0 auto; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); margin: 0 14px; border-bottom: 1px solid var(--line); }
   .pages.three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
@@ -608,7 +614,7 @@
   .opt-hint:empty { display: none; }
   .opt-ctl { display: flex; align-items: center; flex: 0 0 auto; }
   .opt-value { min-width: 96px; text-align: center; font: 700 16px/1.1 var(--font-display); color: var(--ink); outline-offset: 2px; }
-  .opt-slider .opt-value { min-width: 0; text-align: right; color: var(--accent); white-space: nowrap; }
+  .opt-slider .opt-value { flex: 0 0 auto; min-width: 0; text-align: right; color: var(--accent); white-space: nowrap; }
   .step { width: 44px; height: 44px; border: 0; background: transparent; border-radius: 10px; }
   .step.small { width: 40px; height: 40px; background: #151a28; border: 1px solid var(--line); }
   .step:disabled { opacity: 0.3; cursor: default; }
@@ -877,6 +883,7 @@
       <section id="lobbyMatch" class="page" role="tabpanel" aria-labelledby="pgMatch">
         <div class="sec-head"><span>Arena</span><span id="arenaCount"></span></div>
         <div class="panel arena">
+          <div class="map-pick" id="mapPick" role="group" aria-label="Map"></div>
           <div class="you-row">
             <button class="round-btn" id="arenaPrev" type="button" aria-label="Previous arena"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></button>
             <canvas id="arenaPic" role="img" aria-label="The arena"></canvas>

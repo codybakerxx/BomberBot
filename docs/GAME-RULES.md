@@ -8,7 +8,7 @@ The game runs at a fixed 60 ticks a second. Times below are given in seconds wit
 
 *`createWorld` in sim.ts*
 
-- The usual arena (Classic) is 15 tiles wide and 13 tall. The outer ring is wall, leaving 13 by 11 to play in. The lobby also offers Compact (11 by 9 to play in) and Big (15 by 13): the same build in other sizes.
+- The usual arena (Classic) is 15 tiles wide and 13 tall. The outer ring is wall, leaving 13 by 11 to play in. The lobby also offers Compact (11 by 9 to play in) and Big (15 by 13): the same build in other sizes. It also offers two maps, Midnight (steel blocks and bricks) and Wild West (red rock and wooden crates): a map is only how the arena looks, and every rule here is the same on both.
 - **Solid blocks** never break. They are the outer wall plus a pillar on every second tile in both directions. The pillars turn the arena into a grid of lanes.
 - **Bricks** can be blasted away. At the start each open tile has a 78% chance of holding a brick. The lobby's Bricks setting changes that: Few 50%, Some 65%, Normal 78%, Lots 86%, Packed 93%.
 - Each player's starting tile and the tiles next to it are always left clear, so nobody starts boxed in.

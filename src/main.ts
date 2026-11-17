@@ -12,7 +12,7 @@
  */
 import { createWorld, step, ticksLeft, World, PlayerInput, Dir, TICK_HZ, DEATH_TICKS, type GameEvent } from './sim';
 import { Bot, BotLevel, BOT_LEVELS, LEVELS, createBot, botInput } from './bot';
-import { COLORS, NOBODY, botName, colorById, drawAngels, drawHead, drawStatic, drawDynamic, drawGhosts, warmSprites } from './render';
+import { COLORS, NOBODY, botName, colorById, drawAngels, drawHead, drawStatic, drawDynamic, drawGhosts, setMap, warmSprites } from './render';
 import { Input, PadReader, typing } from './input';
 import { drawTitle, closeTitle, drawIcon } from './title';
 import { initAudio, preview, setSound, sfx } from './audio';
@@ -21,7 +21,7 @@ import { readDance, type DanceId } from './dances';
 import { createPadNav } from './padnav';
 import { PAD } from './bindings';
 import { createRemap } from './remap';
-import { Guest, MatchSetup, Prefs, SHARPNESS, SOUND_NAMES, arenaOf, clockText, defaultSetup, load, readPrefs, readSetup, save, summary, wholeTile, worldConfig } from './setup';
+import { CpuSlot, Guest, MatchSetup, Prefs, SHARPNESS, SOUND_NAMES, arenaOf, clockText, defaultSetup, load, readPrefs, readSetup, rollCpus, save, summary, wholeTile, worldConfig } from './setup';
 import { Opt, answerConfirm, choice, confirmFirst, confirmOpen, heading, mount, note, slider, toggle, wireConfirm, wireFlash } from './ui';
 import { Hand, SENSITIVITY, DEFAULT_SENS, STRAIGHT, standardAims } from './swipe';
 import { Online } from './online';
@@ -219,8 +219,14 @@ function danceOf(i: number): DanceId {
   if (net) return seats[i]?.dance ?? 'party';
   if (i === 0) return myDance;
   if (i <= guests.length) return guests[i - 1].dance;
-  return setup.cpus[i - 1 - guests.length]?.dance ?? 'party';
+  return matchCpus()[i - 1 - guests.length]?.dance ?? 'party';
 }
+/**
+ * The CPU players as this match has them (on this screen; online the seats say). With Randomize CPUs on,
+ * `newMatch` picks each one's emote and level at random; the lobby's own are left as they were.
+ */
+let rolled: CpuSlot[] | null = null;
+const matchCpus = (): CpuSlot[] => (rolled && rolled.length === setup.cpus.length ? rolled : setup.cpus);
 /** The controller playing player i (you or a guest), if there is one. */
 const padOf = (i: number): PadReader | null => (net ? (i === meIdx ? input.mine() : null) : i === 0 ? input.mine() : guests[i - 1] ? input.reader(guests[i - 1].pad) : null);
 input.attachKeyboard(window);
@@ -244,7 +250,7 @@ window.addEventListener('touchstart', showTouch, { passive: true, once: true });
 function newWorld(): void {
   const seed = (Math.random() * 2 ** 31) | 0;
   world = createWorld(worldConfig(setup, myColor, seed, guests.map((g) => g.colorId)));
-  bots = setup.cpus.map((c, i) => createBot(i + 1 + guests.length, c.level, seed));
+  bots = matchCpus().map((c, i) => createBot(i + 1 + guests.length, c.level, seed));
   blastedBy = -1;
   hurried = false;
   counted = false;
@@ -425,6 +431,7 @@ function redrawStatic(): void {
   staticLanded = landedIn(w);
   staticLayer.width = canvas.width;
   staticLayer.height = canvas.height;
+  setMap(setup.map);
   drawStatic(staticLayer.getContext('2d')!, w, T);
 }
 
@@ -555,11 +562,12 @@ function drawTimer(): void {
 }
 
 /**
- * A small shake of the arena when a bomb goes off (the owner's ask): a few page pixels, dying away over a fifth
- * of a second. Whole pixels only, so the arena stays sharp. None with Settings › Graphics › Less movement.
+ * A small shake of the arena when a bomb goes off (the owner's ask): a couple of page pixels, dying away over a
+ * sixth of a second (it was 3 pixels over a fifth: the owner asked for it a little more subtle). Whole pixels
+ * only, so the arena stays sharp. None with Settings › Graphics › Less movement.
  */
-const SHAKE_PX = 3;
-const SHAKE_S = 0.2;
+const SHAKE_PX = 2;
+const SHAKE_S = 0.16;
 let shakeAt = -1;
 let shaken = false;
 function shake(time: number): void {
@@ -1026,6 +1034,7 @@ const lobby = createLobby(lobbyHost);
  * arriving from the title or a match (Ready has to be pressed again); not when coming back from Settings.
  */
 function showLobby(fresh = false): void {
+  rolled = null; // (the match is over: the lobby's CPU players are the ones on their cards)
   hideScreens();
   mode = 'lobby';
   roundLive = false;
@@ -1037,6 +1046,7 @@ function showLobby(fresh = false): void {
 
 /** Start a match with the lobby's setup: everyone's score back to 0, then round 1. */
 function newMatch(): void {
+  rolled = setup.randEmotes || setup.randLevels ? rollCpus(setup, Math.random) : null;
   wins.fill(0);
   leader = -1;
   roundNo = 0;
@@ -1131,7 +1141,7 @@ function fillPause(): void {
     // (names typed by people: set as text, never as markup)
     name.textContent = i === myIdx() ? myName || 'You' : net && human(i) ? seats[i]?.name || botName(col) : botName(col);
     const sub = document.createElement('small');
-    const cpuLevel = (): string => `P${i + 1} · CPU · ${LEVELS[setup.cpus[i - peopleCount()]?.level ?? 'normal'].label}`;
+    const cpuLevel = (): string => `P${i + 1} · CPU · ${LEVELS[(net ? seats[i]?.level : undefined) ?? matchCpus()[i - peopleCount()]?.level ?? 'normal'].label}`;
     sub.textContent = net
       ? human(i)
         ? `P${i + 1}${i === meIdx ? ' · you' : ''}${seats[i]?.member === net.host ? ' · host' : ''}${net.members.find((m) => m.id === seats[i]?.member)?.on === false ? ' · away' : ''}`

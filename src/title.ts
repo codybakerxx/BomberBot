@@ -115,8 +115,8 @@ function drawBackdrop(g: Ctx, W: number, H: number, sc: Scene, me: BotColor, sta
       // the corridor the robots stand in stays clear, so they stand out against the floor
       if (bare || (j >= -clearUp && j <= 1)) continue;
       // solid blocks on every other row and column, as in the arena; bricks scattered between them
-      if (i % 2 === 0 && j % 2 !== 0) drawHard(g, px, py, t);
-      else if (hash(i, j) < 0.42) drawSoft(g, px, py, t);
+      if (i % 2 === 0 && j % 2 !== 0) drawHard(g, px, py, t, 'midnight');
+      else if (hash(i, j) < 0.42) drawSoft(g, px, py, t, 'midnight');
     }
   }
   // the dark comes in: a veil over everything, deeper at the top (the name) and bottom (the buttons)

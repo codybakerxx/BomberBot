@@ -9,7 +9,7 @@
  * Both are saved on this device. Anything saved that does not look right is ignored and the default used.
  * Every option here is used by the game: nothing is shown in a menu that does not do something.
  */
-import { readDance, type DanceId } from './dances';
+import { DANCES, readDance, type DanceId } from './dances';
 import { BotLevel, BOT_LEVELS } from './bot';
 import { KeyMap, PadMap, defaultKeys, defaultPad, readKeys, readPad } from './bindings';
 import { ItemKind, ITEM_CHANCE, MAX_BOMBS, MAX_FIRE, MAX_LIVES, MAX_SPEED_ITEMS, START_FIRE, TICK_HZ, WorldConfig } from './sim';
@@ -59,6 +59,20 @@ export const ARENAS = [
   { id: 'big', name: 'Big', cols: 15, rows: 13, roundSecs: 120, closeIn: 2, blurb: 'More room to run, more bricks to clear.' },
 ] as const;
 export type ArenaId = (typeof ARENAS)[number]['id'];
+
+/**
+ * The maps: how the arena looks (render.ts draws each). A map is only a look: the floor, the solid blocks and
+ * the breakable ones. The layout, the sizes above and the rules are the same on every map, so the rules
+ * (sim.ts) know nothing of it. The first is the game's original look.
+ */
+export const MAPS = [
+  { id: 'midnight', name: 'Midnight', solid: 'steel blocks', soft: 'bricks' },
+  { id: 'western', name: 'Wild West', solid: 'red rock', soft: 'wooden crates' },
+] as const;
+export type MapId = (typeof MAPS)[number]['id'];
+export function mapOf(s: MatchSetup): (typeof MAPS)[number] {
+  return MAPS.find((m) => m.id === s.map) ?? MAPS[0];
+}
 
 /** How many bricks fill the arena: a share of the open tiles (0.78 is the game's usual). */
 export const BRICKS = [
@@ -132,7 +146,15 @@ export interface MatchSetup {
   /** SETUP_VERSION when it was saved */
   v: number;
   cpus: CpuSlot[];
+  /**
+   * Randomize CPUs (the Players page; the owner's ask): each CPU player gets an emote, a level, or both,
+   * picked at random at the start of every match (`rollCpus`), in place of the ones on its card.
+   */
+  randEmotes: boolean;
+  randLevels: boolean;
   arena: ArenaId;
+  /** how the arena looks (MAPS) */
+  map: MapId;
   /** the round timer: off means no timer and no falling blocks, so a round lasts until one bot is left */
   timerOn: boolean;
   roundSecs: number;
@@ -172,6 +194,9 @@ export function defaultSetup(myColor: string): MatchSetup {
     timerOn: true,
     roundSecs: ARENAS[1].roundSecs,
     closeIn: ARENAS[1].closeIn,
+    map: 'midnight',
+    randEmotes: false,
+    randLevels: false,
     v: SETUP_VERSION,
     firstTo: 1,
     bricks: 2,
@@ -202,9 +227,23 @@ export function pickArena(s: MatchSetup, id: ArenaId): void {
  * the players are left as they are.
  */
 export function defaultRules(s: MatchSetup, myColor: string): MatchSetup {
-  const out = { ...defaultSetup(myColor), cpus: s.cpus };
+  const out = { ...defaultSetup(myColor), cpus: s.cpus, map: s.map, randEmotes: s.randEmotes, randLevels: s.randLevels };
   pickArena(out, s.arena);
   return out;
+}
+
+/**
+ * The CPU players as a match will have them: as on their cards, or, with Randomize CPUs on, each with an
+ * emote or a level (or both) picked at random. `random` gives a number from 0 up to 1. A new list: the
+ * setup's own CPU players are left as they are.
+ */
+export function rollCpus(s: MatchSetup, random: () => number): CpuSlot[] {
+  const pick = <T>(list: readonly T[]): T => list[Math.min(list.length - 1, Math.floor(random() * list.length))];
+  return s.cpus.map((c) => ({
+    ...c,
+    ...(s.randLevels ? { level: pick(BOT_LEVELS) } : {}),
+    ...(s.randEmotes ? { dance: pick(DANCES).id } : {}),
+  }));
 }
 
 export function arenaOf(s: MatchSetup): (typeof ARENAS)[number] {
@@ -254,7 +293,7 @@ export function clockText(secs: number): string {
 export function summary(s: MatchSetup, guests = 0): string {
   const parts = [
     `${s.cpus.length + 1 + guests} players`,
-    `${arenaOf(s).name} arena`,
+    s.map === 'midnight' ? `${arenaOf(s).name} arena` : `${mapOf(s).name}, ${arenaOf(s).name}`,
     s.timerOn ? `${clockText(s.roundSecs)} rounds` : 'No timer',
     `First to ${s.firstTo}`,
   ];
@@ -292,6 +331,9 @@ export function readSetup(raw: unknown, myColor: string, colorIds: string[]): Ma
     if (out.cpus.length === 0) out.cpus = d.cpus;
   }
   if (ARENAS.some((a) => a.id === r.arena)) out.arena = r.arena as ArenaId;
+  if (MAPS.some((m) => m.id === r.map)) out.map = r.map as MapId;
+  if (typeof r.randEmotes === 'boolean') out.randEmotes = r.randEmotes;
+  if (typeof r.randLevels === 'boolean') out.randLevels = r.randLevels;
   if (typeof r.timerOn === 'boolean') out.timerOn = r.timerOn;
   out.roundSecs = clampInt(r.roundSecs, ROUND_MIN, ROUND_MAX, d.roundSecs);
   out.roundSecs -= out.roundSecs % ROUND_STEP;

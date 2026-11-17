@@ -21,7 +21,7 @@
  * main.ts owns the match itself; it hands this file a `LobbyHost` to read and change what it needs.
  */
 import { BOT_LEVELS, LEVELS } from './bot';
-import { COLORS, botName, colorById, drawRobot, drawStatic, drawDynamic, ROBOT } from './render';
+import { COLORS, botName, colorById, drawRobot, drawStatic, drawDynamic, drawHard, drawSoft, drawFloor, setMap, ROBOT } from './render';
 import { createWorld, MAX_BOMBS, MAX_FIRE, MAX_LIVES, MAX_SPEED_ITEMS, START_FIRE } from './sim';
 import {
   CpuSlot,
@@ -29,6 +29,7 @@ import {
   AFTERLIVES,
   type Afterlife,
   ARENAS,
+  MAPS,
   BRICKS,
   CLOSE_IN,
   ITEM_AMOUNTS,
@@ -289,11 +290,19 @@ export function createLobby(host: LobbyHost): {
     preview(who);
   }
   /** The small ‹ dance › along the foot of a card, and a swipe across the whole card. */
-  function dancePick(wrap: HTMLElement, who: string, readOnly = false): void {
+  function dancePick(wrap: HTMLElement, who: string, readOnly = false, random = false): void {
     const row = document.createElement('div');
     row.className = 'dance-pick';
     row.setAttribute('role', 'group');
     row.setAttribute('aria-label', 'Victory dance');
+    if (random) {
+      // Randomize CPUs: its emote is picked when the match starts, so there is nothing to choose here
+      row.classList.add('ro', 'rand');
+      row.innerHTML = '<span class="dp-name"><span class="dp-label">Emote</span><span class="dp-text">Random</span></span>';
+      row.setAttribute('aria-label', 'Emote: picked at random each match');
+      wrap.append(row);
+      return;
+    }
     const mk = (id: string, html: string, label: string, act: () => void): HTMLButtonElement => {
       const b = document.createElement('button');
       b.type = 'button';
@@ -423,7 +432,35 @@ export function createLobby(host: LobbyHost): {
         for (const c of s().cpus) c.level = BOT_LEVELS[i];
         changed();
       },
-      disabled: () => s().cpus.length === 0,
+      disabled: () => s().cpus.length === 0 || s().randLevels,
+    }),
+    // Randomize CPUs (the owner's ask): an emote and a level picked at random for each CPU player, every match.
+    // One switch for both, with each on its own under it. No explanations: this page has none (the owner's call).
+    toggle({
+      label: 'Randomize CPUs',
+      get: () => s().randEmotes || s().randLevels,
+      set: (on) => {
+        s().randEmotes = s().randLevels = on;
+        changed();
+      },
+      under: [
+        toggle({
+          label: 'Random emotes',
+          get: () => s().randEmotes,
+          set: (on) => {
+            s().randEmotes = on;
+            changed();
+          },
+        }),
+        toggle({
+          label: 'Random levels',
+          get: () => s().randLevels,
+          set: (on) => {
+            s().randLevels = on;
+            changed();
+          },
+        }),
+      ],
     }),
   ];
   const refreshAll = mount($('allCpus'), allCpus);
@@ -506,10 +543,11 @@ export function createLobby(host: LobbyHost): {
       b.type = 'button';
       b.className = 'slot';
       b.id = `slot-${i + 1}`;
-      b.setAttribute('aria-label', `${botName(colorById(c.colorId))}, CPU player, P${cpuP(i)}, ${LEVELS[c.level].label}, ready. Tap to change.`);
+      const lv = s().randLevels ? "Random" : LEVELS[c.level].label;
+      b.setAttribute('aria-label', `${botName(colorById(c.colorId))}, CPU player, P${cpuP(i)}, ${lv}, ready. Tap to change.`);
       const cv = document.createElement('canvas');
       const t = document.createElement('div');
-      t.innerHTML = `<b>${botName(colorById(c.colorId))}</b><small>P${cpuP(i)} · ${LEVELS[c.level].label}</small><span class="rdy on">✓ Ready</span>`;
+      t.innerHTML = `<b>${botName(colorById(c.colorId))}</b><small>P${cpuP(i)} · ${lv}</small><span class="rdy on">✓ Ready</span>`;
       b.append(cv, t);
       cv.dataset.who = `c${i}`;
       b.addEventListener('click', () => openSheet(i));
@@ -527,7 +565,7 @@ export function createLobby(host: LobbyHost): {
       wrap.className = 'slot-wrap';
       wrap.append(b);
       if (canEdit()) wrap.append(bin);
-      dancePick(wrap, `c${i}`, !canEdit());
+      dancePick(wrap, `c${i}`, !canEdit(), s().randEmotes);
       box.append(wrap);
       cvs.push([cv, c.colorId]);
     });
@@ -568,8 +606,9 @@ export function createLobby(host: LobbyHost): {
     }),
     choice({
       label: 'Level',
-      hint: () => (s().cpus[editing] ? LEVELS[s().cpus[editing].level].blurb : ''),
-      values: () => BOT_LEVELS.map((l) => LEVELS[l].label),
+      hint: () => (s().randLevels ? 'Picked at random each match (Randomize CPUs, on the Players page)' : s().cpus[editing] ? LEVELS[s().cpus[editing].level].blurb : ''),
+      values: () => (s().randLevels ? BOT_LEVELS.map(() => 'Random') : BOT_LEVELS.map((l) => LEVELS[l].label)),
+      disabled: () => s().randLevels,
       get: () => BOT_LEVELS.indexOf(s().cpus[editing]?.level ?? 'normal'),
       set: (i) => {
         s().cpus[editing].level = BOT_LEVELS[i];
@@ -579,8 +618,9 @@ export function createLobby(host: LobbyHost): {
     }),
     choice({
       label: 'Victory dance',
-      hint: () => (s().cpus[editing] ? danceOf(s().cpus[editing].dance ?? 'party').blurb : ''),
-      values: () => DANCES.map((d) => d.name),
+      hint: () => (s().randEmotes ? 'Picked at random each match (Randomize CPUs, on the Players page)' : s().cpus[editing] ? danceOf(s().cpus[editing].dance ?? 'party').blurb : ''),
+      values: () => (s().randEmotes ? DANCES.map(() => 'Random') : DANCES.map((d) => d.name)),
+      disabled: () => s().randEmotes,
       get: () => DANCES.findIndex((d) => d.id === (s().cpus[editing]?.dance ?? 'party')),
       set: (i) => {
         s().cpus[editing].dance = DANCES[i].id;
@@ -655,7 +695,7 @@ export function createLobby(host: LobbyHost): {
     if (editing < 0 || !s().cpus[editing]) return;
     const c = s().cpus[editing];
     $('cpuTitle').textContent = botName(colorById(c.colorId));
-    $('cpuDesc').textContent = `CPU player · P${cpuP(editing)} · ${LEVELS[c.level].label}. Changes are saved as you make them.`;
+    $('cpuDesc').textContent = `CPU player · P${cpuP(editing)} · ${s().randLevels ? 'Random level' : LEVELS[c.level].label}. Changes are saved as you make them.`;
     drawBotOn($<HTMLCanvasElement>('cpuBot'), c.colorId);
     const only = s().cpus.length + guests().length <= 1;
     ($('cpuRemove') as HTMLButtonElement).disabled = only;
@@ -689,6 +729,30 @@ export function createLobby(host: LobbyHost): {
       drawArena();
     }
   }).observe($('arenaPic').parentElement!);
+  // the map: a button each, with a little picture of its floor, solid block and breakable block
+  for (const m of MAPS) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.dataset.map = m.id;
+    b.setAttribute('aria-label', `${m.name} map: ${m.solid} and ${m.soft}`);
+    const cv = document.createElement('canvas');
+    const t = 22 * Math.min(3, Math.ceil(host.density()));
+    cv.width = t * 3;
+    cv.height = t;
+    const g = cv.getContext('2d')!;
+    for (let i = 0; i < 3; i++) drawFloor(g, i, 0, i * t, 0, t, m.id);
+    drawHard(g, 0, 0, t, m.id);
+    drawSoft(g, t * 2, 0, t, m.id);
+    const name = document.createElement('b');
+    name.textContent = m.name;
+    b.append(cv, name);
+    b.addEventListener('click', () => {
+      if (!canEdit() || s().map === m.id) return;
+      s().map = m.id;
+      changed();
+    });
+    $('mapPick').append(b);
+  }
   function drawArena(): void {
     const cv = $<HTMLCanvasElement>('arenaPic');
     // everyone where they will start: online, in the room's order (P1 first), which is the round's
@@ -711,6 +775,7 @@ export function createLobby(host: LobbyHost): {
     cv.style.height = `${cv.height / dpr}px`;
     cv.style.flex = '0 0 auto'; // (no longer stretched to fill the row)
     const g = cv.getContext('2d')!;
+    setMap(s().map);
     drawStatic(g, w, T);
     drawDynamic(g, w, T, 0, 0);
   }
@@ -1055,6 +1120,7 @@ export function createLobby(host: LobbyHost): {
     );
     $('arenaCount').textContent = `${ARENAS.indexOf(a) + 1} of ${ARENAS.length}`;
     for (const b of $('arenaDots').querySelectorAll<HTMLButtonElement>('.dot')) b.setAttribute('aria-pressed', String(b.dataset.arena === a.id));
+    for (const b of $('mapPick').querySelectorAll<HTMLButtonElement>('button')) b.setAttribute('aria-pressed', String(b.dataset.map === s().map));
     if (!$('lobbyMatch').hidden || window.matchMedia('(min-width: 820px) and (min-height: 480px)').matches) drawArena();
     refreshRules();
     // the summary at the top, and whether Start can be pressed

@@ -15,7 +15,7 @@
  */
 import { MAX_PLAYERS, TICK_HZ, step, type World, type WorldConfig } from './sim';
 import { BOT_LEVELS, botInput, createBot, type Bot, type BotLevel } from './bot';
-import { MAX_CPUS, problem, readSetup, worldConfig, type CpuSlot, type MatchSetup } from './setup';
+import { MAX_CPUS, problem, readSetup, rollCpus, worldConfig, type CpuSlot, type MatchSetup } from './setup';
 import { readDance, type DanceId } from './dances';
 import {
   CHECK_EVERY,
@@ -337,22 +337,22 @@ export class Room {
         this.match = JSON.parse(JSON.stringify(this.setup)) as MatchSetup;
         this.seats = [
           ...this.members.filter((x) => x.playing).map((x) => ({ member: x.id, name: x.name, colorId: x.colorId, dance: x.dance })),
-          ...this.match.cpus.map((c) => ({ member: null, name: '', colorId: c.colorId, dance: c.dance ?? 'party' })),
+          ...this.match.cpus.map((c) => ({ member: null, name: '', colorId: c.colorId, dance: c.dance ?? 'party', level: c.level })),
         ];
-        this.score = { wins: this.seats.map(() => 0), leader: -1, matchWinner: -1, roundNo: 0 };
+        this.newScore();
         this.sendRoom();
         this.startRound(now);
         return;
       }
       case 'next': {
         if (!isHost || !this.playing || !this.world?.over) return;
-        if (this.score.matchWinner >= 0) this.score = { wins: this.seats.map(() => 0), leader: -1, matchWinner: -1, roundNo: 0 };
+        if (this.score.matchWinner >= 0) this.newScore();
         this.startRound(now);
         return;
       }
       case 'restart': {
         if (!isHost || !this.playing) return;
-        this.score = { wins: this.seats.map(() => 0), leader: -1, matchWinner: -1, roundNo: 0 };
+        this.newScore();
         this.startRound(now);
         return;
       }
@@ -395,6 +395,24 @@ export class Room {
   }
 
   // ------------------------------------------------------------ rounds
+
+  /**
+   * A match starts (or starts again: Rematch, Restart): the score back to 0, and, with Randomize CPUs on,
+   * each CPU player's emote and level picked afresh. The seats say what each got, so every page knows.
+   */
+  private newScore(): void {
+    this.score = { wins: this.seats.map(() => 0), leader: -1, matchWinner: -1, roundNo: 0 };
+    const match = this.match;
+    if (!match) return;
+    match.cpus = rollCpus(match, this.random);
+    const people = this.seats.length - match.cpus.length;
+    match.cpus.forEach((c, i) => {
+      const seat = this.seats[people + i];
+      if (!seat) return;
+      seat.dance = c.dance ?? 'party';
+      seat.level = c.level;
+    });
+  }
 
   private startRound(now: number): void {
     const setup = this.match!;

@@ -23,7 +23,9 @@ import {
   type ServerMsg,
 } from '../src/net';
 import { makeRng } from '../src/sim';
-import { ARENAS, defaultRules, defaultSetup, wholeTile } from '../src/setup';
+import { ARENAS, MAPS, defaultRules, defaultSetup, readSetup, rollCpus, summary, wholeTile } from '../src/setup';
+import { BOT_LEVELS } from '../src/bot';
+import { DANCE_IDS } from '../src/dances';
 import type { World } from '../src/sim';
 
 assert.deepStrictEqual(COLOR_IDS, COLORS.map((c) => c.id), 'the server knows the same robots as the page');
@@ -35,6 +37,38 @@ for (const a of ARENAS) {
   assert.strictEqual(r.arena, a.id, `Reset to Default stays on ${a.name}`);
   assert.ok(r.roundSecs === a.roundSecs && r.closeIn === a.closeIn, `and uses ${a.name}'s timer and closing in`);
   assert.ok(r.firstTo === 1 && r.lives === 1, 'the other rules go back to their defaults');
+}
+
+// the map (how the arena looks) and Randomize CPUs are part of the setup: read back, kept by Reset to Default
+{
+  const d = defaultSetup('gold');
+  assert.ok(d.map === 'midnight' && !d.randEmotes && !d.randLevels, 'a new setup: the first map, nothing random');
+  const saved = readSetup({ ...d, map: 'western', randEmotes: true, randLevels: true }, 'gold', COLOR_IDS);
+  assert.ok(saved.map === 'western' && saved.randEmotes && saved.randLevels, 'they are read back');
+  assert.strictEqual(readSetup({ ...d, map: 'moon' }, 'gold', COLOR_IDS).map, 'midnight', 'a map that does not exist is the first map');
+  const r = defaultRules({ ...saved, lives: 4 }, 'gold');
+  assert.ok(r.map === 'western' && r.randEmotes && r.randLevels && r.lives === 1, 'Reset to Default keeps the map and Randomize CPUs');
+  assert.ok(summary(saved).includes('Wild West') && !summary(d).includes(MAPS[0].name), 'the summary names a map other than the first');
+  // every size on every map: the map changes nothing the rules see
+  for (const a of ARENAS) assert.deepStrictEqual({ ...defaultRules({ ...saved, arena: a.id }, 'gold'), map: 'midnight' }, { ...defaultRules({ ...saved, arena: a.id, map: 'midnight' }, 'gold') });
+
+  // Randomize CPUs: a new list each time, the cards' own left alone, and only what is switched on changes
+  const rng = makeRng(5);
+  const cards = JSON.stringify(saved.cpus);
+  const levels = new Set<string>();
+  const dances = new Set<string>();
+  for (let i = 0; i < 60; i++) {
+    for (const c of rollCpus(saved, rng)) {
+      assert.ok(BOT_LEVELS.includes(c.level) && DANCE_IDS.includes(c.dance!));
+      levels.add(c.level);
+      dances.add(c.dance!);
+    }
+  }
+  assert.strictEqual(JSON.stringify(saved.cpus), cards, 'the lobby keeps the levels and emotes on the cards');
+  assert.ok(levels.size === BOT_LEVELS.length && dances.size === DANCE_IDS.length, 'every level and every emote turns up');
+  assert.deepStrictEqual(rollCpus({ ...saved, randEmotes: false, randLevels: false }, rng), saved.cpus, 'off: as on the cards');
+  assert.ok(rollCpus({ ...saved, randLevels: false }, rng).every((c, i) => c.level === saved.cpus[i].level), 'emotes only: levels as on the cards');
+  assert.deepStrictEqual(rollCpus(saved, () => 0.999999).map((c) => c.level), saved.cpus.map(() => BOT_LEVELS[BOT_LEVELS.length - 1]), 'the top of the range is the last level');
 }
 
 // the arena is a whole number of page pixels on a screen of density 3 (an iPhone), so it is never stretched
@@ -270,5 +304,32 @@ assert.ok(!info.playing && info.members.every((m) => !m.ready));
 room.disconnect(host.member!, host.conn, now);
 room.housekeep(now + 20_000);
 assert.strictEqual(back.last('room')!.host, back.last('room')!.you, 'the friend hosts now');
+
+// Randomize CPUs online, on the Wild West map: the server picks, the seats tell every page, the lobby's cards stay
+{
+  const room2 = new Room('GHJK', makeRng(3));
+  const h = new Page('h2');
+  h.member = room2.hello(h.conn, { t: 'hello', id: 'h2', name: 'Cody', colorId: 'gold', dance: 'spin', create: true, pv: PROTOCOL }, now);
+  const first = h.last('room')!.setup;
+  room2.message(h.member!, { t: 'setup', setup: { ...first, map: 'western', randEmotes: true, randLevels: true, timerOn: false } }, now);
+  const lobby = h.last('room')!.setup;
+  assert.ok(lobby.map === 'western' && lobby.randEmotes && lobby.randLevels, 'the room keeps the map and Randomize CPUs');
+  const seen = new Set<string>();
+  room2.message(h.member!, { t: 'start' }, now);
+  for (let i = 0; i < 12; i++) {
+    const seats = h.last('round')!.seats;
+    const cpus = seats.filter((s) => s.member === null);
+    assert.strictEqual(cpus.length, lobby.cpus.length);
+    for (const c of cpus) {
+      assert.ok(c.level && BOT_LEVELS.includes(c.level) && DANCE_IDS.includes(c.dance), 'each CPU seat says its level and emote');
+      seen.add(`${c.level}/${c.dance}`);
+    }
+    assert.strictEqual(seats[0].level, undefined, 'a person has no level');
+    assert.strictEqual(seats[0].dance, 'spin', 'and keeps their own emote');
+    room2.message(h.member!, { t: 'restart' }, now); // a new match: picked afresh
+  }
+  assert.ok(seen.size > 4, `the picks change from match to match (${seen.size} different)`);
+  assert.deepStrictEqual(h.last('room')!.setup.cpus, lobby.cpus, 'the cards in the lobby are as the host left them');
+}
 
 console.log('room checks passed');

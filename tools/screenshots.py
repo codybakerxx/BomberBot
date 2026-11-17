@@ -259,6 +259,29 @@ async def main():
         await page.wait_for_timeout(1250)  # the round is decided, and the winner is at the top of its jump
         await page.screenshot(path=str(OUT / "round-won.png"))
         await context.close()
+
+        # --- the Wild West map: picked on the Match page, then a round on it with a blast and power-ups
+        context, page = await phone(browser, 393, 740)
+        await page.tap("#colOk")
+        await page.tap("#colOk")  # Next ›
+        await page.tap("#mapPick button[data-map=western]")
+        await page.wait_for_timeout(300)
+        await page.screenshot(path=str(OUT / "lobby-west.png"))
+        await start_round(page)
+        await page.wait_for_timeout(200)
+        await page.evaluate(
+            """() => {
+              const w = __game.world, open = (x, y) => { w.tiles[y * w.w + x] = 0; w.hidden.delete(y * w.w + x); };
+              for (const [x, y] of [[2,1],[3,1],[4,1],[5,1],[7,1],[1,2],[1,3],[1,5],[3,3],[5,3],[2,3],[4,3]]) open(x, y);
+              const item = (x, y, kind) => w.items.push({ cx: x, cy: y, kind, age: 20 });
+              item(7, 1, 'bomb'); item(1, 5, 'fire'); item(3, 3, 'speed'); item(5, 3, 'kick'); item(4, 3, 'grab');
+              w.flames.push(...[[2,1,'h',3],[3,1,'c',0],[4,1,'h',0],[5,1,'h',4]].map(([cx, cy, kind, tip]) => ({ cx, cy, ttl: 20, owner: 0, kind, tip })));
+              __game.bots.length = 0;
+            }"""
+        )
+        await page.wait_for_timeout(60)
+        await page.screenshot(path=str(OUT / "play-west.png"))
+        await context.close()
         await browser.close()
     print("saved", ", ".join(sorted(f.name for f in OUT.glob("*.png"))))
 

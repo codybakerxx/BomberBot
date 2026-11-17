@@ -9,6 +9,7 @@
  */
 import { drawRobot, warmRobots, CRACK, GHOST_ARMS, ROBOT, type Pose, type Wanted } from './robot';
 import { danceFrame, danceSamples, type DanceId } from './dances';
+import type { MapId } from './setup';
 export { warmRobots } from './robot';
 import { World, FLOOR, HARD, SOFT, FLAME_TICKS, DEATH_TICKS, GHOST_TICKS, SHIELD_GRACE_TICKS, FALL_TICKS, TICK_HZ, ItemKind, Player, Bomb, FLY_TICKS_PER_TILE, THROW_TILES, FUSE_TICKS, CARRY_FUSE_TICKS, DX, DY, angelAim, angelReach, perimeterAt } from './sim';
 
@@ -162,8 +163,48 @@ function scatter(n: number): number {
 
 // ---------------------------------------------------------------- arena
 
-/** Solid block: fills its whole tile, raised bevel with a sunken square in the middle. */
-export function drawHard(ctx: Ctx, px: number, py: number, T: number): void {
+/**
+ * The map being drawn (setup.ts, MAPS): how the floor, the solid blocks and the breakable ones look. Only a
+ * look: the rules are the same on every map. main.ts and the lobby say which before they draw an arena.
+ */
+let mapNow: MapId = 'midnight';
+export function setMap(id: MapId): void {
+  mapNow = id;
+}
+
+/** Solid block: fills its whole tile. `joined`: another solid block is right below it (its front is hidden). `deco`: see drawRock. */
+export function drawHard(ctx: Ctx, px: number, py: number, T: number, map: MapId = mapNow, joined = false, deco = 1): void {
+  if (map === 'western') drawRock(ctx, px, py, T, joined, deco);
+  else drawSteel(ctx, px, py, T);
+}
+
+/** Breakable block: fills its whole tile. `variant` 0 or 1 gives neighbours a little variety. */
+export function drawSoft(ctx: Ctx, px: number, py: number, T: number, map: MapId = mapNow, variant = 0): void {
+  if (map !== 'western') drawBricks(ctx, px, py, T);
+  else if (Number.isInteger(T) && T <= 200) ctx.drawImage(crateSprite(T, variant & 1), px, py);
+  else drawCrate(ctx, px, py, T, variant & 1);
+}
+
+/** One tile of floor, at column x and row y of the arena. */
+export function drawFloor(ctx: Ctx, x: number, y: number, px: number, py: number, T: number, map: MapId = mapNow): void {
+  if (map === 'western') {
+    drawSand(ctx, x, y, px, py, T);
+    return;
+  }
+  ctx.fillStyle = '#0e1220';
+  ctx.fillRect(px, py, T, T);
+  // a few flecks so the floor is not dead flat
+  ctx.fillStyle = 'rgba(120,150,255,0.06)';
+  for (let k = 0; k < 5; k++) {
+    const n = (x * 73 + y * 131 + k * 197) % 97;
+    ctx.fillRect(px + ((n * 37) % 89) / 89 * T * 0.9, py + ((n * 53) % 83) / 83 * T * 0.9, T * 0.06, T * 0.06);
+  }
+}
+
+// Midnight (the game's first look): steel blocks and bricks on a dark floor
+
+/** A steel block: raised bevel with a sunken square in the middle. */
+function drawSteel(ctx: Ctx, px: number, py: number, T: number): void {
   const e = Math.max(1, Math.round(T * 0.07));
   ctx.fillStyle = '#39456b';
   ctx.fillRect(px, py, T, T);
@@ -184,8 +225,8 @@ export function drawHard(ctx: Ctx, px: number, py: number, T: number): void {
   ctx.fillRect(px + i + w - e, py + i, e, w);
 }
 
-/** Breakable block: fills its whole tile with four staggered courses of bricks. */
-export function drawSoft(ctx: Ctx, px: number, py: number, T: number): void {
+/** Four staggered courses of bricks. */
+function drawBricks(ctx: Ctx, px: number, py: number, T: number): void {
   ctx.fillStyle = '#232a45'; // mortar
   ctx.fillRect(px, py, T, T);
   const rows = 4;
@@ -208,21 +249,240 @@ export function drawSoft(ctx: Ctx, px: number, py: number, T: number): void {
   }
 }
 
+// Wild West (the owner's ask, November 2026: a western map, clean and good to look at, with a solid and a
+// breakable of its own): red rock and wooden crates on desert sand in evening light. The ground is kept
+// fairly dark, like Midnight's floor, because everything that glows (blasts, the robots' soles, the ring
+// under your robot, ghosts) is drawn to be seen against the dark.
+const WEST = {
+  sand: ['#93714a', '#8c6a44'], // two tones, tile about (very close: a hint of a checker to judge distance by)
+  grain: 'rgba(255,220,160,0.10)',
+  speck: 'rgba(40,18,6,0.15)',
+  rockTop: '#b95737',
+  rockLit: '#e48d62',
+  rockSlab: '#c76643',
+  rockShade: '#8e3f27',
+  rockFront: '#76301d',
+  rockBand: '#a24f2f',
+  rockFoot: '#4a1c0f',
+  cactus: '#4c8a4e',
+  cactusDark: '#2c5a35',
+  cactusLit: '#86c070',
+  bloom: '#ffd35e',
+  wood: '#e3b672',
+  woodLine: '#bf9050',
+  frame: '#b37b3d',
+  frameLit: '#d9a560',
+  woodFront: '#8e5d2d',
+  woodFrontLine: '#6c4420',
+  woodEdge: '#3a220f',
+};
+
+/** Desert sand: two close tones, grains, and now and then a pebble, a tuft of dry grass or ripples left by the wind. */
+function drawSand(ctx: Ctx, x: number, y: number, px: number, py: number, T: number): void {
+  ctx.fillStyle = WEST.sand[(x + y) & 1];
+  ctx.fillRect(px, py, T, T);
+  for (let k = 0; k < 6; k++) {
+    const n = (x * 73 + y * 131 + k * 197) % 97;
+    const d = Math.max(1, Math.round(T * (k < 2 ? 0.06 : 0.04)));
+    ctx.fillStyle = k % 2 ? WEST.grain : WEST.speck;
+    ctx.fillRect(Math.round(px + (((n * 37) % 89) / 89) * T * 0.9), Math.round(py + (((n * 53) % 83) / 83) * T * 0.9), d, d);
+  }
+  const h = scatter(x * 31.7 + y * 57.3 + 4.1);
+  const cx = px + T * (0.3 + 0.4 * scatter(x * 7.9 + y * 3.3));
+  const cy = py + T * (0.35 + 0.35 * scatter(x * 2.1 + y * 9.7));
+  ctx.lineCap = 'round';
+  if (h < 0.1) {
+    // a pebble, lit from the upper left
+    ctx.fillStyle = 'rgba(40,18,6,0.35)';
+    ctx.beginPath();
+    ctx.ellipse(cx + T * 0.015, cy + T * 0.02, T * 0.075, T * 0.05, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#b08c68';
+    ctx.beginPath();
+    ctx.ellipse(cx, cy, T * 0.07, T * 0.045, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = 'rgba(255,235,200,0.4)';
+    ctx.beginPath();
+    ctx.ellipse(cx - T * 0.02, cy - T * 0.012, T * 0.03, T * 0.016, 0, 0, Math.PI * 2);
+    ctx.fill();
+  } else if (h < 0.2) {
+    // a tuft of dry grass: a few short blades fanning out
+    ctx.strokeStyle = 'rgba(222,190,104,0.65)';
+    ctx.lineWidth = Math.max(1, T * 0.025);
+    for (const lean of [-0.11, -0.04, 0.03, 0.1]) {
+      ctx.beginPath();
+      ctx.moveTo(cx, cy + T * 0.07);
+      ctx.quadraticCurveTo(cx + lean * T * 0.4, cy, cx + lean * T, cy - T * (0.09 - Math.abs(lean) * 0.25));
+      ctx.stroke();
+    }
+  } else if (h < 0.34) {
+    // ripples the wind left in the sand: two soft curved lines
+    ctx.strokeStyle = 'rgba(255,224,170,0.13)';
+    ctx.lineWidth = Math.max(1, T * 0.03);
+    for (const dy of [0, 0.11]) {
+      ctx.beginPath();
+      ctx.moveTo(cx - T * 0.2, cy + T * dy);
+      ctx.quadraticCurveTo(cx, cy + T * (dy - 0.07), cx + T * 0.2, cy + T * dy);
+      ctx.stroke();
+    }
+  }
+  ctx.lineCap = 'butt';
+}
+
+/**
+ * A block of red rock: a flat top lit from the upper left, with a worn slab on it, and (unless another block
+ * is right below) its front face under that, in layers, so the block stands up off the sand. `deco` (0 to 1,
+ * the same for the same tile) puts a small barrel cactus on about one block in six.
+ */
+function drawRock(ctx: Ctx, px: number, py: number, T: number, joined: boolean, deco = 1): void {
+  const e = Math.max(1, Math.round(T * 0.07));
+  const top = joined ? T : Math.round(T * 0.74);
+  ctx.fillStyle = WEST.rockTop;
+  ctx.fillRect(px, py, T, top);
+  ctx.fillStyle = WEST.rockLit; // lit top and left edges
+  ctx.fillRect(px, py, T, e);
+  ctx.fillRect(px, py, e, top);
+  ctx.fillStyle = WEST.rockShade; // shaded right edge, and the bottom one where the top runs on into the next block
+  ctx.fillRect(px + T - e, py, e, top);
+  if (joined) ctx.fillRect(px, py + T - e, T, e);
+  // the worn slab on top: a lighter patch with soft corners and a lit rim, set in from the edges
+  const i = Math.round(T * 0.19);
+  const sw = T - i * 2;
+  const sh = top - i * 2 + (joined ? 0 : Math.round(T * 0.05));
+  if (sh > e * 3) {
+    const r = T * 0.1;
+    ctx.fillStyle = WEST.rockShade;
+    rr(ctx, px + i + e * 0.5, py + i + e * 0.5, sw, sh, r);
+    ctx.fill();
+    ctx.fillStyle = WEST.rockLit;
+    rr(ctx, px + i - e * 0.35, py + i - e * 0.35, sw, sh, r);
+    ctx.fill();
+    ctx.fillStyle = WEST.rockSlab;
+    rr(ctx, px + i, py + i, sw, sh, r);
+    ctx.fill();
+    if (deco < 0.17) {
+      // a barrel cactus, seen from above: a green ball with ribs and a small bloom
+      const cx = px + T / 2;
+      const cy = py + i + sh / 2;
+      const cr = Math.min(sw, sh) * 0.36;
+      ctx.fillStyle = 'rgba(60,20,8,0.35)';
+      ctx.beginPath();
+      ctx.ellipse(cx + cr * 0.18, cy + cr * 0.28, cr * 1.05, cr * 0.95, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = WEST.cactusDark;
+      ctx.beginPath();
+      ctx.arc(cx, cy, cr, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = WEST.cactus;
+      ctx.beginPath();
+      ctx.arc(cx, cy, cr * 0.84, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = WEST.cactusLit;
+      ctx.lineWidth = Math.max(1, cr * 0.13);
+      for (let k = 0; k < 8; k++) {
+        const a = (k / 8) * Math.PI * 2 + 0.3;
+        line(ctx, cx + Math.cos(a) * cr * 0.3, cy + Math.sin(a) * cr * 0.3, cx + Math.cos(a) * cr * 0.78, cy + Math.sin(a) * cr * 0.78);
+      }
+      ctx.fillStyle = WEST.bloom;
+      ctx.beginPath();
+      ctx.arc(cx, cy, cr * 0.24, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+  if (joined) return;
+  // the front face: darker rock in layers, a paler band through it
+  const fh = T - top;
+  ctx.fillStyle = WEST.rockFront;
+  ctx.fillRect(px, py + top, T, fh);
+  ctx.fillStyle = WEST.rockBand;
+  ctx.fillRect(px, py + top + Math.round(fh * 0.3), T, Math.max(1, Math.round(fh * 0.24)));
+  ctx.fillStyle = WEST.rockShade; // the lip just under the top's edge
+  ctx.fillRect(px, py + top, T, Math.max(1, Math.round(e * 0.5)));
+  ctx.fillStyle = WEST.rockFoot;
+  ctx.fillRect(px, py + T - e, T, e);
+}
+
+/**
+ * A wooden crate, standing up off the sand like the rocks: its lid (three planks in a frame of four boards,
+ * with a brace corner to corner) and under it its front, darker. A dark edge all round, so crates side by
+ * side read as crates. Bold shapes and few lines: on a phone a tile is under half a centimetre.
+ */
+function drawCrate(ctx: Ctx, px: number, py: number, T: number, _flip = 0): void {
+  const g = Math.max(1, Math.round(T * 0.04)); // the dark edge
+  const top = Math.round(T * 0.78); // the lid; the rest is the front
+  const f = Math.max(2, Math.round(T * 0.13)); // a frame board's width
+  ctx.fillStyle = WEST.woodEdge;
+  ctx.fillRect(px, py, T, T);
+  // the lid's planks
+  const lx = px + g;
+  const ly = py + g;
+  const lw = T - g * 2;
+  const lh = top - g;
+  ctx.fillStyle = WEST.wood;
+  ctx.fillRect(lx, ly, lw, lh);
+  const ix = lx + f;
+  const iy = ly + f;
+  const iw = lw - f * 2;
+  const ih = lh - f * 2;
+  ctx.fillStyle = WEST.woodLine;
+  const t = Math.max(1, Math.round(T * 0.025));
+  for (const k of [1, 2]) ctx.fillRect(Math.round(ix + (k * iw) / 3 - t / 2), iy, t, ih);
+  // the brace, corner to corner, the same wood as the frame
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(ix, iy, iw, ih);
+  ctx.clip();
+  ctx.strokeStyle = WEST.frame;
+  ctx.lineWidth = f * 0.9;
+  line(ctx, ix + iw + f * 0.3, iy - f * 0.3, ix - f * 0.3, iy + ih + f * 0.3);
+  ctx.strokeStyle = WEST.frameLit;
+  ctx.lineWidth = Math.max(1, t);
+  line(ctx, ix + iw - f * 0.32, iy - f * 0.3, ix - f * 0.32 - f * 0.3, iy + ih);
+  ctx.restore();
+  // the frame: four boards, lit along the top
+  ctx.fillStyle = WEST.frame;
+  ctx.fillRect(lx, ly, lw, f);
+  ctx.fillRect(lx, ly + lh - f, lw, f);
+  ctx.fillRect(lx, ly, f, lh);
+  ctx.fillRect(lx + lw - f, ly, f, lh);
+  ctx.fillStyle = WEST.frameLit;
+  ctx.fillRect(lx, ly, lw, t);
+  ctx.fillRect(lx, ly, t, lh);
+  ctx.fillRect(ix, ly + lh - f, iw, t);
+  // the front: darker boards, a line between each
+  const fy = py + top;
+  const fh = T - top - g;
+  ctx.fillStyle = WEST.woodFront;
+  ctx.fillRect(lx, fy, lw, fh);
+  ctx.fillStyle = WEST.woodFrontLine;
+  ctx.fillRect(lx, fy, lw, t);
+  for (const k of [1, 2]) ctx.fillRect(Math.round(ix + (k * iw) / 3 - t / 2), fy, t, fh);
+  ctx.fillRect(lx + f - t, fy, t, fh);
+  ctx.fillRect(lx + lw - f, fy, t, fh);
+}
+/** Crates are drawn once at each size and stamped from then on (a round has a hundred of them, every frame). */
+const crates = new Map<string, HTMLCanvasElement>();
+function crateSprite(T: number, flip: number): HTMLCanvasElement {
+  const key = `${T}|${flip}`;
+  let c = crates.get(key);
+  if (!c) {
+    if (crates.size > 24) crates.clear();
+    c = document.createElement('canvas');
+    c.width = c.height = T;
+    drawCrate(c.getContext('2d')!, 0, 0, T, flip);
+    crates.set(key, c);
+  }
+  return c;
+}
+
 /** Floor and fixed walls. Redrawn only when the screen size changes. */
 export function drawStatic(ctx: Ctx, world: World, T: number): void {
   for (let y = 0; y < world.h; y++) {
     for (let x = 0; x < world.w; x++) {
       const px = x * T;
       const py = y * T;
-      ctx.fillStyle = '#0e1220';
-      ctx.fillRect(px, py, T, T);
-      // a few flecks so the floor is not dead flat
-      ctx.fillStyle = 'rgba(120,150,255,0.06)';
-      for (let k = 0; k < 5; k++) {
-        const n = (x * 73 + y * 131 + k * 197) % 97;
-        ctx.fillRect(px + ((n * 37) % 89) / 89 * T * 0.9, py + ((n * 53) % 83) / 83 * T * 0.9, T * 0.06, T * 0.06);
-      }
-      if (world.tiles[y * world.w + x] === HARD) drawHard(ctx, px, py, T);
+      drawFloor(ctx, x, y, px, py, T);
+      if (world.tiles[y * world.w + x] === HARD) drawHard(ctx, px, py, T, mapNow, y + 1 < world.h && world.tiles[(y + 1) * world.w + x] === HARD, scatter(x * 12.7 + y * 45.1 + 0.5));
     }
   }
 }
@@ -353,7 +613,8 @@ function line(ctx: Ctx, x1: number, y1: number, x2: number, y2: number): void {
  */
 export function drawDynamic(ctx: Ctx, world: World, T: number, time: number, focusId = 0, celebrate?: Celebration, crowned = -1): void {
   // every block casts a strip of shadow onto the floor below it
-  ctx.fillStyle = 'rgba(0,0,0,0.38)';
+  const west = mapNow === 'western';
+  ctx.fillStyle = west ? 'rgba(38,14,4,0.42)' : 'rgba(0,0,0,0.38)';
   for (let y = 0; y < world.h - 1; y++) {
     for (let x = 0; x < world.w; x++) {
       if (world.tiles[y * world.w + x] !== FLOOR && world.tiles[(y + 1) * world.w + x] === FLOOR) {
@@ -391,7 +652,7 @@ export function drawDynamic(ctx: Ctx, world: World, T: number, time: number, foc
   // breakable blocks (burning ones flash and shrink)
   for (let y = 0; y < world.h; y++) {
     for (let x = 0; x < world.w; x++) {
-      if (world.tiles[y * world.w + x] === SOFT) drawSoft(ctx, x * T, y * T, T);
+      if (world.tiles[y * world.w + x] === SOFT) drawSoft(ctx, x * T, y * T, T, mapNow, x + y);
     }
   }
   for (const b of world.burning) {
@@ -421,16 +682,18 @@ export function drawDynamic(ctx: Ctx, world: World, T: number, time: number, foc
 
   // blasts, in the colour of whoever placed the bomb
   ctx.save();
-  ctx.globalCompositeOperation = 'lighter';
-  for (const pass of [0, 1, 2]) {
+  // (on the sand of the Wild West a blast first darkens the ground under it, so its light and its owner's
+  // colour show as they do on Midnight's dark floor: pass -1)
+  for (const pass of west ? [-1, 0, 1, 2] : [0, 1, 2]) {
+    ctx.globalCompositeOperation = pass < 0 ? 'source-over' : 'lighter';
     for (const f of world.flames) {
       const col = colorById(world.players[f.owner]?.colorId ?? 'gold');
       const t = f.ttl / FLAME_TICKS;
       const k = Math.sqrt(t > 0.8 ? (1 - t) / 0.2 : t / 0.8);
-      const width = T * [0.92, 0.62, 0.3][pass] * k;
+      const width = T * (pass < 0 ? 0.92 : [0.92, 0.62, 0.3][pass]) * k;
       if (width < 0.5) continue;
-      ctx.strokeStyle = pass === 2 ? '#ffffff' : col.glow;
-      ctx.globalAlpha = [0.3, 0.75, 0.95][pass];
+      ctx.strokeStyle = pass < 0 ? '#1c0b04' : pass === 2 ? '#ffffff' : col.glow;
+      ctx.globalAlpha = pass < 0 ? 0.5 : [0.3, 0.75, 0.95][pass];
       ctx.lineWidth = width;
       const cx = (f.cx + 0.5) * T;
       const cy = (f.cy + 0.5) * T;

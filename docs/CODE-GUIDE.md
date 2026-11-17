@@ -139,6 +139,8 @@ How one robot is drawn: from the front, the back and each side, standing, walkin
 
 ### `src/lobby.ts`: the lobby
 
+Randomize CPUs (the switch at the foot of the Players page, `randEmotes` and `randLevels` in the setup): `rollCpus` in setup.ts picks each CPU player's emote and level when a match starts (`newMatch` in main.ts keeps them in `rolled`; online, `newScore` in room.ts, and the seats carry each CPU's level). The cards' own are left alone and show Random meanwhile. The map buttons (`mapPick`) set `setup.map`.
+
 `createLobby(host)` wires up the lobby's two pages (see docs/CONTROLS.md): your colour, the player cards and a CPU player's panel, the arena picture (a real arena from `createWorld`, drawn with `drawStatic` and `drawDynamic`) and the rules. It changes `host.setup` and `host.myColor` and calls `host.save()` after every change, then redraws everything (`refresh`). Colours always stay different: you cannot pick a CPU player's colour, and a CPU player's Colour choice lists only free ones. Other players on this screen (`host.guests`, couch play) join with `join(pad)`, and main.ts passes their controller's presses to `guestStep`, `guestReady` and `guestBack`; their robots go after yours and before the CPU players in the world (`worldConfig`'s `guests`).
 
 ### `src/ui.ts`: the menus' controls
@@ -156,13 +158,14 @@ Everything on the canvas is drawn with shapes in code. There are no image files.
 | Function | Draws |
 |---|---|
 | `drawStatic` | Floor and solid blocks. Drawn once onto a hidden canvas and reused every frame. |
+| `setMap`, `drawFloor`, `drawHard`, `drawSoft` | The map being drawn (`MAPS` in setup.ts): each map has its own floor, solid block and breakable block. Midnight: `drawSteel`, `drawBricks`. Wild West: `drawSand`, `drawRock` (a front face unless a block is right below; a cactus on some), `drawCrate` (stamped from a picture made once per size), with its colours in `WEST`. main.ts (`redrawStatic`) and the lobby's arena picture call `setMap` before drawing. A new map is a new id in `MAPS` and a branch in these three. |
 | `drawDynamic` | Everything else, every frame: shadows, power-ups, bricks, the ring under your robot, bombs, blasts, robots, carried and flying bombs |
 | `drawItemIcon` | The seven power-up icons |
 | `danceFrame` (in `dances.ts`) | The winner's victory dance at a moment: facing, steps, slide and `Pose` |
 | `warmSprites` | Gets the robots' pictures ready ahead of need: everyone's walk, the burnt robot, the ghosts, the winner's dance |
 | `drawGhosts` | The ghosts of knocked-out robots, with wings and a halo, floating up to the top of the screen. Drawn on a layer of its own, because they leave the arena |
 | `drawStatus` | What is drawn over a robot: the shield ring, the ring flying off when a shield is used up, the skull over a cursed robot |
-| `drawBombArt`, `drawHard`, `drawSoft` | A bomb with a lit fuse, a solid block and a brick, on their own: for the title screen |
+| `drawBombArt`, `drawHard`, `drawSoft` | A bomb with a lit fuse, a solid block and a brick, on their own: for the title screen (always Midnight's) and the lobby's map buttons |
 | `COLORS` | The nine bot colours. Only the coloured parts change (the armour, the helmet's rim and chin piece, the lit soles); the black parts are shared. |
 
 ### `src/audio.ts`: sound

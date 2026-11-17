@@ -16,6 +16,7 @@
 import { createWorld, type Dir, type ItemKind, type PlayerInput, type World, type WorldConfig } from './sim';
 import type { MatchSetup } from './setup';
 import type { DanceId } from './dances';
+import type { BotLevel } from './bot';
 
 /**
  * The version of these messages. A page says it in `hello`; the server turns away a page with another (one
@@ -202,6 +203,8 @@ export interface Seat {
   name: string;
   colorId: string;
   dance: DanceId;
+  /** a CPU player's level in this match (it may have been picked at random: Randomize CPUs) */
+  level?: BotLevel;
 }
 
 /** The score of the match so far, by place in the round. */
