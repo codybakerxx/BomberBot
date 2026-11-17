@@ -1,6 +1,7 @@
 """
-Checks the guard that keeps the arena sharp (keepSharp and checkSharp in src/main.ts), by doing to a page
-what makes an arena go soft and reading back what the game did about it:
+Checks the arena's sharpness report (checkSharp in src/main.ts, shown in Settings > Graphics), by doing to a
+page what makes an arena go soft and reading what the game says. (Until 17 November 2026 the game also
+corrected these itself; the owner found the arena looked worse, so it only reports now.) Cases:
 
 - a normal phone screen (density 3) and one with a fractional density (2.625): drawn pixel for pixel;
 - the page zoomed (as a pinch, a page shrunk to fit, or the app showing it would): the arena is drawn again
@@ -58,42 +59,29 @@ async def main():
         b = await launch(p)
         for dsf in (3, 2.625):
             ctx = await b.new_context(viewport={"width": 390, "height": 844}, device_scale_factor=dsf, has_touch=True, is_mobile=True)
-            # (a page cannot be pinched from here, so the zoom the browser reports is put in by hand)
             await ctx.add_init_script("window.__z = 1; Object.defineProperty(window.visualViewport, 'scale', { get: () => window.__z });")
             pg = await ctx.new_page()
             errs = []
             pg.on("pageerror", lambda e: errs.append(str(e)))
             await start(pg)
             g = await pg.evaluate(GEO)
-            check(g["sharp"]["ok"] and abs(g["w"] / g["cssW"] - dsf) < 0.01 and g["ir"] == "pixelated", f"density {dsf}: drawn pixel for pixel ({g['sharp']['text']})")
-            for z in (1.25, 0.97):
-                await pg.evaluate(f"window.__z = {z}")
-                await pg.wait_for_timeout(1500)
-                g = await pg.evaluate(GEO)
-                check(g["sharp"]["ok"] and abs(g["w"] / g["cssW"] - dsf * z) < 0.02, f"  page zoomed x{z}: drawn at {g['w'] / g['cssW']:.2f} to the page pixel ({g['sharp']['text']})")
-            await pg.evaluate("window.__z = 1.003")
-            await pg.wait_for_timeout(1200)
+            check(g["sharp"]["ok"] and abs(g["w"] / g["cssW"] - dsf) < 0.01 and g["ir"] != "pixelated", f"density {dsf}: drawn pixel for pixel, shown as drawn ({g['sharp']['text']})")
+            await pg.evaluate("window.__z = 1.25")
+            await pg.wait_for_timeout(1500)
             g = await pg.evaluate(GEO)
-            check(g["sharp"]["zoom"] == 1 and abs(g["w"] / g["cssW"] - dsf) < 0.01, "  a zoom within half a per cent of 1 is 1")
-            await pg.evaluate("window.__n = 0; const c = document.getElementById('cv'); const d = Object.getOwnPropertyDescriptor(HTMLCanvasElement.prototype, 'width'); Object.defineProperty(c, 'width', { get() { return d.get.call(this); }, set(v) { window.__n++; d.set.call(this, v); } }); let t = 0; window.__pinch = setInterval(() => { window.__z = 1 + (++t % 40) / 50; }, 16);")
-            await pg.wait_for_timeout(2000)
-            n = await pg.evaluate("window.__n")
-            check(n <= 2, f"  a pinch in progress does not have the arena made again every frame ({n} times in 2 s)")
-            await pg.evaluate("clearInterval(window.__pinch); window.__z = 1")
-            await pg.wait_for_timeout(1200)
+            check("zoomed" in g["sharp"]["text"] and abs(g["w"] / g["cssW"] - dsf) < 0.01, f"  page zoomed: said, and the arena left as it was ({g['sharp']['text']})")
+            await pg.evaluate("window.__z = 1")
             await pg.add_style_tag(content="html { transform: translate(0.4px, 0.27px); }")
-            await pg.wait_for_timeout(2500)
+            await pg.wait_for_timeout(1500)
             g = await pg.evaluate(GEO)
-            off = max(abs((g["left"] * dsf + 0.5) % 1 - 0.5), abs((g["top"] * dsf + 0.5) % 1 - 0.5))
-            check(g["sharp"]["ok"] and off < 0.05, f"  page moved by part of a pixel: the arena is back on the grid ({off:.3f} of a pixel off)")
+            check("off the grid" in g["sharp"]["text"], f"  page moved by part of a pixel: said ({g['sharp']['text']})")
             await pg.evaluate("document.querySelector('style:last-of-type').remove()")
-            await pg.wait_for_timeout(2500)
-            g = await pg.evaluate(GEO)
-            check(g["sharp"]["ok"], "  and again when the page moves back")
+            await pg.wait_for_timeout(1500)
+            check((await pg.evaluate(GEO))["sharp"]["ok"], "  sharp again when it moves back")
             await pg.add_style_tag(content="#cv { width: 300px !important; }")
             await pg.wait_for_timeout(4000)
             g = await pg.evaluate(GEO)
-            check(not g["sharp"]["ok"] and "than it is drawn" in g["sharp"]["text"] and g["sharp"]["tries"] <= 4, f"  stretched beyond its reach: it says so and stops trying ({g['sharp']['text']})")
+            check("than drawn" in g["sharp"]["text"] and g["sharp"]["tries"] <= 4, f"  stretched: said, and laid out again a few times at most ({g['sharp']['text']})")
             check(not errs, "  no errors")
             await ctx.close()
         await b.close()

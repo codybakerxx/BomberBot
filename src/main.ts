@@ -327,7 +327,9 @@ function density(): number {
  * it. Canvases drawn for the reported density alone are then stretched, and soft, while text stays sharp.
  */
 function screenDensity(): number {
-  return (window.devicePixelRatio || 1) * pageZoom;
+  // (it was times the page's zoom for a day, November 2026; the owner found the arena looked bad again, so
+  // back to what the browser reports, as when it was fine: pageZoom is only shown in Settings now)
+  return window.devicePixelRatio || 1;
 }
 /**
  * How far the page is zoomed on the screen (the browser's visualViewport.scale): 1 nearly always. A new
@@ -961,23 +963,11 @@ function keepSharp(now: number): void {
 }
 
 /**
- * The check behind keepSharp (the owner's ask, November 2026: the arena and the robots went soft now and
- * then, most often on the first visit after an update, and it had to stop for good). keepSharp trusts what
- * the browser reports; this measures instead. Twice a second it asks the browser where the arena really is
- * on the screen and how big, and compares that with the pixels it was drawn with:
- *
- * - shown at another size than it was drawn for (something stretched it): the page is laid out again;
- * - not starting on a whole screen pixel (something moved the page under it by part of a pixel, after it
- *   was placed): it is moved the rest of the way onto one.
- *
- * Each is tried a few times and then left, so a screen it cannot put right is not laid out for ever. What it
- * found is kept in `sharp` and shown in Settings › Graphics under Sharpness, so a blurry screen can be
- * reported with the reason on it.
- *
- * When the arena is drawn pixel for pixel, it is also shown with `image-rendering: pixelated`: the browser
- * then copies each pixel as it is and never smooths between two, so a placement out by a hair cannot soften
- * it. (Not when it is drawn with fewer pixels than the screen has, Sharpness below Sharpest: stretched that
- * way it would look blocky, and smoothing is right.)
+ * Twice a second, where the arena really is on the screen and how big, compared with the pixels it was drawn
+ * with: shown in Settings › Graphics under Sharpness ("Arena: sharp, pixel for pixel", or what is off), so a
+ * blurry screen can be reported with its reason. If it is shown stretched it is laid out again (a few times
+ * at most). It does not otherwise touch the arena: for a day in November 2026 it also showed it pixelated,
+ * moved it onto the screen's grid and followed the page's zoom, and the owner found the arena looked worse.
  */
 const SHARP_EVERY_MS = 500;
 const SHARP_TRIES = 4;
@@ -994,47 +984,33 @@ function checkSharp(now: number): void {
   const vv = window.visualViewport;
   const real = (window.devicePixelRatio || 1) * (vv && vv.scale > 0.05 ? vv.scale : 1); // the screen's pixels to one of the page's, right now
   const want = density();
-  const exact = want >= screenDensity() - 0.001; // drawn with every pixel the screen has
-  const pix = exact ? 'pixelated' : '';
-  if (canvas.style.imageRendering !== pix) canvas.style.imageRendering = ghosts.style.imageRendering = pix;
-  const shownAt = canvas.width / r.width; // the canvas's pixels to one of the page's, as it is shown
+  const exact = want >= screenDensity() - 0.001;
+  // (the arena is left as the layout put it: showing it pixelated and nudging it onto the grid were tried for a
+  // day in November 2026 and the owner found it looked worse on his phone. This only looks, and says.)
+  if (canvas.style.imageRendering) canvas.style.imageRendering = ghosts.style.imageRendering = '';
+  const shownAt = canvas.width / r.width;
   const stretch = shownAt / want;
-  // how far its corner is from a whole screen pixel, in screen pixels
   const off = (v: number): number => {
     const d = v * real;
     return d - Math.round(d);
   };
   const dx = off(r.left - (vv?.offsetLeft ?? 0));
   const dy = off(r.top - (vv?.offsetTop ?? 0));
-  const zoomed = Math.abs(real / (window.devicePixelRatio || 1) - 1) > 0.005;
+  const zoom = real / (window.devicePixelRatio || 1);
+  const zoomed = Math.abs(zoom - 1) > 0.005;
   const stretched = Math.abs(stretch - 1) > 0.004;
-  const offGrid = !zoomed && (Math.abs(dx) > 0.03 || Math.abs(dy) > 0.03);
-  if (!stretched && !offGrid) {
-    sharpTries = 0;
-    sharp = { ok: true, text: zoomed ? `sharp (the page is zoomed ×${Math.round((real / (window.devicePixelRatio || 1)) * 100) / 100}, and drawn to match)` : 'sharp, pixel for pixel' };
-    if (!exact) sharp.text = 'drawn softer on purpose (Sharpness is below Sharpest)';
-    return;
+  const offGrid = Math.abs(dx) > 0.05 || Math.abs(dy) > 0.05; // (a hair, as a fractional density leaves, is not worth a word)
+  const bits: string[] = [];
+  if (!exact) bits.push('drawn softer on purpose (Sharpness is below Sharpest)');
+  if (zoomed) bits.push(`the page is zoomed ×${Math.round(zoom * 100) / 100}`);
+  if (stretched) bits.push(`shown ${Math.round(Math.abs(1 / stretch - 1) * 1000) / 10}% ${stretch < 1 ? 'bigger' : 'smaller'} than drawn`);
+  if (offGrid) bits.push(`${Math.round(Math.max(Math.abs(dx), Math.abs(dy)) * 100) / 100} of a pixel off the grid`);
+  sharp = bits.length ? { ok: false, text: bits.join('; ') } : { ok: true, text: 'sharp, pixel for pixel' };
+  // stretched (the window changed under it without a resize): laid out again, a few times at most, as before
+  if (stretched && sharpTries < SHARP_TRIES) {
+    sharpTries++;
+    layout();
   }
-  sharp = {
-    ok: false,
-    text: stretched
-      ? `shown ${Math.round(Math.abs(1 / stretch - 1) * 1000) / 10}% ${stretch < 1 ? 'bigger' : 'smaller'} than it is drawn`
-      : `${Math.round(Math.max(Math.abs(dx), Math.abs(dy)) * 100) / 100} of a pixel off the screen's grid`,
-  };
-  if (sharpTries >= SHARP_TRIES) return;
-  sharpTries++;
-  if (stretched) layout();
-  else {
-    // onto the grid: the rest of the way to a whole screen pixel
-    const move = (prop: 'left' | 'top', d: number, alsoGhosts: boolean): void => {
-      const v = `${(parseFloat(canvas.style[prop]) || 0) - d / real}px`;
-      canvas.style[prop] = v;
-      if (alsoGhosts) ghosts.style[prop] = v;
-    };
-    if (Math.abs(dx) > 0.03) move('left', dx, true);
-    if (Math.abs(dy) > 0.03) move('top', dy, false);
-  }
-  sharpAt = now - SHARP_EVERY_MS + 60; // look again shortly, to see that it worked
 }
 
 /** Push the control settings into the swipe pad, the screen layout, the menu and the pad's caption, and optionally save them. */
@@ -1278,7 +1254,7 @@ function fillPause(): void {
   const time = world.over || left === Infinity ? '' : left > 0 ? ` · ${clockText(Math.ceil(left / TICK_HZ))} left` : ' · Blocks falling';
   // (online: the round trip to the server, so a slow connection can be told from a fault)
   $('pauseInfo').textContent = `${summary(setup, guests.length)}${time}${net && net.rtt ? ` · ping ${net.rtt} ms` : ''}`;
-  $('pauseResume').textContent = roundLive && !net ? 'Resume' : 'Back to the round';
+  $('pauseResume').textContent = 'Resume'; // (the owner's word, whether the round is going on or over)
   const list = $('standings');
   list.textContent = '';
   const dpr = density();
