@@ -50,10 +50,14 @@ import {
   defaultRules,
   problem,
   fixedSize,
-  joinTeam,
   lineUp,
-  recolourTeam,
-  teamChoices,
+  recolourRow,
+  rowChoices,
+  rowTeams,
+  seatLast,
+  seating,
+  setRowTeam,
+  swapSeats,
   teamSizes,
   splitTeams,
   swapTeams,
@@ -488,7 +492,7 @@ export function createLobby(host: LobbyHost): {
           get: () => Math.max(0, [0, ...teamSizes(inOrder().length)].indexOf(fixedSize(s(), inOrder().length))),
           set: (i) => {
             s().teamSize = [0, ...teamSizes(inOrder().length)][i] ?? 0;
-            if (s().teamSize) splitTeams(s(), inOrder());
+            if (s().teamSize) splitTeams(s(), inOrder()); // (writes the rows down as that size makes them)
             changed();
           },
           wrap: false,
@@ -531,6 +535,7 @@ export function createLobby(host: LobbyHost): {
       el: row,
       refresh(): void {
         label.textContent = lineUp(s(), inOrder());
+        b.hidden = !!fixedSize(s(), inOrder().length); // (teams all one size are even already)
       },
     };
   }
@@ -545,10 +550,14 @@ export function createLobby(host: LobbyHost): {
     const order = inOrder();
     return teamsFor(s(), order)[order.indexOf(colour)] ?? 0;
   }
-  /** The next colour for the team `colour` is on: everyone on it changes with it (the owner's ask). */
+  /** The row of the Players page a robot sits in (two to a row; the row is its team). */
+  function rowOf(colour: string): number {
+    return Math.floor(seating(s(), inOrder()).indexOf(colour) / 2);
+  }
+  /** The next colour for the row `colour` sits in (with a team size, its team's rows): everyone there changes with it (the owner's ask). */
   function nextTeamColour(colour: string): void {
     if (!canEdit() || !s().teamsOn) return;
-    recolourTeam(s(), inOrder(), teamOf(colour));
+    recolourRow(s(), inOrder(), rowOf(colour));
     changed();
   }
   function drawBotOn(cv: HTMLCanvasElement, colorId: string, fill = 0.92): void {
@@ -620,16 +629,17 @@ export function createLobby(host: LobbyHost): {
     swipeable(row, step);
     return row;
   }
-  /** The Team row on a card: ‹ the robot's team ›, through the teams it can be on (`teamChoices`). */
+  /** The Team row on a card: ‹ its row's team colour ›, through the colours the row can have (`rowChoices`); the whole row changes with it. */
   function teamRow(who: string): HTMLElement {
     const colour = colourOf(who);
     const t = teamOf(colour);
     const step = (d: number): void => {
       const order = inOrder();
-      const list = teamChoices(s(), order, colour);
-      const at = list.indexOf(teamOf(colour));
+      const row = rowOf(colour);
+      const list = rowChoices(s(), order, row);
+      const at = list.indexOf(rowTeams(s(), order.length)[row]);
       const next = list[(at + d + list.length) % list.length];
-      if (next !== undefined && joinTeam(s(), order, colour, next)) changed();
+      if (next !== undefined && setRowTeam(s(), order, row, next)) changed();
     };
     return pickRow(`tp-${who}`, 'Team', TEAMS[t].short, canEdit() ? step : null, TEAMS[t].color);
   }
@@ -726,8 +736,10 @@ export function createLobby(host: LobbyHost): {
     box.textContent = '';
     const cvs: [HTMLCanvasElement, string][] = [];
     const lastOne = s().cpus.length + guests().length <= 1;
+    /** the cards made, by the colour of their robot: laid out by where each sits, at the end */
+    const made: [string, HTMLElement][] = [];
     const add = (wrap: HTMLElement, colour: string): void => {
-      box.append(wrap);
+      made.push([colour, wrap]);
       cvs.push([wrap.querySelector('canvas')!, colour]);
     };
     // you
@@ -761,7 +773,7 @@ export function createLobby(host: LobbyHost): {
         t.querySelector('b')!.textContent = g.remote ? g.remote.name || looking : looking;
         t.querySelector('small')!.textContent = g.remote ? `P${n} · ${g.remote.host ? 'host' : 'online'}${g.remote.on ? '' : ' · away'}` : `P${n} · controller ${g.pad + 1}`;
       }, { bin, dance: [!!g.remote, false] });
-      box.append(wrap);
+      made.push([g.colorId, wrap]);
       cvs.push([wrap.querySelector('canvas')!, g.pick]);
     });
     // the CPU players
@@ -788,6 +800,7 @@ export function createLobby(host: LobbyHost): {
         c.colorId,
       );
     });
+    const extras: HTMLElement[] = [];
     if (s().cpus.length < maxCpus() && canEdit()) {
       const addBtn = document.createElement('button');
       addBtn.type = 'button';
@@ -795,7 +808,9 @@ export function createLobby(host: LobbyHost): {
       addBtn.id = 'slotAdd';
       addBtn.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><b>Add CPU player</b>';
       addBtn.addEventListener('click', addCpu);
-      box.append(addBtn);
+      addBtn.dataset.who = 'add'; // (a card dropped here takes the last seat)
+      addBtn.classList.add('slot-drop');
+      extras.push(addBtn);
     }
     // with a controller connected and room for one more: how another player joins
     if (total() < MAX_CPUS + 1 && host.controllers() > 0 && !net()) {
@@ -803,7 +818,29 @@ export function createLobby(host: LobbyHost): {
       j.className = 'slot join';
       j.id = 'slotJoin';
       j.innerHTML = '<span class="pada">A</span><b>Another controller? Press A on it to join</b>';
-      box.append(j);
+      extras.push(j);
+    }
+    // two to a row, in the order they sit (the owner's design: in a teams match the row is the team, and is
+    // tinted with its colour; with Teams of 4, two rows together)
+    const seats = seating(s(), inOrder());
+    made.sort((a, b) => seats.indexOf(a[0]) - seats.indexOf(b[0]));
+    const items = [...made.map(([, w]) => w), ...extras];
+    const order = inOrder();
+    const teams = teamsFor(s(), order);
+    for (let r = 0; r * 2 < items.length; r++) {
+      const row = document.createElement('div');
+      row.className = 'slot-row';
+      row.append(...items.slice(r * 2, r * 2 + 2));
+      const first = made[r * 2];
+      if (s().teamsOn && first) {
+        const t = teams[order.indexOf(first[0])];
+        row.classList.add('teamed');
+        row.style.setProperty('--team', TEAMS[t].color);
+        // (the same team as the row before: drawn joined to it)
+        const prev = made[r * 2 - 2];
+        if (prev && teams[order.indexOf(prev[0])] === t) row.classList.add('same');
+      }
+      box.append(row);
     }
     // the canvases have their size only once they are on the page
     for (const [cv, id] of cvs) drawBotOn(cv, id);
@@ -819,9 +856,9 @@ export function createLobby(host: LobbyHost): {
   const HOLD_MS = 380;
   const HOLD_SLOP = 10;
   /**
-   * A card can be held down and dragged onto another (the owner's ask): it joins that robot's team and, for
-   * a CPU player, takes the place after it (or the first CPU place, dropped on a person). With a mouse it
-   * lifts as soon as it moves. Only for whoever can change the players (online, the host).
+   * A card can be held down and dragged onto another (the owner's ask): the two swap seats, so each plays for
+   * the other's row's team (`dropOn`). With a mouse it lifts as soon as it moves. Only for whoever can change
+   * the players (online, the host).
    */
   function dragFrom(wrap: HTMLElement, who: string): void {
     let timer = 0;
@@ -879,7 +916,7 @@ export function createLobby(host: LobbyHost): {
     if (!drag || e.pointerId !== drag.id) return;
     drag.ghost.style.left = `${e.clientX - drag.dx}px`;
     drag.ghost.style.top = `${e.clientY - drag.dy}px`;
-    const under = document.elementFromPoint(e.clientX, e.clientY)?.closest<HTMLElement>('#slots .slot-wrap') ?? null;
+    const under = document.elementFromPoint(e.clientX, e.clientY)?.closest<HTMLElement>('#slots .slot-wrap, #slots .slot-drop') ?? null;
     const over = under && under !== drag.wrap ? under : null;
     if (over !== drag.over) {
       drag.over?.classList.remove('drop-on');
@@ -924,21 +961,14 @@ export function createLobby(host: LobbyHost): {
     },
     true,
   );
-  /** Card `who` dropped on card `on`: it joins that robot's team, and a CPU player moves to just after it. */
+  /**
+   * Card `who` dropped on card `on`: the two swap seats, so each then plays for the other's row's team (the
+   * owner's design: the row is the team). Dropped on the empty place at the end (Add CPU player): the last seat.
+   */
   function dropOn(who: string, on: string): void {
     if (!canEdit()) return;
-    const order = inOrder();
-    if (s().teamsOn) joinTeam(s(), order, colourOf(who), teamOf(colourOf(on)), colourOf(on));
-    if (who[0] === 'c') {
-      const from = Number(who.slice(1));
-      const [cpu] = s().cpus.splice(from, 1);
-      let to = 0;
-      if (on[0] === 'c') {
-        const j = Number(on.slice(1));
-        to = j > from ? j : j + 1; // (after it, counting the gap the dragged one left)
-      }
-      s().cpus.splice(to, 0, cpu);
-    }
+    if (on === 'add') seatLast(s(), inOrder(), colourOf(who));
+    else swapSeats(s(), inOrder(), colourOf(who), colourOf(on));
     changed();
   }
 

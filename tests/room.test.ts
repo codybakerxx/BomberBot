@@ -23,7 +23,7 @@ import {
   type ServerMsg,
 } from '../src/net';
 import { makeRng } from '../src/sim';
-import { ARENAS, MAPS, defaultRules, itemChances, defaultSetup, fixedSize, joinTeam, lineUp, readSetup, recolourTeam, rollCpus, splitTeams, summary, swapTeams, teamChoices, teamSizes, teamsFor, wholeTile, worldConfig } from '../src/setup';
+import { ARENAS, MAPS, defaultRules, itemChances, defaultSetup, fixedSize, lineUp, readSetup, recolourRow, rollCpus, rowChoices, rowTeams, seatLast, seating, setRowTeam, summary, swapSeats, swapTeams, teamSizes, teamsFor, wholeTile, worldConfig } from '../src/setup';
 import { BOT_LEVELS } from '../src/bot';
 import { DANCE_IDS } from '../src/dances';
 import type { World } from '../src/sim';
@@ -348,8 +348,7 @@ assert.strictEqual(back.last('room')!.host, back.last('room')!.you, 'the friend 
   h.member = room3.hello(h.conn, { t: 'hello', id: 'h3', name: 'Cody', colorId: 'gold', dance: 'spin', create: true, pv: PROTOCOL }, now);
   const first = h.last('room')!.setup;
   const cpus = first.cpus.map((c) => c.colorId);
-  const teams = Object.fromEntries(['gold', ...cpus].map((c, i) => [c, i < 2 ? 0 : 1]));
-  room3.message(h.member!, { t: 'setup', setup: { ...first, teamsOn: true, friendlyFire: false, teams, firstTo: 2, timerOn: false } }, now);
+  room3.message(h.member!, { t: 'setup', setup: { ...first, teamsOn: true, friendlyFire: false, seats: ['gold', ...cpus], rowTeams: [0, 1], firstTo: 2, timerOn: false } }, now);
   room3.message(h.member!, { t: 'start' }, now);
   const cfg = h.last('round')!.cfg;
   assert.deepStrictEqual(cfg.teams, [0, 0, 1, 1], 'the round the server sends has the sides');
@@ -362,32 +361,66 @@ assert.strictEqual(back.last('room')!.host, back.last('room')!.you, 'the friend 
   assert.deepStrictEqual(room3.score.wins, [1, 1, 0, 0], 'a point each for both robots on it');
 }
 
-// teams: split half and half, balanced as players come and go, kept through colour swaps and saving
+// teams: the row a robot sits in on the Players page is its team (two to a row)
 {
   const s = defaultSetup('gold');
   const four = ['gold', 'black', 'pink', 'blue'];
   assert.equal(s.teamsOn, false, 'teams are off to start with');
   assert.equal(s.friendlyFire, false, 'and friendly fire is off');
+  assert.equal(s.teamSize, 0, 'Custom to start with');
   assert.equal(worldConfig(s, 'gold', 1).teams, undefined, 'off: every robot for itself');
-  splitTeams(s, four);
-  assert.deepStrictEqual(teamsFor(s, four), [0, 0, 1, 1], 'half and half, in player order');
-  splitTeams(s, ['gold', 'black', 'pink']);
-  assert.deepStrictEqual(teamsFor(s, ['gold', 'black', 'pink']), [0, 0, 1], 'an odd number: red has one more');
-  // someone new goes on the smaller side
-  splitTeams(s, four);
-  assert.deepStrictEqual(teamsFor(s, [...four, 'red']), [0, 0, 1, 1, 0]);
-  s.teams.black = 1;
-  assert.deepStrictEqual(teamsFor(s, [...four, 'red']), [0, 1, 1, 1, 0]);
-  // never only one side
-  s.teams = { gold: 0, black: 0, pink: 0, blue: 0 };
-  assert.deepStrictEqual(teamsFor(s, four), [0, 0, 0, 1]);
-  // a CPU player gives its colour up to you: you each keep your side
-  s.teams = { gold: 0, black: 0, pink: 1, blue: 1 };
+  assert.deepStrictEqual(teamsFor(s, four), [0, 0, 1, 1], 'two rows: the first red, the second blue');
+  assert.deepStrictEqual(rowTeams(s, 8), [0, 0, 1, 1], 'eight players: two rows of each');
+  assert.deepStrictEqual(rowTeams(s, 5), [0, 1, 1], 'five: the first row red, the others blue');
+  // dragging a card onto another swaps their seats: each plays for the other's row
+  swapSeats(s, four, 'black', 'pink');
+  assert.deepStrictEqual(seating(s, four), ['gold', 'pink', 'black', 'blue']);
+  assert.deepStrictEqual(teamsFor(s, four), [0, 1, 0, 1], 'pink now sits beside you, on your team');
+  // dropped on the empty place at the end: the last seat
+  seatLast(s, four, 'gold');
+  assert.deepStrictEqual(seating(s, four), ['pink', 'black', 'blue', 'gold']);
+  // someone new sits at the end; a new row joins the team with the fewest robots
+  assert.deepStrictEqual(seating(s, [...four, 'red']), ['pink', 'black', 'blue', 'gold', 'red']);
+  assert.deepStrictEqual(rowTeams(s, 5), [0, 1, 0], 'the new row joins red (2 v 2 before it)');
+  // a tap where a name is: the whole row takes the next colour no other row has
+  s.seats = [...four];
+  s.rowTeams = [0, 1];
+  assert.equal(recolourRow(s, four, 0), 2, 'red becomes green (blue is taken)');
+  assert.deepStrictEqual(teamsFor(s, four), [2, 2, 1, 1], 'both robots in that row change');
+  // Custom: a row can take any colour, the same as another row joining them, but not leaving one team
+  assert.deepStrictEqual(rowChoices(s, four, 0), [0, 2, 3, 4, 5, 6, 7], 'not blue: that would leave only one team');
+  const six = ['gold', 'black', 'pink', 'blue', 'red', 'orange'];
+  s.seats = [...six];
+  s.rowTeams = [0, 1, 2];
+  assert.ok(setRowTeam(s, six, 2, 1));
+  assert.equal(lineUp(s, six), '4 v 2', 'the third row joins blue');
+  // Teams of 2 and 4: the sizes eight players divide into in whole rows; a team's rows are one colour
+  assert.deepStrictEqual([3, 4, 5, 6, 7, 8].map((n) => teamSizes(n)), [[], [2], [], [2], [], [2, 4]]);
+  const eight = ['gold', 'black', 'pink', 'blue', 'red', 'orange', 'white', 'green'];
+  s.seats = [...eight];
+  s.rowTeams = [0, 0, 1, 1];
+  s.teamSize = 2;
+  assert.deepStrictEqual(rowTeams(s, 8), [0, 1, 2, 3], 'teams of two: every row its own colour, none shared');
+  assert.equal(lineUp(s, eight), '2 v 2 v 2 v 2');
+  s.teamSize = 4;
+  s.rowTeams = [0, 3, 1, 1];
+  assert.deepStrictEqual(rowTeams(s, 8), [0, 0, 1, 1], 'teams of four: two rows each, one colour');
+  assert.deepStrictEqual(rowChoices(s, eight, 0), [0, 2, 3, 4, 5, 6, 7], 'not the other team’s colour');
+  assert.equal(recolourRow(s, eight, 1), 2, 'a tap on a robot in the second row');
+  assert.deepStrictEqual(s.rowTeams, [2, 2, 1, 1], 'recolours both rows of its team');
+  assert.equal(fixedSize(s, 9), 0, 'a player more: Custom');
+  // two players share one row: still a team each
+  assert.deepStrictEqual(teamsFor(defaultSetup('gold'), ['gold', 'black']), [0, 1]);
+  // a CPU player gives its colour up to you: you each keep your seat, so your team
+  s.seats = [...four];
+  s.rowTeams = [0, 1];
+  s.teamSize = 0;
   swapTeams(s, 'gold', 'pink');
-  assert.deepStrictEqual(s.teams, { gold: 1, black: 0, pink: 0, blue: 1 });
+  assert.deepStrictEqual(s.seats, ['pink', 'black', 'gold', 'blue']);
   // into the world, and read back as saved
   s.teamsOn = true;
   s.friendlyFire = true;
+  s.seats = ['pink', 'black', 'gold', 'blue'];
   s.cpus = [{ colorId: 'black', level: 'normal' }, { colorId: 'gold', level: 'normal' }, { colorId: 'blue', level: 'normal' }];
   const cfg = worldConfig(s, 'pink', 1);
   assert.deepStrictEqual(cfg.teams, [0, 0, 1, 1]);
@@ -395,60 +428,12 @@ assert.strictEqual(back.last('room')!.host, back.last('room')!.you, 'the friend 
   const back = readSetup(JSON.parse(JSON.stringify(s)), 'pink', COLOR_IDS);
   assert.equal(back.teamsOn, true);
   assert.equal(back.friendlyFire, true);
-  assert.deepStrictEqual(back.teams, s.teams);
-  assert.deepStrictEqual(readSetup({ ...s, teams: { gold: 9, nope: 1, blue: 1 } }, 'pink', COLOR_IDS).teams, { blue: 1 }, 'only real colours and teams are kept');
+  assert.deepStrictEqual(back.seats, s.seats);
+  assert.deepStrictEqual(back.rowTeams, s.rowTeams);
+  assert.deepStrictEqual(readSetup({ ...s, seats: ['gold', 'nope', 'gold', 'blue'], rowTeams: [9, 1] }, 'pink', COLOR_IDS).seats, ['gold', 'blue'], 'only real colours, each once');
+  assert.equal(readSetup({ ...s, teamSize: 3 }, 'pink', COLOR_IDS).teamSize, 0, 'whole rows only: Teams of 2 or 4');
   assert.equal(defaultRules(s, 'pink').teamsOn, true, 'Reset to Default on the Match page leaves the teams alone');
   assert.ok(summary(s).includes('Teams, friendly fire'));
-
-  // team size: Custom (the default) or teams all one size, as the players divide into them
-  const eight = ['gold', 'black', 'pink', 'blue', 'red', 'orange', 'white', 'green'];
-  assert.deepStrictEqual([2, 3, 4, 5, 6, 7, 8].map((n) => teamSizes(n)), [[], [], [2], [], [2, 3], [], [2, 4]], 'only sizes the players divide into');
-  const t = defaultSetup('gold');
-  assert.equal(t.teamSize, 0, 'Custom to start with');
-  t.teamsOn = true;
-  assert.deepStrictEqual(teamsFor(t, eight), [0, 0, 0, 0, 1, 1, 1, 1], 'two teams to start with');
-  t.teamSize = 2;
-  splitTeams(t, eight);
-  assert.deepStrictEqual(teamsFor(t, eight), [0, 0, 1, 1, 2, 2, 3, 3], 'teams of two');
-  assert.equal(lineUp(t, eight), '2 v 2 v 2 v 2');
-  // a tap where a name is: the whole team takes the next colour no other team has
-  assert.equal(recolourTeam(t, eight, 0), 4, 'red becomes purple (blue, green and yellow are taken)');
-  assert.deepStrictEqual(teamsFor(t, eight), [4, 4, 1, 1, 2, 2, 3, 3], 'and everyone on it changes with it');
-  // teams of two: the ‹ › goes through the teams there are, and a full team swaps a robot over
-  assert.deepStrictEqual(teamChoices(t, eight, 'gold'), [1, 2, 3, 4]);
-  assert.ok(joinTeam(t, eight, 'gold', 2));
-  assert.deepStrictEqual(teamsFor(t, eight), [2, 4, 1, 1, 2, 4, 3, 3], 'gold joins green; green’s last robot takes its place');
-  assert.equal(lineUp(t, eight), '2 v 2 v 2 v 2', 'every team still two');
-  // dropped on a robot: that one stays, the other one swaps over
-  assert.ok(joinTeam(t, eight, 'white', 1, 'pink'));
-  assert.deepStrictEqual(teamsFor(t, eight), [2, 4, 1, 3, 2, 4, 1, 3]);
-  // split again: the teams keep their colours
-  t.teamSize = 4;
-  splitTeams(t, eight);
-  assert.deepStrictEqual(teamsFor(t, eight), [2, 2, 2, 2, 4, 4, 4, 4], 'teams of four, keeping the first two colours');
-  // a player more: the size no longer fits, so it is Custom, and the new robot joins the smallest team
-  assert.equal(fixedSize(t, 9), 0);
-  // Custom: every colour can be picked; a colour nobody has starts a team; never down to one team
-  t.teamSize = 0;
-  assert.deepStrictEqual(teamChoices(t, eight, 'gold'), [0, 1, 2, 3, 4, 5, 6, 7]);
-  assert.ok(joinTeam(t, eight, 'gold', 6));
-  assert.equal(lineUp(t, eight), '4 v 3 v 1');
-  const two = ['gold', 'black'];
-  const u = defaultSetup('gold');
-  u.teamsOn = true;
-  splitTeams(u, two);
-  assert.ok(!joinTeam(u, two, 'black', 0), 'one against one: neither can join the other');
-  assert.ok(!teamChoices(u, two, 'black').includes(0));
-  // a size that was in force, upset by a player coming: split again so every team is that size
-  const v = defaultSetup('gold');
-  v.teamsOn = true;
-  v.teamSize = 2;
-  const quad = ['gold', 'black', 'pink', 'blue'];
-  splitTeams(v, quad);
-  v.teams = { gold: 0, black: 0, pink: 0, blue: 1 };
-  assert.deepStrictEqual(teamsFor(v, quad), [0, 0, 1, 1]);
-  assert.equal(readSetup({ ...v, teamSize: 3 }, 'gold', COLOR_IDS).teamSize, 3);
-  assert.equal(readSetup({ ...v, teamSize: 9 }, 'gold', COLOR_IDS).teamSize, 4);
 }
 
 console.log('room checks passed');

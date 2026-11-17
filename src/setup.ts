@@ -192,12 +192,21 @@ export interface MatchSetup {
    * team's colour changes it for everyone on it.
    */
   teamsOn: boolean;
-  /** each robot's team by its colour (one colour is one robot in a match): an index into TEAMS. A robot not in it joins the smallest team (`teamsFor`). */
-  teams: Record<string, number>;
   /**
-   * Team size (the lobby's Custom, Teams of 2, Teams of 4...): 0 is Custom, the default, where any robot can be
-   * on any team. Otherwise every team has exactly this many robots: only offered when the players divide into
-   * such teams (`teamSizes`), and Custom while they do not.
+   * Where each robot sits on the Players page, by its colour (one colour is one robot in a match), in order:
+   * two to a row. A robot not in it sits at the end (`seating`). Dragging a card onto another swaps their seats.
+   */
+  seats: string[];
+  /**
+   * The team of each row of the Players page (the owner's design, 17 November 2026: the row a robot sits in
+   * is its team): an index into TEAMS. Rows with the same colour are one team. With a team size, each team is
+   * that many rows' worth (Teams of 4: two rows), the same colour (`rowTeams`).
+   */
+  rowTeams: number[];
+  /**
+   * Team size (the lobby's Custom, Teams of 2, Teams of 4): 0 is Custom, the default, where each row has a
+   * colour of its own (rows of one colour are one team). Otherwise every team is this many robots, rows of two
+   * side by side: only offered when the players divide into such teams (`teamSizes`), Custom while they do not.
    */
   teamSize: number;
   /** in a teams match, can a teammate's blast knock you out? */
@@ -217,10 +226,10 @@ export const TEAMS = [
 ];
 const isTeam = (t: unknown): t is number => typeof t === 'number' && Number.isInteger(t) && t >= 0 && t < TEAMS.length;
 
-/** The team sizes `n` robots can be split into exactly, in at least two teams: 8 robots, [2, 4]; 6, [2, 3]; 5, none. */
+/** The team sizes `n` robots can be split into exactly, in whole rows of two and at least two teams: 8 robots, [2, 4]; 6, [2]; 5, none. */
 export function teamSizes(n: number): number[] {
   const out: number[] = [];
-  for (let k = 2; k <= n / 2; k++) if (n % k === 0) out.push(k);
+  for (let k = 2; k <= n / 2; k += 2) if (n % k === 0) out.push(k);
   return out;
 }
 
@@ -229,135 +238,144 @@ export function fixedSize(s: MatchSetup, n: number): number {
   return teamSizes(n).includes(s.teamSize) ? s.teamSize : 0;
 }
 
-/** The teams' colours, first the ones the players have, in their order, then the rest of TEAMS in its order. */
-function teamOrder(s: MatchSetup, colours: string[]): number[] {
-  const out: number[] = [];
-  for (const c of colours) if (isTeam(s.teams[c]) && !out.includes(s.teams[c])) out.push(s.teams[c]);
-  for (let t = 0; t < TEAMS.length; t++) if (!out.includes(t)) out.push(t);
+/** Where the robots sit, by colour: as `s.seats` has them, then anyone not in it in player order. */
+export function seating(s: MatchSetup, colours: string[]): string[] {
+  const out = s.seats.filter((c, i) => colours.includes(c) && s.seats.indexOf(c) === i);
+  for (const c of colours) if (!out.includes(c)) out.push(c);
   return out;
 }
 
-/** `n` robots in `k` teams as evenly as can be, in player order, the teams taking the colours of `order`. */
-function evenly(n: number, k: number, order: number[]): number[] {
-  const out: number[] = [];
-  for (let t = 0; t < k; t++) {
-    const size = Math.floor(n / k) + (t < n % k ? 1 : 0);
-    for (let j = 0; j < size; j++) out.push(order[t]);
+/**
+ * The team of each row, for `n` robots sitting two to a row: as picked, and kept to the rules. With nothing
+ * picked yet, the first half of the rows red and the rest blue. A row new since (a robot more) joins the team
+ * with the fewest robots. With a team size, each team's rows are one colour and no two teams share one. And
+ * never one team only (with two rows or more).
+ */
+export function rowTeams(s: MatchSetup, n: number): number[] {
+  const rows = Math.ceil(n / 2);
+  const per = (r: number): number => (r < rows - 1 || n % 2 === 0 ? 2 : 1); // robots in row r
+  let out: number[];
+  if (!s.rowTeams.some(isTeam)) {
+    const red = Math.max(1, Math.floor(rows / 2));
+    out = Array.from({ length: rows }, (_, r) => (r < red ? 0 : 1));
+  } else {
+    out = [];
+    for (let r = 0; r < rows; r++) {
+      if (isTeam(s.rowTeams[r])) out.push(s.rowTeams[r]);
+      else {
+        const count = new Map<number, number>();
+        out.forEach((t, k) => count.set(t, (count.get(t) ?? 0) + per(k)));
+        let best = out[0] ?? 0;
+        for (const [t, k] of count) if (k < count.get(best)!) best = t;
+        out.push(best);
+      }
+    }
   }
-  return out;
-}
-
-/** How many teams Split evenly makes: as many as the team size gives; in Custom, as many as there are now (two at least). */
-function splitCount(s: MatchSetup, colours: string[], now: number[]): number {
-  const n = colours.length;
   const size = fixedSize(s, n);
-  if (size) return n / size;
-  return Math.max(2, Math.min(n, new Set(now).size));
+  if (size) {
+    const span = size / 2; // rows to a team
+    const used: number[] = [];
+    for (let b = 0; b * span < rows; b++) {
+      let t = out[b * span];
+      if (used.includes(t)) t = TEAMS.findIndex((_, k) => !used.includes(k));
+      used.push(t);
+      for (let r = b * span; r < (b + 1) * span && r < rows; r++) out[r] = t;
+    }
+  } else if (rows > 1 && out.every((t) => t === out[0])) out[rows - 1] = out[0] === 0 ? 1 : 0;
+  return out;
 }
 
 /**
  * The team of each robot in a match, given their colours in player order (you, the other players, the CPU
- * players): the one picked for it or, for one with none yet, the smallest team. With nobody on a team yet,
- * two even teams. Always at least two teams (with two robots or more), and with a team size in force,
- * every team that size (split again evenly if a player coming or going has upset it).
+ * players): the team of the row it sits in (`seating`, `rowTeams`). Always at least two teams, with two
+ * robots or more (two robots share one row: the second then plays for another team).
  */
 export function teamsFor(s: MatchSetup, colours: string[]): number[] {
-  const n = colours.length;
-  const order = teamOrder(s, colours);
-  if (!colours.some((c) => isTeam(s.teams[c]))) {
-    const size = fixedSize(s, n);
-    return evenly(n, size ? n / size : 2, order);
-  }
-  const count = new Map<number, number>();
-  for (const c of colours) if (isTeam(s.teams[c])) count.set(s.teams[c], (count.get(s.teams[c]) ?? 0) + 1);
-  const out = colours.map((c) => {
-    if (isTeam(s.teams[c])) return s.teams[c];
-    let best = -1;
-    for (const [t, k] of count) if (best < 0 || k < count.get(best)!) best = t;
-    count.set(best, count.get(best)! + 1);
-    return best;
-  });
-  if (n > 1 && out.every((t) => t === out[0])) out[n - 1] = order.find((t) => t !== out[0])!;
-  const size = fixedSize(s, n);
-  if (size) {
-    const sizes = new Map<number, number>();
-    for (const t of out) sizes.set(t, (sizes.get(t) ?? 0) + 1);
-    if ([...sizes.values()].some((k) => k !== size)) return evenly(n, n / size, teamOrder({ ...s, teams: Object.fromEntries(colours.map((c, i) => [c, out[i]])) }, colours));
-  }
+  const seats = seating(s, colours);
+  const rows = rowTeams(s, colours.length);
+  const out = colours.map((c) => rows[Math.floor(seats.indexOf(c) / 2)]);
+  if (out.length > 1 && out.every((t) => t === out[0])) out[colours.indexOf(seats[seats.length - 1])] = out[0] === 0 ? 1 : 0;
   return out;
 }
 
-/** Write everyone's team down as it is now, so it stays put as players come and go. */
+/** Write the seats and the rows' teams down as they are now. */
 function settle(s: MatchSetup, colours: string[]): number[] {
-  const now = teamsFor(s, colours);
-  colours.forEach((c, i) => (s.teams[c] = now[i]));
-  return now;
+  s.seats = seating(s, colours);
+  s.rowTeams = rowTeams(s, colours.length);
+  return s.rowTeams;
+}
+
+/** The rows that are one team with row `row` for the colour changes: its team's rows with a team size, else just it. */
+function rowsOf(s: MatchSetup, n: number, row: number): number[] {
+  const size = fixedSize(s, n);
+  if (!size) return [row];
+  const span = size / 2;
+  const b = Math.floor(row / span);
+  return Array.from({ length: span }, (_, k) => b * span + k).filter((r) => r < Math.ceil(n / 2));
 }
 
 /**
- * Split the robots evenly, in player order (P1 and the next ones in the first team, and so on): into teams
- * of the team size, or in Custom into as many teams as there are now. The teams keep the colours they have.
+ * The colours the ‹ › on a card in row `row` goes through, in TEAMS order: in Custom every colour (the same
+ * colour as another row makes them one team), except one that would leave only one team; with a team size,
+ * the colours no other team has.
  */
-export function splitTeams(s: MatchSetup, colours: string[]): void {
-  const now = teamsFor(s, colours);
-  const k = splitCount(s, colours, now);
-  const out = evenly(colours.length, k, teamOrder(s, colours));
-  s.teams = {};
-  colours.forEach((c, i) => (s.teams[c] = out[i]));
+export function rowChoices(s: MatchSetup, colours: string[], row: number): number[] {
+  const now = rowTeams(s, colours.length);
+  const mine = rowsOf(s, colours.length, row);
+  const others = now.filter((_, r) => !mine.includes(r));
+  if (fixedSize(s, colours.length)) return TEAMS.map((_, t) => t).filter((t) => !others.includes(t));
+  return TEAMS.map((_, t) => t).filter((t) => t === now[row] || others.length === 0 || others.some((o) => o !== t));
+}
+
+/** Give row `row` (with a team size, its whole team's rows) the team colour `team`. False if not allowed (see rowChoices). */
+export function setRowTeam(s: MatchSetup, colours: string[], row: number, team: number): boolean {
+  if (!rowChoices(s, colours, row).includes(team)) return false;
+  settle(s, colours);
+  for (const r of rowsOf(s, colours.length, row)) s.rowTeams[r] = team;
+  return true;
 }
 
 /**
- * A team takes the next colour along that no other team has (the owner's ask: tap where a robot's name is
- * and its team's colour changes, for everyone on it). Returns its new colour.
+ * Row `row`'s team takes the next colour along that no other row has (the owner's ask: tap where a robot's
+ * name is and the colour changes for everyone in its row; with a team size, its team's rows). Returns it.
  */
-export function recolourTeam(s: MatchSetup, colours: string[], team: number): number {
+export function recolourRow(s: MatchSetup, colours: string[], row: number): number {
   const now = settle(s, colours);
+  const mine = rowsOf(s, colours.length, row);
+  const others = now.filter((_, r) => !mine.includes(r));
   for (let d = 1; d < TEAMS.length; d++) {
-    const t = (team + d) % TEAMS.length;
-    if (now.includes(t)) continue;
-    colours.forEach((c, i) => {
-      if (now[i] === team) s.teams[c] = t;
-    });
+    const t = (now[row] + d) % TEAMS.length;
+    if (others.includes(t)) continue;
+    for (const r of mine) s.rowTeams[r] = t;
     return t;
   }
-  return team;
+  return now[row];
 }
 
-/**
- * The teams a robot can be put on with the ‹ › on its card, in TEAMS order: in Custom every colour (a colour
- * nobody has starts a team), except one that would leave only one team; with a team size, the teams there are.
- */
-export function teamChoices(s: MatchSetup, colours: string[], colour: string): number[] {
-  const now = teamsFor(s, colours);
-  const i = colours.indexOf(colour);
-  if (fixedSize(s, colours.length)) return [...new Set(now)].sort((a, b) => a - b);
-  return TEAMS.map((_, t) => t).filter((t) => t === now[i] || new Set(now.map((x, k) => (k === i ? t : x))).size >= 2);
+/** Two robots swap seats (one card dragged onto the other): each then plays for the other's row's team. */
+export function swapSeats(s: MatchSetup, colours: string[], a: string, b: string): void {
+  settle(s, colours);
+  const i = s.seats.indexOf(a);
+  const j = s.seats.indexOf(b);
+  if (i < 0 || j < 0) return;
+  [s.seats[i], s.seats[j]] = [b, a];
 }
 
-/**
- * Put one robot on a team (its card's ‹ ›, or dropping its card on a robot of that team). With a team size,
- * a full team gives up one of its robots in exchange (the last one in player order other than `keep`, so a
- * CPU player before a person), and every team stays that size. Never down to one team: false then.
- */
-export function joinTeam(s: MatchSetup, colours: string[], colour: string, team: number, keep = ''): boolean {
+/** A robot moves to the last seat (a card dragged onto the empty place at the end). */
+export function seatLast(s: MatchSetup, colours: string[], a: string): void {
+  settle(s, colours);
+  s.seats = [...s.seats.filter((c) => c !== a), a];
+}
+
+/** Everyone in two teams again: the first half of the rows one colour, the rest another (with a team size, its teams). */
+export function splitTeams(s: MatchSetup, colours: string[]): void {
   const now = settle(s, colours);
-  const i = colours.indexOf(colour);
-  if (i < 0 || !isTeam(team)) return false;
-  if (now[i] === team) return true;
-  const size = fixedSize(s, colours.length);
-  if (size) {
-    if (!now.includes(team)) return false;
-    const members = colours.filter((c, k) => now[k] === team);
-    if (members.length >= size) {
-      const out = [...members].reverse().find((c) => c !== keep) ?? members[members.length - 1];
-      s.teams[out] = now[i];
-    }
-    s.teams[colour] = team;
-    return true;
-  }
-  if (new Set(now.map((t, k) => (k === i ? team : t))).size < 2) return false;
-  s.teams[colour] = team;
-  return true;
+  if (fixedSize(s, colours.length)) return;
+  const rows = now.length;
+  const a = now[0] ?? 0;
+  const b = now.find((t) => t !== a) ?? (a === 0 ? 1 : 0);
+  const half = Math.max(1, Math.floor(rows / 2));
+  s.rowTeams = now.map((_, r) => (r < half ? a : b));
 }
 
 /** The teams in play and how many are on each, biggest first: "2 v 2 v 1". */
@@ -367,14 +385,12 @@ export function lineUp(s: MatchSetup, colours: string[]): string {
   return [...n.values()].sort((a, b) => b - a).join(' v ');
 }
 
-/** Two robots swap colours (a CPU player gives its colour up to you): each keeps its team, so their teams swap with the colours. */
+/**
+ * Two robots swap colours (a CPU player gives its colour up to you), or one takes a colour nobody has: each
+ * keeps its seat, so its team.
+ */
 export function swapTeams(s: MatchSetup, a: string, b: string): void {
-  const ta = s.teams[a];
-  const tb = s.teams[b];
-  delete s.teams[a];
-  delete s.teams[b];
-  if (tb !== undefined) s.teams[a] = tb;
-  if (ta !== undefined) s.teams[b] = ta;
+  s.seats = s.seats.map((c) => (c === a ? b : c === b ? a : c));
 }
 
 export function defaultSetup(myColor: string): MatchSetup {
@@ -402,7 +418,8 @@ export function defaultSetup(myColor: string): MatchSetup {
     postMortem: false,
     angelsBack: false,
     teamsOn: false,
-    teams: {},
+    seats: [],
+    rowTeams: [],
     teamSize: 0, // Custom (the owner's call)
     friendlyFire: false, // teammates are safe from each other's blasts unless it is switched on
   };
@@ -423,7 +440,7 @@ export function pickArena(s: MatchSetup, id: ArenaId): void {
  */
 export function defaultRules(s: MatchSetup, myColor: string): MatchSetup {
   // (the Players page's settings stay: the players, Randomize CPUs and the teams)
-  const out = { ...defaultSetup(myColor), cpus: s.cpus, map: s.map, randEmotes: s.randEmotes, randLevels: s.randLevels, teamsOn: s.teamsOn, teams: s.teams, teamSize: s.teamSize, friendlyFire: s.friendlyFire };
+  const out = { ...defaultSetup(myColor), cpus: s.cpus, map: s.map, randEmotes: s.randEmotes, randLevels: s.randLevels, teamsOn: s.teamsOn, seats: s.seats, rowTeams: s.rowTeams, teamSize: s.teamSize, friendlyFire: s.friendlyFire };
   pickArena(out, s.arena);
   return out;
 }
@@ -565,11 +582,10 @@ export function readSetup(raw: unknown, myColor: string, colorIds: string[]): Ma
   if (typeof r.angelsBack === 'boolean') out.angelsBack = r.angelsBack;
   if (typeof r.teamsOn === 'boolean') out.teamsOn = r.teamsOn;
   if (typeof r.friendlyFire === 'boolean') out.friendlyFire = r.friendlyFire;
-  if (r.teams && typeof r.teams === 'object') {
-    for (const [c, t] of Object.entries(r.teams)) if (colorIds.includes(c) && isTeam(t)) out.teams[c] = t;
-  }
+  if (Array.isArray(r.seats)) out.seats = r.seats.filter((c, i, all) => typeof c === 'string' && colorIds.includes(c) && all.indexOf(c) === i).slice(0, 9);
+  if (Array.isArray(r.rowTeams)) out.rowTeams = r.rowTeams.slice(0, 5).map((t) => (isTeam(t) ? t : 0));
   out.teamSize = clampInt(r.teamSize, 0, 4, d.teamSize);
-  if (out.teamSize === 1) out.teamSize = 0;
+  if (out.teamSize % 2) out.teamSize = 0; // (whole rows of two: Teams of 2 or 4)
   return out;
 }
 
