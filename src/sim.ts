@@ -322,14 +322,15 @@ export const MAX_BOMBS = 8;
  * the end so arenas made from old seeds keep their first five kinds in place.
  * What these chances come to per arena is measured in docs/GAME-RULES.md.
  */
+// (all a quarter up in November 2026, the owner's ask, on every map: 60% of bricks hide something, it was 48%)
 export const ITEM_CHANCE: [ItemKind, number][] = [
-  ['bomb', 0.15],
-  ['fire', 0.15],
-  ['speed', 0.11],
-  ['kick', 0.025], // rare. Every arena still gets at least one: see createWorld
-  ['grab', 0.025], // likewise
-  ['shield', 0.01], // very rare: in about half of arenas
-  ['curse', 0.01], // very rare: in about half of arenas
+  ['bomb', 0.1875],
+  ['fire', 0.1875],
+  ['speed', 0.1375],
+  ['kick', 0.03125], // rare. Every arena still gets at least one: see createWorld
+  ['grab', 0.03125], // likewise
+  ['shield', 0.0125], // very rare: in about six arenas in ten
+  ['curse', 0.0125], // very rare: in about six arenas in ten
 ];
 export const SHIELD_TICKS = 30 * TICK_HZ; // a shield that is not used wears off after 30 s
 export const SHIELD_GRACE_TICKS = 30; // after a shield takes a blast, blasts do no harm for 0.5 s: long enough for that blast to clear

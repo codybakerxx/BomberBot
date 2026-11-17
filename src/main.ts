@@ -1361,6 +1361,12 @@ function closeKey(): void {
   $('keySheet').hidden = true;
 }
 $('pauseKey').addEventListener('click', showKey);
+// mute, from the menu during a match: the same as Settings › Sound › Sound effects, in one tap
+$('pauseMute').addEventListener('click', () => {
+  prefs.soundOn = !prefs.soundOn;
+  if (prefs.soundOn) initAudio();
+  prefsChanged();
+});
 $('keyDone').addEventListener('click', closeKey);
 $('keySheet').addEventListener('click', (e) => {
   if (e.target === $('keySheet')) closeKey(); // a tap outside the panel
@@ -1827,6 +1833,9 @@ function prefsChanged(): void {
 /** Put your settings into effect. (Sharpness is picked up by keepSharp on the next frame.) */
 function applyPrefs(): void {
   setSound(prefs.soundOn, prefs.volume, prefs.muted);
+  const mute = $('pauseMute');
+  mute.setAttribute('aria-pressed', String(!prefs.soundOn));
+  mute.setAttribute('aria-label', prefs.soundOn ? 'Mute all sound' : 'Sound is off: switch it back on');
   input.setBindings(prefs.keys, prefs.padKeys);
   document.body.classList.toggle('calm', prefs.calm);
   document.documentElement.style.setProperty('--pad-show', String(prefs.padShow / 100));

@@ -859,12 +859,12 @@ for (let seed = 1; seed <= 40; seed++) {
 {
   const chance = Object.fromEntries(ITEM_CHANCE) as Record<string, number>;
   assert.deepEqual(ITEM_CHANCE.map(([k]) => k), ['bomb', 'fire', 'speed', 'kick', 'grab', 'shield', 'curse']);
-  assert.ok(Math.abs(ITEM_CHANCE.reduce((s, [, c]) => s + c, 0) - 0.48) < 1e-12, '48% of bricks hide something');
-  assert.equal(chance.shield, 0.01);
-  assert.equal(chance.curse, 0.01);
+  assert.ok(Math.abs(ITEM_CHANCE.reduce((s, [, c]) => s + c, 0) - 0.6) < 1e-12, '60% of bricks hide something');
+  assert.equal(chance.shield, 0.0125);
+  assert.equal(chance.curse, 0.0125);
   for (const k of ['bomb', 'fire', 'speed']) assert.ok(chance[k] >= 10 * chance.shield, `${k} is far commoner than a shield or a curse`);
-  assert.equal(chance.kick, 0.025);
-  assert.equal(chance.grab, 0.025);
+  assert.equal(chance.kick, 0.03125);
+  assert.equal(chance.grab, 0.03125);
   for (const k of ['kick', 'grab']) assert.ok(chance[k] > 2 * chance.shield, `${k} is rare, but not as rare as a shield or a curse`);
   for (const k of ['bomb', 'fire', 'speed']) assert.ok(chance[k] >= 4 * chance.kick, `${k} is at least four times as common as a boot or a glove`);
 
@@ -889,7 +889,7 @@ for (let seed = 1; seed <= 40; seed++) {
   assert.equal(arenasWith.grab, N, 'every arena has a glove');
   for (const k of ['shield', 'curse']) {
     const share = arenasWith[k] / N;
-    assert.ok(share > 0.45 && share < 0.65, `${k} turns up in about half of arenas (${(share * 100).toFixed(0)}%)`);
+    assert.ok(share > 0.52 && share < 0.72, `${k} turns up in about six arenas in ten (${(share * 100).toFixed(0)}%)`);
   }
 }
 

@@ -757,7 +757,7 @@ function drawCrumble(ctx: Ctx, b: { cx: number; cy: number; ttl: number }, T: nu
     ctx.fillStyle = grad;
     ctx.fillRect(cx - size, cy - size, size * 2, size * 2);
   }
-  // The chunks: the block's picture cut in an uneven 4 by 4 grid. How it comes apart is one of four ways,
+  // The pieces come from the block's own picture. How it comes apart is one of four ways,
   // picked by the tile (so blocks breaking side by side differ), each a collapse in place, not a blast:
   //   0 slump:    it sags and spreads out on every side, like a pile settling
   //   1 cave in:  the middle gives way, pieces drop in towards the centre and heap there
@@ -767,68 +767,84 @@ function drawCrumble(ctx: Ctx, b: { cx: number; cy: number; ttl: number }, T: nu
   // tips, gathers dust and fades as rubble. (The owner's ask, November 2026: collapsing and crumbling in
   // almost all directions, in a few different ways at random. It first burst outwards and up, then fell
   // straight down.)
-  const n = 4;
   const way = Math.floor(scatter(seed + 0.77) * 4);
   const side = Math.floor(scatter(seed + 0.31) * 4); // topple: which way; split: across or down
   const tdx = [0, 1, 0, -1][side];
   const tdy = [-1, 0, 1, 0][side];
-  const cuts = (o: number): number[] =>
-    Array.from({ length: n + 1 }, (_, i) => (i === 0 ? 0 : i === n ? T : Math.round((T * i) / n + (scatter(seed + o + i) - 0.5) * T * 0.1)));
-  const cx = cuts(11);
-  const cy = cuts(23);
-  for (let gy = 0; gy < n; gy++) {
-    for (let gx = 0; gx < n; gx++) {
-      const s = seed + gx * 3.1 + gy * 5.3;
-      const sx = cx[gx];
-      const sy = cy[gy];
-      const sw = cx[gx + 1] - sx;
-      const sh = cy[gy + 1] - sy;
-      if (sw < 1 || sh < 1) continue;
-      // where it sits, from -1 to 1 each way across the block
-      const ox = (sx + sw / 2) / T * 2 - 1;
-      const oy = (sy + sh / 2) / T * 2 - 1;
-      // its own moment to go, then gathering speed until it lies still
-      const delay = scatter(s + 7) * 0.3;
-      const v = Math.min(1, Math.max(0, (u - delay) / 0.6));
-      const fall = v * v * (3 - 2 * v);
-      let mx: number;
-      let my: number;
-      if (way === 0) {
-        mx = ox * 0.24;
-        my = oy * 0.2 + 0.06;
-      } else if (way === 1) {
-        mx = -ox * 0.16;
-        my = -oy * 0.14 + 0.08;
-      } else if (way === 2) {
-        const far = (ox * tdx + oy * tdy + 1) / 2; // 0 on the near side, 1 on the far side
-        mx = tdx * (0.08 + 0.38 * far) + ox * 0.06;
-        my = tdy * (0.08 + 0.38 * far) + oy * 0.05 + 0.04;
-      } else {
-        const across = side % 2 === 0; // the crack runs down the middle, the halves part sideways
-        mx = across ? Math.sign(ox) * 0.22 + ox * 0.06 : ox * 0.08;
-        my = across ? oy * 0.08 + 0.05 : Math.sign(oy) * 0.2 + oy * 0.05;
-      }
-      // a little of its own, so no two pieces move alike
-      mx += (scatter(s + 1) - 0.5) * 0.12;
-      my += (scatter(s + 2) - 0.5) * 0.1;
-      const px = x0 + sx + sw / 2 + mx * T * fall;
-      const py = y0 + sy + sh / 2 + my * T * fall;
-      const turn = (scatter(s + 4) - 0.5) * 1.4 * fall;
-      const shrink = 1 - (0.35 + 0.2 * scatter(s + 5)) * fall; // sinking to the floor, crumbling smaller
-      const alpha = u < 0.62 ? 1 : 1 - (u - 0.62) / 0.38;
-      ctx.globalAlpha = alpha;
-      ctx.translate(px, py);
-      ctx.rotate(turn);
-      const w = sw * shrink;
-      const h = sh * shrink;
-      ctx.drawImage(img, sx, sy, sw, sh, -w / 2, -h / 2, w, h);
-      // shaded and dusty as it comes down
-      ctx.fillStyle = `rgba(${dust[0] * 0.4},${dust[1] * 0.4},${dust[2] * 0.4},${0.25 * fall})`;
-      ctx.fillRect(-w / 2, -h / 2, w, h);
-      ctx.fillStyle = `rgba(${dust[0]},${dust[1]},${dust[2]},${0.25 * fall})`;
-      ctx.fillRect(-w / 2, -h / 2, w, h * 0.5);
-      ctx.setTransform(base);
+  // The pieces (the owner's ask: rocks of all sizes and shapes, and more of them): on a jittered 5 by 5 grid
+  // over the block, each a rough stone of five to seven corners, from crumbs to chunks a third of the block
+  // across, cut from the block's own picture where it lay. Then a scatter of grit.
+  const N = 5;
+  for (let k = 0; k < N * N + 10; k++) {
+    const s = seed + k * 2.37;
+    const grit = k >= N * N;
+    const gx = grit ? scatter(s + 0.1) * N : (k % N) + 0.15 + scatter(s + 0.1) * 0.7;
+    const gy = grit ? scatter(s + 0.2) * N : Math.floor(k / N) + 0.15 + scatter(s + 0.2) * 0.7;
+    const hx = (gx / N) * T; // where it was, in the block
+    const hy = (gy / N) * T;
+    const big = scatter(s + 0.3);
+    const rad = grit ? T * (0.025 + 0.025 * big) : T * (0.09 + 0.14 * big * big + 0.04 * scatter(s + 0.4));
+    const ox = (hx / T) * 2 - 1; // -1 to 1 across the block
+    const oy = (hy / T) * 2 - 1;
+    // its own moment to go (the small ones first), then gathering speed until it lies still
+    const delay = scatter(s + 7) * 0.3 * (grit ? 0.4 : 1);
+    const v = Math.min(1, Math.max(0, (u - delay) / 0.6));
+    const fall = v * v * (3 - 2 * v);
+    let mx: number;
+    let my: number;
+    if (way === 0) {
+      mx = ox * 0.24;
+      my = oy * 0.2 + 0.06;
+    } else if (way === 1) {
+      mx = -ox * 0.16;
+      my = -oy * 0.14 + 0.08;
+    } else if (way === 2) {
+      const far = (ox * tdx + oy * tdy + 1) / 2; // 0 on the near side, 1 on the far side
+      mx = tdx * (0.08 + 0.38 * far) + ox * 0.06;
+      my = tdy * (0.08 + 0.38 * far) + oy * 0.05 + 0.04;
+    } else {
+      const across = side % 2 === 0;
+      mx = across ? Math.sign(ox) * 0.22 + ox * 0.06 : ox * 0.08;
+      my = across ? oy * 0.08 + 0.05 : Math.sign(oy) * 0.2 + oy * 0.05;
     }
+    // small stones roll further than big ones, and no two alike
+    const roll = grit ? 1.8 : 1.25 - big * 0.5;
+    mx = mx * roll + (scatter(s + 1) - 0.5) * 0.14;
+    my = my * roll + (scatter(s + 2) - 0.5) * 0.12;
+    const px = x0 + hx + mx * T * fall;
+    const py = y0 + hy + my * T * fall;
+    const turn = (scatter(s + 4) - 0.5) * 2 * fall;
+    const shrink = 1 - (0.12 + 0.15 * scatter(s + 5)) * fall; // sinking to the floor, wearing smaller
+    const alpha = u < 0.62 ? 1 : 1 - (u - 0.62) / 0.38;
+    ctx.globalAlpha = alpha;
+    ctx.translate(px, py);
+    ctx.rotate(turn);
+    ctx.scale(shrink, shrink);
+    // its outline: a rough stone
+    const corners = 5 + Math.floor(scatter(s + 6) * 3);
+    ctx.beginPath();
+    for (let c = 0; c < corners; c++) {
+      const a = (c / corners) * Math.PI * 2 + scatter(s + c) * 0.5;
+      const r = rad * (0.65 + 0.5 * scatter(s + c * 1.7 + 3));
+      const vx = Math.cos(a) * r;
+      const vy = Math.sin(a) * r * (0.75 + 0.4 * scatter(s + 8));
+      if (c) ctx.lineTo(vx, vy);
+      else ctx.moveTo(vx, vy);
+    }
+    ctx.closePath();
+    ctx.save();
+    ctx.clip();
+    // the block's picture as it lay under this stone (grit takes a darker look of it)
+    ctx.drawImage(img, -hx, -hy);
+    ctx.fillStyle = `rgba(${dust[0] * 0.35},${dust[1] * 0.35},${dust[2] * 0.35},${(grit ? 0.3 : 0.04) + 0.16 * fall})`;
+    ctx.fillRect(-rad * 1.3, -rad * 1.3, rad * 2.6, rad * 2.6);
+    // lit on its upper left, shaded below: a stone, not a flat cut-out
+    ctx.fillStyle = 'rgba(255,255,255,0.18)';
+    ctx.fillRect(-rad * 1.3, -rad * 1.3, rad * 2.6, rad * 0.9);
+    ctx.fillStyle = 'rgba(0,0,0,0.25)';
+    ctx.fillRect(-rad * 1.3, rad * 0.35, rad * 2.6, rad);
+    ctx.restore();
+    ctx.setTransform(base);
   }
   // a few small pieces knocked off, skittering out in other directions
   ctx.fillStyle = west ? '#c99554' : '#8d9cd0';

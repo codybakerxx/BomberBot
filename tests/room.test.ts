@@ -23,7 +23,7 @@ import {
   type ServerMsg,
 } from '../src/net';
 import { makeRng } from '../src/sim';
-import { ARENAS, MAPS, defaultRules, defaultSetup, readSetup, rollCpus, summary, wholeTile } from '../src/setup';
+import { ARENAS, MAPS, defaultRules, itemChances, defaultSetup, readSetup, rollCpus, summary, wholeTile } from '../src/setup';
 import { BOT_LEVELS } from '../src/bot';
 import { DANCE_IDS } from '../src/dances';
 import type { World } from '../src/sim';
@@ -69,6 +69,15 @@ for (const a of ARENAS) {
   assert.deepStrictEqual(rollCpus({ ...saved, randEmotes: false, randLevels: false }, rng), saved.cpus, 'off: as on the cards');
   assert.ok(rollCpus({ ...saved, randLevels: false }, rng).every((c, i) => c.level === saved.cpus[i].level), 'emotes only: levels as on the cards');
   assert.deepStrictEqual(rollCpus(saved, () => 0.999999).map((c) => c.level), saved.cpus.map(() => BOT_LEVELS[BOT_LEVELS.length - 1]), 'the top of the range is the last level');
+}
+
+// a custom power-up mix with Lots of everything asks for more than every brick: scaled down to fit
+{
+  const lots = { ...defaultSetup('gold'), itemsOn: true, items: { bomb: 3, fire: 3, speed: 3, kick: 3, grab: 3, shield: 3, curse: 3 } };
+  const c = itemChances(lots);
+  const sum = c.reduce((n, [, x]) => n + x, 0);
+  assert.ok(Math.abs(sum - 1) < 1e-9, `at most every brick (${sum})`);
+  assert.ok(Math.abs(c[0][1] / c[2][1] - 0.1875 / 0.1375) < 1e-9, 'in the same proportions');
 }
 
 // the arena is a whole number of page pixels on a screen of density 3 (an iPhone), so it is never stretched

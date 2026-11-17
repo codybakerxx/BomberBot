@@ -85,24 +85,24 @@ Each brick hides at most one power-up. You pick one up by standing on its tile. 
 
 ### How rare each one is
 
-The chance under each brick is set in `ITEM_CHANCE`. The other columns are what that comes to in play, counted over 20,000 arenas by `experiments/item-rarity.ts`. An arena starts with about 79 bricks, and about 38 of them hide something.
+The chance under each brick is set in `ITEM_CHANCE`. The other columns are what that comes to in play, counted over 20,000 arenas by `experiments/item-rarity.ts`. An arena starts with about 79 bricks, and about 47 of them hide something (every chance was raised by a quarter in November 2026, the owner's ask: 38 before).
 
 | Power-up | Chance under each brick | Average in an arena | Arenas with at least one | Arenas with two or more |
 |---|---|---|---|---|
-| Bomb | 15% | 11.8 | 100% | 100% |
-| Flame | 15% | 11.8 | 100% | 100% |
-| Speed | 11% | 8.7 | 100% | 100% |
-| Boot | 2.5% | 2.1 | 100% | 59% |
-| Glove | 2.5% | 2.1 | 100% | 59% |
-| Shield | 1% | 0.8 | 54% | 19% |
-| Curse | 1% | 0.8 | 54% | 19% |
-| Nothing | 52% | | | |
+| Bomb | 18.75% | 14.8 | 100% | 100% |
+| Flame | 18.75% | 14.8 | 100% | 100% |
+| Speed | 13.75% | 10.8 | 100% | 100% |
+| Boot | 3.125% | 2.6 | 100% | 71% |
+| Glove | 3.125% | 2.5 | 100% | 71% |
+| Shield | 1.25% | 1.0 | 62% | 26% |
+| Curse | 1.25% | 1.0 | 63% | 26% |
+| Nothing | 40% | | | |
 
-- The **shield** and the **curse** are very rare on purpose. Each is missing from nearly half of all arenas, and when one is there it is usually the only one.
+- The **shield** and the **curse** are very rare on purpose. Each is missing from nearly four arenas in ten, and when one is there it is usually the only one.
 - Every arena has at least one **boot** and one **glove**. If the dice give none, one is placed under a brick that would otherwise be empty. Nothing else is guaranteed.
 - These are what an arena *hides*. Fewer are picked up: a power-up lying in the open is destroyed by a blast, and some bricks are never broken.
-- The **boot** and the **glove** are the next rarest: about two of each in an arena, and in four arenas in ten there is only the one.
-- The first five began at 40% of bricks between them and were raised to 46% in the same mix. The shield and the curse added 1% each. Then the boot and the glove went from 6% to 4% each and later to 2.5% each, and what they gave up went to the bomb, the flame and speed (now 15%, 15% and 11%). The total stayed at 48%.
+- The **boot** and the **glove** are the next rarest: two or three of each in an arena, and in three arenas in ten there is only the one.
+- The first five began at 40% of bricks between them and were raised to 46% in the same mix. The shield and the curse added 1% each. Then the boot and the glove went from 6% to 4% each and later to 2.5% each, and what they gave up went to the bomb, the flame and speed (now 15%, 15% and 11%). The total stayed at 48%, until every chance was raised by a quarter (60% in all) at the owner's ask in November 2026.
 
 ### Shield
 

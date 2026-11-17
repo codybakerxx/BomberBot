@@ -262,7 +262,10 @@ export function arenaSize(s: MatchSetup, guests = 0): { cols: number; rows: numb
 /** The chance of each power-up for this setup (the usual ones unless the mix is custom). */
 export function itemChances(s: MatchSetup): [ItemKind, number][] {
   if (!s.itemsOn) return ITEM_CHANCE;
-  return ITEM_CHANCE.map(([k, c]) => [k, c * ITEM_AMOUNTS[s.items[k]].times]);
+  const out = ITEM_CHANCE.map(([k, c]): [ItemKind, number] => [k, c * ITEM_AMOUNTS[s.items[k]].times]);
+  // (Lots of many kinds could ask for more than every brick: then each is scaled down to fit, in proportion)
+  const sum = out.reduce((n, [, c]) => n + c, 0);
+  return sum > 1 ? out.map(([k, c]) => [k, c / sum]) : out;
 }
 
 /** The config sim.ts builds a round from: you first, then the other players on this screen, then the CPU players in their lobby order. */
