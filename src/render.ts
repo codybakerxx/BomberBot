@@ -702,9 +702,8 @@ function flameLine(f: World['flames'][number], T: number): [number, number, numb
 /**
  * A breakable block breaking (the owner's ask, November 2026: a realistic crumbling effect; it used to flash
  * white and vanish). Over the time a blast lasts (FLAME_TICKS) the block shudders and cracks, then collapses:
- * its own picture is cut into chunks that slump down where it stood and settle as rubble, with a few small
- * pieces knocked off sideways and a low cloud of dust (made gentler at the owner's ask: at first it burst
- * outwards and up). Bricks break into blue-grey rubble, crates into splinters and
+ * its own picture is cut into chunks that come down in one of four ways (see below), settling as rubble,
+ * with a few small pieces knocked off on every side and a low cloud of dust. Bricks break into blue-grey rubble, crates into splinters and
  * planks with tan dust. All of it from the block's own picture, so it matches whatever the block looks like.
  */
 function drawCrumble(ctx: Ctx, b: { cx: number; cy: number; ttl: number }, T: number, time: number): void {
@@ -750,7 +749,7 @@ function drawCrumble(ctx: Ctx, b: { cx: number; cy: number; ttl: number }, T: nu
     const r = T * (0.1 + 0.25 * Math.sqrt(u));
     const size = T * (0.35 + 0.35 * u) * (0.8 + 0.4 * scatter(seed + d));
     const cx = x0 + T / 2 + Math.cos(a) * r;
-    const cy = y0 + T * 0.62 + Math.sin(a) * r * 0.6;
+    const cy = y0 + T * 0.55 + Math.sin(a) * r * 0.8;
     const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, size);
     const al = 0.28 * (1 - u) * Math.min(1, u * 6 + 0.3);
     grad.addColorStop(0, `rgba(${dust[0]},${dust[1]},${dust[2]},${al})`);
@@ -758,45 +757,85 @@ function drawCrumble(ctx: Ctx, b: { cx: number; cy: number; ttl: number }, T: nu
     ctx.fillStyle = grad;
     ctx.fillRect(cx - size, cy - size, size * 2, size * 2);
   }
-  // the chunks: the block's picture cut in a 3 by 3 grid, each slumping down where it was (the owner's ask:
-  // a crumble, not an explosion). The top rows fall furthest, onto the rows below; they spread a little as
-  // they settle, tip over, darken with dust and fade as rubble.
-  const n = 3;
-  const cut = (i: number): number => Math.round((T * i) / n);
-  const fall = u < 0.55 ? (u / 0.55) * (u / 0.55) : 1; // gathers speed, then lies still
+  // The chunks: the block's picture cut in an uneven 4 by 4 grid. How it comes apart is one of four ways,
+  // picked by the tile (so blocks breaking side by side differ), each a collapse in place, not a blast:
+  //   0 slump:    it sags and spreads out on every side, like a pile settling
+  //   1 cave in:  the middle gives way, pieces drop in towards the centre and heap there
+  //   2 topple:   it leans and goes over one way (any of four), the far side sliding furthest
+  //   3 split:    it cracks down the middle and the two halves fall apart, crumbling as they go
+  // Pieces do not all go at once: each starts at its own moment, sinks (shrinks) as it falls to the floor,
+  // tips, gathers dust and fades as rubble. (The owner's ask, November 2026: collapsing and crumbling in
+  // almost all directions, in a few different ways at random. It first burst outwards and up, then fell
+  // straight down.)
+  const n = 4;
+  const way = Math.floor(scatter(seed + 0.77) * 4);
+  const side = Math.floor(scatter(seed + 0.31) * 4); // topple: which way; split: across or down
+  const tdx = [0, 1, 0, -1][side];
+  const tdy = [-1, 0, 1, 0][side];
+  const cuts = (o: number): number[] =>
+    Array.from({ length: n + 1 }, (_, i) => (i === 0 ? 0 : i === n ? T : Math.round((T * i) / n + (scatter(seed + o + i) - 0.5) * T * 0.1)));
+  const cx = cuts(11);
+  const cy = cuts(23);
   for (let gy = 0; gy < n; gy++) {
     for (let gx = 0; gx < n; gx++) {
       const s = seed + gx * 3.1 + gy * 5.3;
-      const sx = cut(gx);
-      const sy = cut(gy);
-      const sw = cut(gx + 1) - sx;
-      const sh = cut(gy + 1) - sy;
-      // how far it drops: the higher rows more, onto the floor of the tile's lower half
-      const drop = T * (0.42 - gy * 0.14 + 0.06 * scatter(s)) * fall;
-      // and a little outwards as the pile spreads
-      const spread = (gx - 1 + (scatter(s + 1) - 0.5) * 0.6) * T * 0.07 * fall;
-      const px = x0 + sx + sw / 2 + spread;
-      const py = y0 + sy + sh / 2 + drop;
-      const turn = (scatter(s + 4) - 0.5) * 0.9 * fall;
-      const squash = 1 - 0.3 * fall; // seen from above, a piece lying down is shorter
-      const shrink = 1 - 0.15 * fall;
-      const alpha = u < 0.6 ? 1 : 1 - (u - 0.6) / 0.4;
+      const sx = cx[gx];
+      const sy = cy[gy];
+      const sw = cx[gx + 1] - sx;
+      const sh = cy[gy + 1] - sy;
+      if (sw < 1 || sh < 1) continue;
+      // where it sits, from -1 to 1 each way across the block
+      const ox = (sx + sw / 2) / T * 2 - 1;
+      const oy = (sy + sh / 2) / T * 2 - 1;
+      // its own moment to go, then gathering speed until it lies still
+      const delay = scatter(s + 7) * 0.3;
+      const v = Math.min(1, Math.max(0, (u - delay) / 0.6));
+      const fall = v * v * (3 - 2 * v);
+      let mx: number;
+      let my: number;
+      if (way === 0) {
+        mx = ox * 0.24;
+        my = oy * 0.2 + 0.06;
+      } else if (way === 1) {
+        mx = -ox * 0.16;
+        my = -oy * 0.14 + 0.08;
+      } else if (way === 2) {
+        const far = (ox * tdx + oy * tdy + 1) / 2; // 0 on the near side, 1 on the far side
+        mx = tdx * (0.08 + 0.38 * far) + ox * 0.06;
+        my = tdy * (0.08 + 0.38 * far) + oy * 0.05 + 0.04;
+      } else {
+        const across = side % 2 === 0; // the crack runs down the middle, the halves part sideways
+        mx = across ? Math.sign(ox) * 0.22 + ox * 0.06 : ox * 0.08;
+        my = across ? oy * 0.08 + 0.05 : Math.sign(oy) * 0.2 + oy * 0.05;
+      }
+      // a little of its own, so no two pieces move alike
+      mx += (scatter(s + 1) - 0.5) * 0.12;
+      my += (scatter(s + 2) - 0.5) * 0.1;
+      const px = x0 + sx + sw / 2 + mx * T * fall;
+      const py = y0 + sy + sh / 2 + my * T * fall;
+      const turn = (scatter(s + 4) - 0.5) * 1.4 * fall;
+      const shrink = 1 - (0.35 + 0.2 * scatter(s + 5)) * fall; // sinking to the floor, crumbling smaller
+      const alpha = u < 0.62 ? 1 : 1 - (u - 0.62) / 0.38;
       ctx.globalAlpha = alpha;
       ctx.translate(px, py);
       ctx.rotate(turn);
-      ctx.drawImage(img, sx, sy, sw, sh, (-sw / 2) * shrink, (-sh / 2) * shrink * squash, sw * shrink, sh * shrink * squash);
-      // dust settling on it
-      ctx.fillStyle = `rgba(${dust[0]},${dust[1]},${dust[2]},${0.35 * fall})`;
-      ctx.fillRect((-sw / 2) * shrink, (-sh / 2) * shrink * squash, sw * shrink, sh * shrink * squash);
+      const w = sw * shrink;
+      const h = sh * shrink;
+      ctx.drawImage(img, sx, sy, sw, sh, -w / 2, -h / 2, w, h);
+      // shaded and dusty as it comes down
+      ctx.fillStyle = `rgba(${dust[0] * 0.4},${dust[1] * 0.4},${dust[2] * 0.4},${0.25 * fall})`;
+      ctx.fillRect(-w / 2, -h / 2, w, h);
+      ctx.fillStyle = `rgba(${dust[0]},${dust[1]},${dust[2]},${0.25 * fall})`;
+      ctx.fillRect(-w / 2, -h / 2, w, h * 0.5);
       ctx.setTransform(base);
     }
   }
   // a few small pieces knocked off, skittering out in other directions
   ctx.fillStyle = west ? '#c99554' : '#8d9cd0';
-  for (let c = 0; c < 4; c++) {
+  for (let c = 0; c < 6; c++) {
     const s = seed + c * 9.7;
-    const a = scatter(s) * Math.PI * 2;
-    const dist = T * (0.35 + 0.35 * scatter(s + 1)) * (1 - (1 - u) * (1 - u));
+    const a = ((c + scatter(s) * 0.8) / 6) * Math.PI * 2; // (spread round every side)
+    const dist = T * (0.3 + 0.35 * scatter(s + 1)) * (1 - (1 - u) * (1 - u));
     const hop = Math.sin(Math.min(1, u * 1.8) * Math.PI) * T * 0.08;
     const sz = Math.max(1, T * (0.035 + 0.03 * scatter(s + 2)));
     ctx.globalAlpha = u < 0.6 ? 1 : 1 - (u - 0.6) / 0.4;
