@@ -1103,7 +1103,7 @@ export function createLobby(host: LobbyHost): {
       const name = botName(colorById(c.colorId));
       let bin: HTMLButtonElement | undefined;
       if (canEdit()) {
-        // the bin: removes this CPU player at once (Undo brings it back)
+        // the bin: removes this CPU player at once
         bin = document.createElement('button');
         bin.type = 'button';
         bin.className = 'bin';
@@ -1296,39 +1296,18 @@ export function createLobby(host: LobbyHost): {
     changed();
   }
 
-  // ------------------------------------------------------------ removing, and Undo
-  /** The CPU player removed last, and where it was, until Undo is pressed or the bar goes away. */
-  let removed: { cpu: CpuSlot; at: number } | null = null;
-  let undoTimer = 0;
+  // ------------------------------------------------------------ removing
   /**
-   * Remove a CPU player at once (the bin on its card, or Remove on its panel): the owner asked for a quick
-   * way. A bar with Undo shows for a few seconds instead of asking first. The last CPU player stays.
+   * Remove a CPU player at once (the bin on its card): the owner asked for a quick way, with no question
+   * first. No note pops up either (the owner's call, 18 November 2026: it was a bar with Undo at the foot);
+   * Add CPU player brings one back. The last CPU player stays.
    */
   function removeCpu(i: number): void {
     if (s().cpus.length + guests().length <= 1 || !s().cpus[i]) return;
-    const [cpu] = s().cpus.splice(i, 1);
-    removed = { cpu, at: i };
-    $('undoText').textContent = `${botName(colorById(cpu.colorId))} removed.`;
-    $('undoBtn').hidden = false;
-    $('undoBar').hidden = false;
-    clearTimeout(undoTimer);
-    undoTimer = window.setTimeout(hideUndo, 6000);
+    s().cpus.splice(i, 1);
     changed();
     ($(`bin-${Math.min(i + 1, s().cpus.length)}`) ?? $('slotAdd'))?.focus({ preventScroll: true });
   }
-  function hideUndo(): void {
-    removed = null;
-    $('undoBar').hidden = true;
-  }
-  $('undoBtn').addEventListener('click', () => {
-    if (!removed || s().cpus.length >= maxCpus()) return hideUndo();
-    const { cpu, at } = removed;
-    // its colour back if nobody has taken it meanwhile, else a free one
-    const free = freeFor(-1);
-    s().cpus.splice(Math.min(at, s().cpus.length), 0, { ...cpu, colorId: free.includes(cpu.colorId) ? cpu.colorId : free[0] });
-    hideUndo();
-    changed();
-  });
   // ------------------------------------------------------------ the Match page
   $('arenaPrev').addEventListener('click', () => stepArena(-1));
   $('arenaNext').addEventListener('click', () => stepArena(1));
@@ -1652,24 +1631,12 @@ export function createLobby(host: LobbyHost): {
     if (net()) return false; // online, everyone plays on their own screen
     if (guestOf(pad)) return true;
     if (1 + guests().length >= MAX_CPUS + 1) return false;
-    // a full match: the last CPU player makes room
-    let made = '';
-    if (total() >= MAX_CPUS + 1) {
-      const cpu = s().cpus.pop()!;
-      made = botName(colorById(cpu.colorId));
-    }
+    // a full match: the last CPU player makes room (no note: the cards show it)
+    if (total() >= MAX_CPUS + 1) s().cpus.pop();
     const free = freeFor(-1);
     const colorId = CPU_COLOURS.find((c) => free.includes(c)) ?? free[0];
     // each new player starts on a different dance from the one before, so a couch match is not all the same
     guests().push({ pad, colorId, pick: colorId, ready: false, dance: DANCES[(guests().length + 1) % DANCES.length].id });
-    if (made) {
-      removed = null;
-      $('undoText').textContent = `${made} made room for P${guests().length + 1}.`;
-      $('undoBtn').hidden = true;
-      $('undoBar').hidden = false;
-      clearTimeout(undoTimer);
-      undoTimer = window.setTimeout(hideUndo, 4000);
-    }
     if (!wide() && page !== 'players') setPage('players');
     changed();
     $(`guest-${pad}`)?.scrollIntoView({ block: 'nearest' });
@@ -1835,7 +1802,6 @@ export function createLobby(host: LobbyHost): {
       $(page === 'players' && !wide() ? 'colOk' : 'arenaStart').focus({ preventScroll: true });
     },
     hide(): void {
-      hideUndo();
       $('lobby').hidden = true;
     },
     page: () => page,
