@@ -559,7 +559,11 @@
   #youBot { width: 150px; height: 150px; }
   /* the arena picture fills the row between its arrows (bigger, the owner's ask) */
   #arenaPic { flex: 1 1 auto; min-width: 0; width: 100%; max-width: 340px; aspect-ratio: 15 / 13; border-radius: 8px; }
-  .panel.arena .you-row { gap: 4px; }
+  .panel.arena .you-row { gap: 4px; position: relative; }
+  .panel.arena { overflow: clip; } /* the map flying off leaves by the panel's edge, never widening the page */
+  /* the map flying away as the next one swoops in (mapFlip in lobby.ts) */
+  .map-card { position: absolute; z-index: 2; border-radius: 8px; pointer-events: none; box-shadow: 0 14px 30px rgba(0, 0, 0, 0.45); }
+  #arenaPic { position: relative; z-index: 1; }
   .panel.arena .round-btn { width: 42px; height: 42px; flex: 0 0 42px; }
   .panel.arena .round-btn svg { width: 20px; height: 20px; }
   #arenaBlurb { font: 700 15px/1 var(--font-display); letter-spacing: 0.1em; color: var(--ink-dim); }

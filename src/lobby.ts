@@ -234,8 +234,85 @@ export function createLobby(host: LobbyHost): {
   function stepArena(d: number): void {
     if (!canEdit()) return;
     const i = MAPS.findIndex((m) => m.id === s().map);
+    const old = mapCard();
     s().map = MAPS[(i + d + MAPS.length) % MAPS.length].id;
     changed();
+    mapFlip(old, d);
+  }
+
+  /**
+   * Going through the maps (the owner's ask, 18 November 2026: up and to the side, a bit like a carousel,
+   * pleasing and fun). The map on show is copied into a card of its own, which lifts, tips and flies off the
+   * way the swipe went, up in an arc, shrinking and fading; the new map swoops in from the other side,
+   * from a little above, overshoots a touch (a little high, a little big, tipped the other way) and settles
+   * with a small bounce. Its name slides in after it. Both animations leave no transform behind, so the
+   * picture ends exactly on its pixels (a transformed canvas is soft). With Less movement on, a short fade.
+   */
+  let flipCard: HTMLCanvasElement | null = null;
+  function mapCard(): HTMLCanvasElement | null {
+    const cv = $<HTMLCanvasElement>('arenaPic');
+    const row = cv.parentElement!;
+    if (cv.width < 2 || !row.offsetParent) return null; // (not on screen: nothing to animate)
+    flipCard?.remove();
+    const card = document.createElement('canvas');
+    card.width = cv.width;
+    card.height = cv.height;
+    card.getContext('2d')!.drawImage(cv, 0, 0);
+    const box = cv.getBoundingClientRect();
+    const at = row.getBoundingClientRect();
+    card.className = 'map-card';
+    Object.assign(card.style, { left: `${box.left - at.left}px`, top: `${box.top - at.top}px`, width: `${box.width}px`, height: `${box.height}px` });
+    card.setAttribute('aria-hidden', 'true');
+    return card;
+  }
+  function mapFlip(card: HTMLCanvasElement | null, d: number): void {
+    const cv = $<HTMLCanvasElement>('arenaPic');
+    const name = $('arenaName');
+    if (!card || !cv.animate) return;
+    cv.getAnimations().forEach((a) => a.cancel());
+    name.getAnimations().forEach((a) => a.cancel());
+    if (document.body.classList.contains('calm')) {
+      cv.animate([{ opacity: 0.2 }, { opacity: 1 }], { duration: 180, easing: 'ease-out' });
+      return;
+    }
+    cv.parentElement!.append(card);
+    flipCard = card;
+    const out = -d; // the old map leaves the way the thumb went
+    card
+      .animate(
+        [
+          { transform: 'none', opacity: 1 },
+          { transform: `translate(${out * 6}%, -7%) rotate(${out * 2}deg) scale(1.02)`, opacity: 1, offset: 0.18 },
+          { transform: `translate(${out * 48}%, -18%) rotate(${out * 9}deg) scale(0.86)`, opacity: 0.85, offset: 0.6 },
+          { transform: `translate(${out * 90}%, -24%) rotate(${out * 15}deg) scale(0.72)`, opacity: 0 },
+        ],
+        { duration: 330, easing: 'cubic-bezier(0.3, 0, 0.6, 1)', fill: 'forwards' },
+      )
+      .finished.then(
+        () => card.remove(),
+        () => card.remove(),
+      )
+      .finally(() => {
+        if (flipCard === card) flipCard = null;
+      });
+    cv.animate(
+      [
+        { transform: `translate(${-out * 80}%, -18%) rotate(${-out * 12}deg) scale(0.74)`, opacity: 0 },
+        { transform: `translate(${-out * 18}%, -9%) rotate(${-out * 4}deg) scale(0.94)`, opacity: 1, offset: 0.45 },
+        { transform: `translate(${out * 3}%, -3%) rotate(${out * 1.6}deg) scale(1.035)`, opacity: 1, offset: 0.72 },
+        { transform: `translate(${-out * 0.8}%, 0.6%) rotate(${-out * 0.4}deg) scale(0.995)`, offset: 0.88 },
+        { transform: 'none', opacity: 1 },
+      ],
+      { duration: 560, delay: 70, easing: 'cubic-bezier(0.22, 0.8, 0.36, 1)', fill: 'backwards' },
+    );
+    name.animate(
+      [
+        { transform: `translateX(${-out * 40}px)`, opacity: 0, filter: 'blur(3px)' },
+        { transform: `translateX(${out * 3}px)`, opacity: 1, filter: 'blur(0)', offset: 0.7 },
+        { transform: 'none', opacity: 1, filter: 'none' },
+      ],
+      { duration: 420, delay: 90, easing: 'cubic-bezier(0.22, 0.8, 0.36, 1)', fill: 'backwards' },
+    );
   }
 
   // ------------------------------------------------------------ the Players page
@@ -1025,9 +1102,12 @@ export function createLobby(host: LobbyHost): {
     b.className = 'dot';
     b.setAttribute('aria-label', `${m.name} map`);
     b.addEventListener('click', () => {
-      if (!canEdit()) return;
+      if (!canEdit() || s().map === m.id) return;
+      const old = mapCard();
+      const d = MAPS.indexOf(m) > MAPS.findIndex((x) => x.id === s().map) ? 1 : -1;
       s().map = m.id;
       changed();
+      mapFlip(old, d);
     });
     b.dataset.map = m.id;
     $('arenaDots').append(b);
