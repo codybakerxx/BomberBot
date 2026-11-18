@@ -474,8 +474,9 @@ assert.strictEqual(back.last('room')!.host, back.last('room')!.you, 'the friend 
   assert.deepStrictEqual(seating(s, eight).slice(0, 2), ['gold', 'green']);
   assert.deepStrictEqual(teamsFor(s, eight).slice(0, 2), [3, 1], 'gold stays yellow; black takes green’s seat in the last row');
   assert.equal(teamsFor(s, eight)[eight.indexOf('green')], 3, 'green now sits beside you, on your team');
-  // a row's colour: only colours no other team has; a tap changes its whole row (Teams of 4: both rows)
-  assert.deepStrictEqual(teamChoices(s, eight, 'gold'), [2, 3, 4, 5, 7]);
+  // a row's colour: any colour (another team's makes the two one team: see below); a tap changes its whole
+  // row (Teams of 4: both rows)
+  assert.deepStrictEqual(teamChoices(s, eight, 'gold'), [0, 1, 2, 3, 4, 5, 6, 7]);
   setTeamSize(s, eight, 4);
   assert.equal(recolour(s, eight, 'pink'), 4, 'pink sits in the second row, with you: yellow becomes purple');
   assert.deepStrictEqual(s.rowTeams, [4, 4, 6, 6], 'both rows of that team');
@@ -488,6 +489,61 @@ assert.strictEqual(back.last('room')!.host, back.last('room')!.you, 'the friend 
   assert.equal(lineUp(s, eight), '1v1v1v1v1v1v1v1');
   assert.equal(fixedSize({ ...s, teamSize: 2 }, 9), 0, 'a player more: Custom');
   assert.equal(readSetup({ ...s, teamSize: 3 }, 'pink', COLOR_IDS).teamSize, 0, 'whole rows only: Teams of 2 or 4');
+}
+
+// teams of 2 or 4, overridden by hand (the owner's ask, 18 November 2026): any team can be given any colour,
+// another team's too, which makes the two one team (2 v 2 v 2 v 2 into 4 v 2 v 2, or all one team)
+{
+  const s = defaultSetup('gold');
+  s.teamsOn = true;
+  const eight = ['gold', 'black', 'pink', 'blue', 'red', 'orange', 'white', 'green'];
+  startTeams(s, eight);
+  setTeamSize(s, eight, 2);
+  assert.deepStrictEqual(s.rowTeams, [0, 2, 4, 6], 'picked: each row the team of whoever sits first in it');
+  assert.equal(lineUp(s, eight), '2 v 2 v 2 v 2');
+  // the ‹ ›: the second row takes the first row's colour, and the four are one team
+  assert.deepStrictEqual(teamChoices(s, eight, 'pink'), [0, 1, 2, 3, 4, 5, 6, 7], 'every colour, the other teams’ too');
+  assert.ok(pickTeam(s, eight, 'pink', 0));
+  assert.deepStrictEqual(s.rowTeams, [0, 0, 4, 6]);
+  assert.equal(lineUp(s, eight), '4 v 2 v 2');
+  assert.equal(teamsFor(s, eight)[eight.indexOf('blue')], teamsFor(s, eight)[0], 'blue (second row) is on your team');
+  settleTeams(s, eight);
+  assert.equal(lineUp(s, eight), '4 v 2 v 2', 'and stays so: the lobby settles the teams on every change');
+  assert.equal(fixedSize(s, eight.length), 2, 'still Teams of 2');
+  assert.deepStrictEqual(worldConfig({ ...s, cpus: eight.slice(1).map((colorId) => ({ colorId, level: 'normal' as const })) }, 'gold', 1).teams, [0, 0, 0, 0, 4, 4, 6, 6], 'into the round as picked');
+  assert.ok(pickTeam(s, eight, 'pink', 2), 'given a colour of its own again');
+  assert.equal(lineUp(s, eight), '2 v 2 v 2 v 2');
+  // a tap: the row takes the next colour, whoever has it; the next tap moves only that row on
+  s.rowTeams = [0, 1, 2, 3];
+  assert.equal(recolour(s, eight, 'gold'), 1);
+  assert.deepStrictEqual(s.rowTeams, [1, 1, 2, 3], 'red became blue, the second row’s colour: one team');
+  assert.equal(lineUp(s, eight), '4 v 2 v 2');
+  assert.equal(recolour(s, eight, 'black'), 2);
+  assert.deepStrictEqual(s.rowTeams, [2, 1, 2, 3], 'only the tapped row moved on (it joins green), blue as it was');
+  // all one team, by hand
+  for (const c of eight) pickTeam(s, eight, c, 4);
+  assert.equal(lineUp(s, eight), 'All one team');
+  // picking the size again starts even, every team a colour of its own
+  setTeamSize(s, eight, 2);
+  assert.equal(new Set(s.rowTeams).size, 4);
+  assert.equal(lineUp(s, eight), '2 v 2 v 2 v 2');
+  // a row more (six robots to eight) starts a team in a colour no other row has; a merge stays
+  const six = eight.slice(0, 6);
+  setTeamSize(s, six, 2);
+  assert.ok(pickTeam(s, six, 'pink', s.rowTeams[0]));
+  assert.equal(lineUp(s, six), '4 v 2');
+  settleTeams(s, eight);
+  assert.equal(lineUp(s, eight), '4 v 2 v 2');
+  assert.ok(!s.rowTeams.slice(0, 3).includes(s.rowTeams[3]), 'the new row is a team of its own');
+  // Teams of 4: both rows of a team change together, and the two teams can be made one
+  setTeamSize(s, eight, 4);
+  assert.equal(lineUp(s, eight), '4 v 4');
+  assert.ok(pickTeam(s, eight, 'red', s.rowTeams[0]));
+  assert.equal(lineUp(s, eight), 'All one team');
+  const was = s.rowTeams[0];
+  recolour(s, eight, 'white');
+  assert.deepStrictEqual(s.rowTeams, [was, was, (was + 1) % 8, (was + 1) % 8], 'a tap: the tapped team’s two rows move on together');
+  assert.equal(lineUp(s, eight), '4 v 4');
 }
 
 console.log('room checks passed');

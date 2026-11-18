@@ -581,7 +581,8 @@ export function createLobby(host: LobbyHost): {
   // Each card (the owner's design, 17 November 2026): the robot, its name, P-number and whether it is ready;
   // then along its foot a ‹ › for each thing to pick: Team (in a teams match), Level (a CPU player) and Emote.
   // A tap on a CPU player's robot gives it the next colour free; a tap where the name is gives the robot's
-  // team the next colour no other team has. A card held down can be dragged onto another: it joins that
+  // team the next colour (in Custom the next one no other team has; with Teams of 2 or 4 its row's next colour,
+  // another team's too, which makes them one team). A card held down can be dragged onto another: it joins that
   // robot's team and, for a CPU player, takes the place after it. (There was a panel for each CPU player.)
   const CHEV_L = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>';
   const CHEV_R = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg>';
@@ -630,8 +631,9 @@ export function createLobby(host: LobbyHost): {
     return row;
   }
   /**
-   * The Team row on a card: ‹ its team colour ›, through `teamChoices`. In Custom a colour another robot has
-   * puts it on that team, beside it; with Teams of 2 or 4 its whole row (its team's rows) changes colour.
+   * The Team row on a card: ‹ its team colour ›, through `teamChoices` (every colour). In Custom a colour another
+   * robot has puts it on that team; with Teams of 2 or 4 its whole row (its team's rows) changes colour, and
+   * another team's colour makes the two one team (the owner's ask: any team's colour can be overridden).
    */
   function teamRow(who: string): HTMLElement {
     const colour = colourOf(who);
