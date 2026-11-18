@@ -61,7 +61,7 @@ import {
   seatLast,
   seating,
   teamSizes,
-  splitTeams,
+  evenTeams,
   swapTeams,
   TEAMS,
   teamsFor,
@@ -479,7 +479,7 @@ export function createLobby(host: LobbyHost): {
       ],
     }),
     // Teams (the owner's asks, November 2026): Team size (Custom, or teams all one size), the teams as they are
-    // with Split evenly, and whether teammates' blasts can knock each other out. Each robot's team is picked on
+    // with Even out, and whether teammates' blasts can knock each other out. Each robot's team is picked on
     // its card (the cards: see `card`).
     toggle({
       label: 'Teams',
@@ -515,7 +515,7 @@ export function createLobby(host: LobbyHost): {
   ];
   const refreshAll = mount($('allCpus'), allCpus);
 
-  /** The row under Team size: the teams as they are (2 v 2), and Split evenly, which splits everyone afresh in player order. */
+  /** The row under Team size: the teams as they are (2 v 2 v 1), and Even out, which evens out the teams there are (Custom only). */
   function splitRow(): Opt {
     const row = document.createElement('div');
     row.className = 'opt opt-split';
@@ -527,12 +527,12 @@ export function createLobby(host: LobbyHost): {
     b.type = 'button';
     b.className = 'mini';
     b.id = 'teamSplit';
-    b.textContent = 'Split evenly';
+    b.textContent = 'Even out';
     box.append(label);
     row.append(box, b);
     b.addEventListener('click', () => {
       if (!canEdit()) return;
-      splitTeams(s(), inOrder());
+      evenTeams(s(), inOrder());
       changed();
     });
     return {

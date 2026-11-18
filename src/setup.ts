@@ -459,15 +459,37 @@ export function setTeamSize(s: MatchSetup, colours: string[], size: number): voi
   settle(s, colours);
 }
 
-/** Split evenly, in Custom: two teams, the first half of the seats and the rest. (Teams of 2 or 4 are even already.) */
-export function splitTeams(s: MatchSetup, colours: string[]): void {
+/**
+ * Even out, in Custom (the owner's ask): the teams there are, with their colours, made as even as they can
+ * be (8 robots in 1 v 1 v 1 v 2 v 3 become 2 v 2 v 2 v 1 v 1). As many robots as can stay on their own team
+ * do; the rest go to the teams short of robots, and teammates then sit together. (Teams of 2 or 4 are even
+ * already.)
+ */
+export function evenTeams(s: MatchSetup, colours: string[]): void {
   settle(s, colours);
   if (fixedSize(s, colours.length)) return;
-  const now = teamsFor(s, colours);
-  const a = now[colours.indexOf(s.seats[0])] ?? 0;
-  const b = a === 0 ? 1 : 0;
-  const half = Math.ceil(s.seats.length / 2);
-  s.seats.forEach((c, k) => (s.teams[c] = k < half ? a : b));
+  const seats = s.seats;
+  const order: number[] = []; // the teams, in the order their first robot sits
+  for (const c of seats) if (!order.includes(s.teams[c])) order.push(s.teams[c]);
+  const k = order.length;
+  const want = order.map((_, i) => Math.floor(seats.length / k) + (i < seats.length % k ? 1 : 0));
+  // the biggest teams keep the bigger shares
+  const size = (t: number): number => seats.filter((c) => s.teams[c] === t).length;
+  const byBig = [...order].sort((a, b) => size(b) - size(a) || order.indexOf(a) - order.indexOf(b));
+  const target = new Map(byBig.map((t, i) => [t, want[i]]));
+  const kept = new Map<number, number>();
+  const spare: string[] = [];
+  for (const c of seats) {
+    const t = s.teams[c];
+    if ((kept.get(t) ?? 0) < target.get(t)!) kept.set(t, (kept.get(t) ?? 0) + 1);
+    else spare.push(c);
+  }
+  for (const c of spare) {
+    const t = order.find((x) => (kept.get(x) ?? 0) < target.get(x)!)!;
+    s.teams[c] = t;
+    kept.set(t, (kept.get(t) ?? 0) + 1);
+  }
+  s.seats = order.flatMap((t) => seats.filter((c) => s.teams[c] === t));
 }
 
 /** Teams on: everyone on a team of their own in Custom (the owner's ask), or the rows as the team size makes them. */
@@ -477,12 +499,11 @@ export function startTeams(s: MatchSetup, colours: string[]): void {
   settle(s, colours);
 }
 
-/** The teams in play and how many are on each, biggest first: "2 v 2 v 1"; with more than four teams, "6 teams". */
+/** The teams in play and how many are on each, biggest first: "2 v 2 v 1"; with more than four teams, closer: "3v2v1v1v1". */
 export function lineUp(s: MatchSetup, colours: string[]): string {
   const n = new Map<number, number>();
   for (const t of teamsFor(s, colours)) n.set(t, (n.get(t) ?? 0) + 1);
-  if (n.size > 4) return `${n.size} teams`;
-  return [...n.values()].sort((a, b) => b - a).join(' v ');
+  return [...n.values()].sort((a, b) => b - a).join(n.size > 4 ? 'v' : ' v ');
 }
 
 /**

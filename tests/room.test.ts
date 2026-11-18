@@ -23,7 +23,7 @@ import {
   type ServerMsg,
 } from '../src/net';
 import { makeRng } from '../src/sim';
-import { ARENAS, MAPS, defaultRules, itemChances, defaultSetup, dropOnto, fixedSize, lineUp, pickTeam, readSetup, recolour, rollCpus, seatLast, seating, setTeamSize, splitTeams, startTeams, summary, swapTeams, teamChoices, teamSizes, teamsFor, wholeTile, worldConfig } from '../src/setup';
+import { ARENAS, MAPS, defaultRules, itemChances, defaultSetup, dropOnto, fixedSize, lineUp, pickTeam, readSetup, recolour, rollCpus, seatLast, seating, setTeamSize, evenTeams, startTeams, summary, swapTeams, teamChoices, teamSizes, teamsFor, wholeTile, worldConfig } from '../src/setup';
 import { BOT_LEVELS } from '../src/bot';
 import { DANCE_IDS } from '../src/dances';
 import type { World } from '../src/sim';
@@ -392,13 +392,26 @@ assert.strictEqual(back.last('room')!.host, back.last('room')!.you, 'the friend 
   s.teams = { gold: 0, black: 0, pink: 0, blue: 1 };
   assert.ok(!teamChoices(s, four, 'blue').includes(0));
   assert.ok(!pickTeam(s, four, 'blue', 0));
-  // Split evenly: two teams, the first half of the seats and the rest
-  splitTeams(s, four);
-  assert.equal(lineUp(s, four), '2 v 2');
-  // someone new: a team of their own; more than four teams are counted
+  // any mix in Custom: 3 v 2 v 1 v 1 v 1 with eight robots
   const eight = ['gold', 'black', 'pink', 'blue', 'red', 'orange', 'white', 'green'];
   startTeams(s, eight);
-  assert.equal(lineUp(s, eight), '8 teams');
+  assert.equal(lineUp(s, eight), '1v1v1v1v1v1v1v1', 'everyone on their own; more than four teams written closer');
+  const tGold = teamsFor(s, eight)[0];
+  const tBlue = teamsFor(s, eight)[3];
+  assert.ok(pickTeam(s, eight, 'black', tGold) && pickTeam(s, eight, 'pink', tGold) && pickTeam(s, eight, 'red', tBlue));
+  assert.equal(lineUp(s, eight), '3v2v1v1v1');
+  // Even out: the same teams and colours, as even as can be; teammates sit together
+  const teamsBefore = new Set(teamsFor(s, eight));
+  evenTeams(s, eight);
+  assert.equal(lineUp(s, eight), '2v2v2v1v1');
+  assert.deepStrictEqual(new Set(teamsFor(s, eight)), teamsBefore, 'the same teams, the same colours');
+  const seated = seating(s, eight).map((c) => teamsFor(s, eight)[eight.indexOf(c)]);
+  assert.ok(seated.every((t, k) => k === 0 || t === seated[k - 1] || !seated.slice(0, k).includes(t)), 'each team sits together');
+  s.teams = { gold: 0, black: 0, pink: 0, blue: 1 };
+  s.seats = [...four];
+  evenTeams(s, four);
+  assert.equal(lineUp(s, four), '2 v 2');
+  assert.equal(teamsFor(s, four)[0], 0, 'you stay on your team');
   assert.deepStrictEqual(teamsFor(defaultSetup('gold'), ['gold', 'black']), [0, 1], 'two robots: one each');
   // a CPU player gives its colour up to you: each keeps its seat and team
   s.seats = [...four];
@@ -453,7 +466,7 @@ assert.strictEqual(back.last('room')!.host, back.last('room')!.you, 'the friend 
   // back to Custom: everyone on a team of their own again, each a colour of their own
   setTeamSize(s, eight, 0);
   assert.equal(new Set(teamsFor(s, eight)).size, 8);
-  assert.equal(lineUp(s, eight), '8 teams');
+  assert.equal(lineUp(s, eight), '1v1v1v1v1v1v1v1');
   assert.equal(fixedSize({ ...s, teamSize: 2 }, 9), 0, 'a player more: Custom');
   assert.equal(readSetup({ ...s, teamSize: 3 }, 'pink', COLOR_IDS).teamSize, 0, 'whole rows only: Teams of 2 or 4');
 }
