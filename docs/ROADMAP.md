@@ -225,3 +225,4 @@ The rules were written with this in mind from the start: they use no browser fea
 - 18 November 2026 (the owner): Settings › Controls (Steering, Visibility) and Settings › Sound (Volume and the four groups of sounds) got the Match page's Reset chips per group, with Undo, and a Reset all button at the foot of each page that asks first.
 - 18 November 2026 (the owner): no note pops up at the foot after a group's Reset, on the Match page or in Settings (it said what was reset, with Undo); the group's cards glowing once is the only sign. Removing a CPU player keeps its Undo bar.
 - 18 November 2026 (the owner): the Undo bar for removing a CPU player is gone too, and so is the note when a CPU player makes room for a joining controller: nothing pops up at the foot of the lobby or Settings now.
+- 18 November 2026 (the owner): the lobby's section titles Players, Map and Rules are larger, brighter and marked with a short gold bar.

@@ -614,6 +614,12 @@
   .dots.small .dot[aria-pressed="true"] { background: var(--accent); box-shadow: none; border-color: var(--void); }
   .sec-head { display: flex; justify-content: space-between; align-items: baseline; padding: 6px 2px 0; font: 700 13px/1 var(--font-display); letter-spacing: 0.18em; text-transform: uppercase; color: var(--ink-dim); }
   .sec-head span:last-child { letter-spacing: 0.04em; text-transform: none; font-weight: 500; }
+  /* the lobby's big section titles, Players, Map and Rules (the owner's ask, 18 November 2026: larger and
+     standing out): bright, bigger, with a short gold bar before them, above the gold group labels */
+  .sec-head.page-head { align-items: center; padding: 14px 2px 2px; font-size: 18px; letter-spacing: 0.16em; color: var(--ink); }
+  .sec-head.page-head > span:first-child { display: inline-flex; align-items: center; gap: 10px; }
+  .sec-head.page-head > span:first-child::before { content: ''; width: 4px; height: 18px; border-radius: 2px; background: var(--accent); box-shadow: 0 0 10px rgba(255, 197, 106, 0.45); }
+  .sec-head.page-head > span:last-child:not(:first-child) { font-size: 13px; color: var(--ink-dim); }
   .host-tag { padding: 3px 8px; border-radius: 6px; color: #14100a !important; background: var(--accent); font-weight: 700 !important; letter-spacing: 0.1em !important; text-transform: uppercase !important; }
   /* the cards, two to a row in the order they sit; in a teams match each row is a team, tinted in its colour,
      and rows of the same team (Teams of 4) are joined into one band (the owner's design, 17 November 2026) */
@@ -1024,14 +1030,14 @@
           <div class="dots" id="youDots" role="group" aria-label="Colours: under each, the player who wears it"></div>
           <button class="go ok" id="colOk" type="button" data-pad="Y">Ready</button>
         </div>
-        <div class="sec-head"><span>Players</span><span id="playerCount"></span></div>
+        <div class="sec-head page-head"><span>Players</span><span id="playerCount"></span></div>
         <div class="slots" id="slots"></div>
         <div class="opts" id="allCpus"></div>
         <!-- at the end of the page, not always on screen (the owner's ask): lit up once you have pressed Ready -->
         <button class="go page-end" id="playersNext" type="button">Next ›</button>
       </section>
       <section id="lobbyMatch" class="page" role="tabpanel" aria-labelledby="pgMatch">
-        <div class="sec-head"><span>Map</span><span id="arenaCount"></span></div>
+        <div class="sec-head page-head"><span>Map</span><span id="arenaCount"></span></div>
         <!-- the map's name over its picture; a swipe or the arrows go through the maps; the size under it, in
              three bubbles (the owner's design, November 2026) -->
         <div class="panel arena">
@@ -1045,7 +1051,7 @@
           <div class="size-pick" id="sizePick" role="group" aria-label="Size"></div>
           <button class="go arena-start" id="arenaStart" type="button" data-pad="≡">Start</button>
         </div>
-        <div class="sec-head"><span>Rules</span><span class="host-tag">Host</span></div>
+        <div class="sec-head page-head"><span>Rules</span><span class="host-tag">Host</span></div>
         <div class="opts" id="rules"></div>
         <button class="mini wide" id="rulesReset" type="button">Reset all settings to default</button>
         <!-- Start again at the end of the page, not always on screen (the owner's ask) -->
