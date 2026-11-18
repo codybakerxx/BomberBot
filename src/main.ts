@@ -1008,12 +1008,65 @@ function keepSharp(now: number): void {
  */
 const SHARP_EVERY_MS = 500;
 const SHARP_TRIES = 4;
+/** After its first tries, a stretched arena is laid out again this often for as long as it stays stretched (it used to give up for good). */
+const SHARP_RETRY_MS = 2000;
 let sharpAt = 0;
 let sharpTries = 0;
+let sharpRetryAt = 0;
 let sharp = { ok: true, text: 'not checked yet' };
+/** The last time the arena was found soft, and why, with the numbers (Settings › Graphics shows it, for a screenshot). */
+let softSeen: { at: number; text: string } | null = null;
+
+/**
+ * The page itself never scrolls: everything that scrolls does so inside its own box. But an iPhone can leave it
+ * shifted: put back where it was scrolled when the page is reloaded (Safari and Chrome both do, by default),
+ * or left a little way up after the keyboard has been open (the name, a room code). Shifted by a fraction of
+ * a page pixel, the arena sits between the screen's pixels and the browser smooths all of it, while text is
+ * drawn afresh and stays crisp: the arena soft "at random" on a refresh (the owner, November 2026). So the
+ * page is never put back where it was, and is put straight back at the top whenever anything moves it.
+ * Returns true if it had to.
+ */
+try {
+  history.scrollRestoration = 'manual';
+} catch {
+  /* an old browser: the checks below still put it right */
+}
+function unshift(): boolean {
+  // (not while typing: then the phone has moved the page on purpose, to keep the box above the keyboard)
+  const typing = document.activeElement?.matches('input, textarea, select, [contenteditable="true"]');
+  if (typing) return false;
+  const se = document.scrollingElement ?? document.documentElement;
+  const vv = window.visualViewport;
+  const moved = window.scrollX || window.scrollY || se.scrollTop || se.scrollLeft || document.body.scrollTop || document.body.scrollLeft;
+  const panned = vv && vv.scale > 0.999 && vv.scale < 1.001 && (Math.abs(vv.offsetTop) > 0.01 || Math.abs(vv.offsetLeft) > 0.01);
+  if (!moved && !panned) return false;
+  window.scrollTo(0, 0);
+  se.scrollTop = se.scrollLeft = 0;
+  document.body.scrollTop = document.body.scrollLeft = 0;
+  return true;
+}
+/**
+ * The page zoomed (not by the player: pinching is not allowed). The viewport tag allows exactly 1; writing it
+ * again has the browser apply it again, which brings the page back to 1. At most once every few seconds.
+ */
+let unzoomAt = -1e9;
+function unzoom(now: number): void {
+  if (now - unzoomAt < 3000) return;
+  unzoomAt = now;
+  const m = document.querySelector('meta[name="viewport"]');
+  const was = m?.getAttribute('content');
+  if (!m || !was) return;
+  m.setAttribute('content', 'width=device-width, initial-scale=1, maximum-scale=1');
+  requestAnimationFrame(() => m.setAttribute('content', was));
+}
+
 function checkSharp(now: number): void {
   sharpAt = now;
   if (shaken) return; // (mid-shake it is a pixel or two off on purpose)
+  if (unshift()) {
+    softSeen = { at: Date.now(), text: 'the page had been shifted (put back)' };
+    return; // (measured again on the next check, in its place)
+  }
   // (behind the title, the lobby or Settings the arena is still laid out, so it is checked there too: by the
   // time it shows it has been put right, and Settings can say what was found)
   const r = canvas.getBoundingClientRect();
@@ -1044,9 +1097,21 @@ function checkSharp(now: number): void {
   if (offGrid) bits.push(`${Math.round(Math.max(Math.abs(dx), Math.abs(dy)) * 100) / 100} of a pixel off the grid`);
   const shrunk = want > screenDensity() + 0.001;
   sharp = bits.length ? { ok: false, text: bits.join('; ') } : { ok: true, text: shrunk ? `drawn at ${Math.round((want / screenDensity()) * 100) / 100}× the screen and shrunk to fit` : 'sharp, pixel for pixel' };
-  // stretched (the window changed under it without a resize): laid out again, a few times at most, as before
-  if (stretched && sharpTries < SHARP_TRIES) {
+  if (bits.length && exact) {
+    // the numbers, for a screenshot of Settings › Graphics: the screen's density, the page's zoom and shift, and
+    // where the arena is and how big, against what it was drawn with
+    const n = (v: number): number => Math.round(v * 1000) / 1000;
+    softSeen = {
+      at: Date.now(),
+      text: `${sharp.text} [density ${n(window.devicePixelRatio || 1)}, zoom ${n(vv?.scale ?? 1)}, shift ${n(vv?.offsetLeft ?? 0)},${n(vv?.offsetTop ?? 0)}, arena ${n(r.left)},${n(r.top)} ${n(r.width)}×${n(r.height)} for ${canvas.width}×${canvas.height}]`,
+    };
+  }
+  if (zoomed) unzoom(now);
+  // stretched (the window changed under it without a resize): laid out again, a few times straight away, then
+  // every couple of seconds for as long as it lasts (it used to stop trying after four, for good)
+  if (stretched && (sharpTries < SHARP_TRIES || now >= sharpRetryAt)) {
     sharpTries++;
+    sharpRetryAt = now + SHARP_RETRY_MS;
     layout();
   }
 }
@@ -1961,7 +2026,10 @@ const gfxOpts: Opt[] = [
       // what the screen reports and what the game draws at, so a blurry screen can be told apart
       const screen = Math.round(screenDensity() * 100) / 100;
       const drawn = Math.round(density() * 100) / 100;
-      const now = ` This screen: ${screen}×, drawn at ${drawn}×. Arena: ${sharp.text}.${siteZoomed() ? ` ${ZOOM_TIP}` : ''}`;
+      // and the last time the arena was found soft, with why (for a screenshot, if it ever looks soft)
+      const ago = softSeen ? Math.round((Date.now() - softSeen.at) / 1000) : 0;
+      const last = softSeen ? ` Last soft: ${ago < 60 ? `${ago} s` : `${Math.round(ago / 60)} min`} ago, ${softSeen.text}.` : '';
+      const now = ` This screen: ${screen}×, drawn at ${drawn}×. Arena: ${sharp.text}.${last}${siteZoomed() ? ` ${ZOOM_TIP}` : ''}`;
       const what = [
         'Draws the game with fewer pixels, which uses less battery on big, sharp screens. It looks a little softer.',
         'Draws the game with fewer pixels, which uses less battery on big, sharp screens. It looks a little softer.',
@@ -2281,9 +2349,26 @@ document.addEventListener('visibilitychange', () => {
 });
 for (const ev of ['pointerdown', 'touchend', 'keydown']) document.addEventListener(ev, wakeAudio, { capture: true, passive: true });
 window.visualViewport?.addEventListener('resize', () => (sharpAt = 0)); // (a zoom or a keyboard: check the arena on the next frame)
-window.addEventListener('pageshow', () => (sharpAt = 0));
+window.visualViewport?.addEventListener('scroll', () => (sharpAt = 0)); // (the page shifted: put it back on the next frame)
+window.addEventListener('pageshow', () => {
+  unshift();
+  sharpAt = 0;
+});
+// the keyboard closing (a name, a room code) can leave the page shifted up: put it back once it has gone
+document.addEventListener('focusout', () => setTimeout(() => {
+  unshift();
+  sharpAt = 0;
+}, 350));
+// The font arriving changes the size of text round the arena (it is the website's, fetched as the page
+// opens, and shown in a stand-in font until then): everything is laid out again once it is in, and checked.
+document.fonts?.ready.then(() => {
+  unshift();
+  layout();
+  sharpAt = 0;
+});
 window.addEventListener('orientationchange', () => setTimeout(layout, 200));
 
+unshift();
 newWorld();
 layout();
 wireConfirm();
