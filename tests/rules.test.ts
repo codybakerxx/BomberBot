@@ -28,7 +28,8 @@ import {
   DEATH_TICKS,
   GHOST_TICKS,
   cloneWorld,
-  KEEP_OPEN,
+  KEEP_OPEN_W,
+  KEEP_OPEN_H,
   keptOpen,
   TICK_HZ,
   ITEM_CHANCE,
@@ -936,15 +937,17 @@ for (let seed = 1; seed <= 40; seed++) {
     assert.deepEqual(xy[13], [13, 2], 'turns down the right side');
     assert.deepEqual(xy[43], [1, 2], 'the first ring ends just under where it began');
     assert.deepEqual(xy[44], [3, 2], 'the second ring starts one in, past the pillar at 2,2');
-    // three whole rings (44, 18 and 28 blocks), then only the two columns either side of the square that stays open
-    assert.deepEqual(xy.slice(90), [[10, 5], [10, 7], [4, 7], [4, 5]], 'the last four close the sides of the 7 by 5 that three rings leave');
-    assert.equal(xy.length, 94);
+    // three whole rings (44, 18 and 28 blocks), and that is all: they leave the 7 by 5 that stays open (the
+    // owner's ask, 18 November 2026; four more blocks used to close its sides to a 5 by 5)
+    assert.equal(xy.length, 90);
+    assert.deepEqual(xy[89], [3, 4], 'the last block closes the third ring, just outside the 7 by 5');
     assert.equal(new Set(w.shrinkOrder).size, w.shrinkOrder.length, 'each once');
-    // the square left open: 5 by 5 in the middle, columns 5 to 9 and rows 4 to 8
-    assert.equal(KEEP_OPEN, 5);
+    // the area left open: 7 by 5 in the middle, columns 4 to 10 and rows 4 to 8
+    assert.equal(KEEP_OPEN_W, 7);
+    assert.equal(KEEP_OPEN_H, 5);
     for (let y = 1; y < w.h - 1; y++) {
       for (let x = 1; x < w.w - 1; x++) {
-        const inside = x >= 5 && x <= 9 && y >= 4 && y <= 8;
+        const inside = x >= 4 && x <= 10 && y >= 4 && y <= 8;
         assert.equal(keptOpen(w.w, w.h, y * w.w + x), inside);
         if (inside) assert.ok(!w.shrinkOrder.includes(y * w.w + x), `no block ever falls on ${x},${y}`);
       }
@@ -960,7 +963,8 @@ for (let seed = 1; seed <= 40; seed++) {
     assert.equal(blockLandTick(w, n - 1), ROUND_TICKS + SHRINK_TICKS, 'the last block lands 50 seconds after 0:00');
     for (let k = 1; k < n; k++) {
       const gap = blockLandTick(w, k) - blockLandTick(w, k - 1);
-      assert.ok(gap === 31 || gap === 32, `block ${k} lands about half a second after the one before`);
+      const even = (SHRINK_TICKS - FALL_TICKS) / (n - 1); // (33.3 ticks with the 90 blocks of a 7 by 5; 31.6 with 94 for a 5 by 5)
+      assert.ok(gap === Math.floor(even) || gap === Math.ceil(even), `block ${k} lands about half a second after the one before`);
     }
     w.players.forEach((p) => { p.x = 7; p.y = 5; }); // out of the way for now
     run(w, ROUND_TICKS - 1, none);
@@ -978,7 +982,7 @@ for (let seed = 1; seed <= 40; seed++) {
     assert.ok(w.events.some((e) => e.type === 'block' && e.cx === 1 && e.cy === 1), 'and says so');
     assert.equal(hard(w), before + 1, 'one at a time');
   }
-  // 50 seconds after 0:00 everything is solid except the 5 by 5 in the middle, which is untouched; then the blocks stop
+  // 50 seconds after 0:00 everything is solid except the 7 by 5 in the middle, which is untouched; then the blocks stop
   {
     const w = timed(undefined, 0.78, 1);
     const p = w.players[0];
@@ -992,7 +996,7 @@ for (let seed = 1; seed <= 40; seed++) {
       else assert.equal(w.tiles[i], HARD, 'outside it everything is solid');
     }
     for (const [i, kind] of hiddenBefore) assert.equal(w.hidden.get(i), keptOpen(w.w, w.h, i) ? kind : undefined, 'power-ups under bricks in the square are still there');
-    assert.equal(w.tiles.filter((t, i) => keptOpen(w.w, w.h, i) && t !== HARD).length, 19, '19 tiles to fight in: 25 less 6 pillars');
+    assert.equal(w.tiles.filter((t, i) => keptOpen(w.w, w.h, i) && t !== HARD).length, 23, '23 tiles to fight in: 35 less 12 pillars');
     assert.equal(w.falling.length, 0);
     assert.equal(ticksLeft(w), 0);
     assert.ok(p.alive, 'a robot in the square is still in');

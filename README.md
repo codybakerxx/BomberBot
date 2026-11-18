@@ -24,7 +24,7 @@ Working today:
 - Touch controls made for one thumb on each side, steered with the left or the right thumb, with a swipe pad that can be matched to your own thumb
 - Nine robots, one per colour, each with a name (Auric, Onyx, Fizz, Volt, Blaze, Tango, Frost, Gizmo, Vortex), and a box for your own name
 - One to seven CPU players, each with its own robot and level: Beginner, Normal or Hard (eight players in all; past six the arena grows)
-- A round timer (1 minute 30 unless the lobby says otherwise): when it reaches zero, blocks fall round the edge and inward for 50 seconds, leaving a 5 by 5 square in the middle to fight it out in
+- A round timer (1 minute 30 unless the lobby says otherwise): when it reaches zero, blocks fall round the edge and inward for 50 seconds, leaving a 7 by 5 area in the middle to fight it out in
 - A scoreboard of four heads beside the timer that counts the rounds each player has won, with a crown for whoever is in the lead
 - A knock-out that burns the bot to ash while its ghost floats away, and a winner that does the victory dance they picked (Party, Spin or the Wave)
 - A title screen: your robot in your colour, waving, with two rivals and a lit bomb, and a choice of Local or Online

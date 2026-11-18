@@ -366,10 +366,12 @@ export const FALL_TICKS = 38; // a falling block is in the air, over its shadow,
 export const START_FIRE = 1; // a blast reaches one tile each way until a flame power-up is picked up (it was 2)
 export const MAX_FIRE = 8;
 /**
- * The falling blocks leave a square this many tiles across open in the middle
- * of the arena, for whoever is left to fight it out in.
+ * The falling blocks leave an area this many tiles across and this many down open in the middle of the arena,
+ * for whoever is left to fight it out in: 7 by 5 (the owner's ask, 18 November 2026; it was a 5 by 5 square,
+ * which the last four blocks used to make out of the 7 by 5 that the rings leave on the Standard arena).
  */
-export const KEEP_OPEN = 5;
+export const KEEP_OPEN_W = 7;
+export const KEEP_OPEN_H = 5;
 export const DEATH_TICKS = 90; // length of the knocked-out animation (1.5 s)
 export const GHOST_TICKS = 300; // `deadTicks` goes on counting this far (5 s), so the ghost can be drawn floating all the way off the top of the screen
 export const CARRY_FUSE_TICKS = 180; // 3 s from the first pick-up, and it keeps ticking
@@ -592,12 +594,11 @@ function spiral(w: number, h: number): number[] {
   return out;
 }
 
-/** Is this tile in the square in the middle of the arena that the falling blocks leave open? */
+/** Is this tile in the area in the middle of the arena that the falling blocks leave open (7 by 5)? */
 export function keptOpen(w: number, h: number, i: number): boolean {
-  const half = (KEEP_OPEN - 1) / 2;
   const x = i % w;
   const y = Math.floor(i / w);
-  return Math.abs(x - (w - 1) / 2) <= half && Math.abs(y - (h - 1) / 2) <= half;
+  return Math.abs(x - (w - 1) / 2) <= (KEEP_OPEN_W - 1) / 2 && Math.abs(y - (h - 1) / 2) <= (KEEP_OPEN_H - 1) / 2;
 }
 
 /**

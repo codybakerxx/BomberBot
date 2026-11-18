@@ -1458,7 +1458,7 @@ export function createLobby(host: LobbyHost): {
           }),
           slider({
             label: 'Closing in',
-            hint: () => `The blocks take ${CLOSE_IN[s().closeIn].secs} seconds to fall. A 5 by 5 square in the middle stays open.`,
+            hint: () => `The blocks take ${CLOSE_IN[s().closeIn].secs} seconds to fall. A 7 by 5 area in the middle stays open.`,
             min: 0,
             max: CLOSE_IN.length - 1,
             get: () => s().closeIn,

@@ -76,14 +76,14 @@ When the timer reaches 0:00 blocks fall round the edge and inward for 50 seconds
 - **A block about to land sends it running**, as a blast does (within about a second and a half).
 - **A block further off is a reason to move on, not to run.** It heads for the nearest tile that will last longer, but it can still stop to bomb a player on the way. That keeps them fighting while the arena closes.
 - **A blast comes before a block.** Getting clear of a bomb, a tile only has to outlast the blast, even if a block is due on it a few seconds later.
-- **The square in the middle is never covered**, so there is always somewhere that counts as safe, and they end up in it.
+- **The 7 by 5 in the middle is never covered** (it was a 5 by 5 square until 18 November 2026; "the square" below means this area), so there is always somewhere that counts as safe, and they end up in it.
 - Hard will step out to bomb a spot that shuts other players into a dead end of the closing arena, if it can still get clear itself.
 
 Beginner has one weakness left in on purpose. Because it only steps aside from the block that is falling, it can back itself into a corner that the ring then closes.
 
 ## Pressing in the square
 
-Careful players in a 5 by 5 square can circle each other for minutes. So once the timer has run out and a Normal or Hard CPU player is standing in the square, it presses (`squareBold` in `LEVELS`, `emboldened` and `inSquare` in `src/bot.ts`). While it is there:
+Careful players in the open area (a 5 by 5 square when this was written, 7 by 5 since) can circle each other for minutes. So once the timer has run out and a Normal or Hard CPU player is standing in the square, it presses (`squareBold` in `LEVELS`, `emboldened` and `inSquare` in `src/bot.ts`). While it is there:
 
 - it bombs any player in line, every chance it gets, from any distance;
 - it uses every bomb it holds;
@@ -141,7 +141,7 @@ No level cheats, and no level is made easier by being careless with its own bomb
 
 ## What has been measured
 
-`experiments/cpu-matches.ts` plays whole rounds with no screen and counts how each bot went out. These are the real CPU players under the real rules: three levels, a blast that starts one tile long, the timer, the falling blocks that start when it reaches 0:00, the square they leave open, and Normal and Hard pressing once they are in it. Recorded on 11 November 2026, after the timer was shortened to 1 minute 30 and the blocks made 20% faster.
+`experiments/cpu-matches.ts` plays whole rounds with no screen and counts how each bot went out. These are the real CPU players under the real rules: three levels, a blast that starts one tile long, the timer, the falling blocks that start when it reaches 0:00, the square they leave open, and Normal and Hard pressing once they are in it. Recorded again on 18 November 2026, after the area the blocks leave open was made 7 by 5 (it was a 5 by 5 square); the first recording was on 11 November 2026, after the timer was shortened to 1 minute 30 and the blocks made 20% faster. Where the 18 November figures differ much from the 11 November ones, the notes say so.
 
 A round has no end of its own: the timer runs 1 minute 30, the blocks take 50 seconds to fall, and then it goes on in the square until someone wins. These runs give up 2 minutes after the blocks stop (4 minutes 20 in) and count the round as **not decided**.
 
@@ -149,32 +149,33 @@ A round has no end of its own: the timer runs 1 minute 30, the blocks take 50 se
 
 | Level | Blasted itself | Shut in by a rival | Caught in a rival's blast | Under a block, early | Under a block, in the last 15 s of them | Won | Rounds drawn | Not decided | Decided after |
 |---|---|---|---|---|---|---|---|---|---|
-| Beginner | 0.0% | 0.8% | 57.9% | 2.5% | 5.0% | 16.7% | 0 of 60 | 20 of 60 | 154 s |
-| Normal | 0.0% | 22.1% | 43.8% | 1.7% | 8.3% | 24.2% | 2 of 60 | 0 of 60 | 146 s |
-| Hard | 0.0% | 34.2% | 41.3% | 0.4% | 2.1% | 20.4% | 9 of 60 | 2 of 60 | 163 s |
+| Beginner | 0.0% | 0.0% | 62.1% | 3.3% | 4.6% | 20.0% | 0 of 60 | 12 of 60 | 156 s |
+| Normal | 0.0% | 23.3% | 43.8% | 0.8% | 8.8% | 23.3% | 4 of 60 | 0 of 60 | 146 s |
+| Hard | 0.0% | 29.6% | 43.8% | 0.0% | 1.7% | 23.3% | 2 of 60 | 2 of 60 | 160 s |
 
 - "Shut in by a rival" and "blasted itself" are both a bot caught by its own blast. The script calls it "shut in by a rival" when, within six steps of where the bot stood, there was a tile its own bombs would not have reached that was blocked or about to be blasted by a bomb a rival dropped *after* the bomb that caught it. It looks at the arena as it was when that bomb was dropped, so a tile a block has landed on since still counts as a way out it had. A rival's bomb dropped on the very same tick counts too, and so does one a rival threw or kicked that came to rest on the way out afterwards. It is also "shut in by a rival" when the bot's own bomb went off early because a rival's bomb set it off, and that rival's bomb was dropped, kicked or thrown after the bot dropped its own. Anything else is "blasted itself".
 - Before Normal and Hard pressed in the square, Normal left 32 of 60 rounds not decided and Hard 9. Now it is none and 2. The price shows in "shut in by a rival": Normal went from 3.8% to about 20%, Hard from 27.5% to about 34%. That is the risk they now take on purpose. Beginner does not press, and its 20 of 60 is the old figure give or take (it was 15).
 - "Decided after" is the average length of the rounds that were decided. The blocks stop at 140 s, so most are settled in the square.
-- With the shorter timer and faster blocks, rounds are settled about 35 seconds sooner than before, and the other columns moved little. One thing did move: four Hards drew 9 rounds of 60 (it was 2). Why has not been looked into.
+- With the shorter timer and faster blocks, rounds are settled about 35 seconds sooner than before, and the other columns moved little. One thing did move: four Hards drew 9 rounds of 60 (it was 2). Why was not looked into; with the 7 by 5 it is back to 2.
+- With the 7 by 5 (18 November 2026): four Beginners leave fewer rounds not decided (12 of 60, was 20), and four Hards are shut in by a rival a little less (29.6%, was 34.2%): more room to get out of a squeeze. The rest is about where it was.
 
 **One of each level in the same round** (three players, 180 rounds, each level in each of three corners equally often):
 
 | Level | Won | Blasted | Under a block, early | Blasted itself | Rivals it blasted |
 |---|---|---|---|---|---|
-| Beginner | 2.2% | 80.6% | 3.9% | 0.0% | 5 |
-| Normal | 30.6% | 62.8% | 1.7% | 0.0% | 57 |
-| Hard | 63.3% | 34.4% | 0.0% | 0.0% | 179 |
+| Beginner | 2.8% | 73.3% | 6.1% | 0.0% | 5 |
+| Normal | 32.8% | 60.0% | 1.7% | 0.0% | 58 |
+| Hard | 59.4% | 32.2% | 0.6% | 0.0% | 167 |
 
-5 of 180 drawn, 2 left undecided (it was 27 before they pressed in the square). The levels are well apart: each wins far more and blasts far more rivals than the one below.
+1 of 180 drawn, 8 left undecided (with the 5 by 5: 5 drawn, 2 undecided) (it was 27 before they pressed in the square). The levels are well apart: each wins far more and blasts far more rivals than the one below.
 
 **Three of one level against a slow, careless player** (a Beginner CPU player standing in for a person, 80 rounds):
 
 | Three of | Blasted the player | Average time | A block got the player | The player won | Not decided | CPU players that blasted themselves |
 |---|---|---|---|---|---|---|
-| Beginner | 54 of 80 | 125 s | 4 of 80 | 10 of 80 | 24 of 80 | 0 |
-| Normal | 60 of 80 | 115 s | 18 of 80 | 2 of 80 | 0 of 80 | 0 |
-| Hard | 67 of 80 | 103 s | 11 of 80 | 1 of 80 | 1 of 80 | 0 |
+| Beginner | 58 of 80 | 116 s | 7 of 80 | 9 of 80 | 16 of 80 | 0 |
+| Normal | 64 of 80 | 100 s | 15 of 80 | 1 of 80 | 0 of 80 | 0 |
+| Hard | 68 of 80 | 92 s | 10 of 80 | 2 of 80 | 4 of 80 | 1 (replayed: a rival's doing, see below) |
 
 This table is noisy, and the stand-in is not a person. Read it loosely.
 
@@ -190,11 +191,11 @@ This table is noisy, and the stand-in is not a person. Read it loosely.
 
 | Level | Blasted itself | Got the other player | Average time |
 |---|---|---|---|
-| Beginner | 0 of 40 | 17 of 40 | 152 s |
-| Normal | 0 of 40 | 40 of 40 | 129 s |
-| Hard | 0 of 40 | 40 of 40 | 111 s |
+| Beginner | 0 of 40 | 13 of 40 | 153 s |
+| Normal | 0 of 40 | 40 of 40 | 133 s |
+| Hard | 0 of 40 | 40 of 40 | 115 s |
 
-Most of that time is spent digging through bricks from one corner to the other. It takes longer than it did, because a blast now starts one tile long. Beginner's figures moved since the last run (11 of 40 then) although Beginner was not changed: the arenas are different, because boots and gloves are rarer and bombs, flames and speeds a little commoner.
+Most of that time is spent digging through bricks from one corner to the other. It takes longer than it did, because a blast now starts one tile long. Beginner's figures moved since the last run (11 of 40, then 17) although Beginner was not changed: the arenas are different, because the power-up chances have changed (this run has no timer, so the 7 by 5 plays no part in it).
 
 ### What the replays have caught
 
@@ -207,6 +208,9 @@ The "blasted itself" column is only worth anything because every case that lands
 - **Pressing in the square.** The first run with it put three bots under "blasted itself". Replayed, all three were a rival's doing: a rival dropped a bomb on the way out on the same tick the bot dropped its own, or threw one that landed on the way out afterwards. The test only counted bombs dropped later, on the tile they were dropped on. It now counts those cases too.
 - **Set off early.** The first run with the shorter timer put two Normal bots under "blasted itself" in the run against the stand-in. Replayed, both were the same thing: the bot dropped a bomb with a way out and was walking it; a rival then kicked a bomb of its own into a blast that was still burning, which set that bomb off two seconds early; its blast reached the bot's bomb and set that off too, with the bot still in line. Nothing on the board when it pressed A said that would happen. The test now counts a bot's bomb set off early by a rival's bomb that was dropped, kicked or thrown afterwards.
 - **Beginner was made easier on 10 November 2026** after play-testing found it still hard: it pauses longer before setting off (40 to 110 ticks, was 20 to 60), notices other players' bombs later (70 ticks, was 45), is drawn to players less (`hunt` 0.12, was 0.3) and bombs a player beside it less often (20% of chances, was 40%).
+
+- **The 7 by 5 (18 November 2026).** The run against the stand-in put one Hard bot under "blasted itself" (seed 21, the stand-in in seat 1, player 3, 140 s in, as the blocks stopped). Replayed, it was a rival's doing that the script cannot see: a rival Hard with the glove lifted two of its bombs, one after the other, and threw them; they were still in the air when it dropped its next bomb, and they came down either side of it in the 7 by 5. When its last bomb went off, their flames were still burning across both of its ways out. The script misses it because the bombs that shut it in were its own (only thrown by the rival) and had already gone off, leaving flames, when it went out. Not a fault of the bot's own: left as it is, with this note.
+- **Beginner alone among bricks (tests/bot.test.ts, 18 November 2026).** With the 7 by 5, the alone test's Beginner in the brick arena ran from its own bomb onto the third ring as it closed and a block landed on it. That is its short sight for blocks (under a second) by design; the test now allows a block, never its own blast, for Beginner only. The `alone` run's figures are unchanged (1 of 40 caught by a block).
 
 One weakness the replays showed and that is still there: a CPU player with no safe route left stands still. Trying anyway would sometimes save it, and that is not built.
 

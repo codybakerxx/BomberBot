@@ -238,8 +238,9 @@ for (const level of ['normal', 'hard'] as BotLevel[]) {
   const w = createWorld({ seed: 7, players: [{ colorId: 'gold' }, { colorId: 'blue' }], softDensity: 0 });
   const at = (x: number, y: number): number => y * w.w + x;
   assert.equal(blockLandsIn(w, at(1, 1)), blockLandTick(w, 0), 'the first block is due on the top-left corner');
-  assert.equal(blockLandsIn(w, at(4, 5)), ROUND_TICKS + SHRINK_TICKS, 'the last beside the square that stays open, 50 seconds after the timer reaches 0');
-  assert.equal(blockLandsIn(w, at(7, 6)), Infinity, 'none in the square');
+  assert.equal(blockLandsIn(w, at(3, 4)), ROUND_TICKS + SHRINK_TICKS, 'the last just outside the 7 by 5 that stays open, 50 seconds after the timer reaches 0');
+  assert.equal(blockLandsIn(w, at(7, 6)), Infinity, 'none in the 7 by 5');
+  assert.equal(blockLandsIn(w, at(4, 5)), Infinity, 'its side columns included (they used to close it to 5 by 5)');
   assert.equal(blockLandsIn(w, at(5, 4)), Infinity);
   assert.equal(blockLandsIn(w, at(2, 2)), Infinity, 'none on a pillar');
   // at the start nothing is in sight; just before the timer reaches 0 the first tiles are, for a level that looks ahead
@@ -258,12 +259,22 @@ for (const level of BOT_LEVELS) {
     const bot = createBot(0, level, 11);
     const p = w.players[0];
     const end = ROUND_TICKS + SHRINK_TICKS + 5 * TICK_HZ;
-    for (let t = 0; t < end && p.alive; t++) step(w, [botInput(w, bot)]);
+    let cause = '';
+    for (let t = 0; t < end && p.alive; t++) {
+      step(w, [botInput(w, bot)]);
+      for (const e of w.events) if (e.type === 'death' && e.player === p.id) cause = e.cause;
+    }
     const where = density === 0 ? 'open arena' : 'bricks';
-    // (Beginner only steps aside from the block that is falling, so it can back into a pocket the ring
-    // then closes. With a 2-minute timer that happened in this open arena and was checked here; with
-    // 1 minute 30 it is somewhere else when the blocks start and gets in. It still happens now and then:
-    // see the `alone` run of experiments/cpu-matches.ts.)
+    // (Beginner only steps aside from the block that is falling, and looks under a second ahead when it
+    // picks where to stand clear of its own bomb, so it can back into a pocket the ring then closes: that is
+    // part of being easy. With a 2-minute timer that happened in this open arena; with the 7 by 5 kept open
+    // (18 November 2026) it happens among the bricks: it runs from its own bomb onto the third ring as it
+    // closes. So Beginner may be caught by a block here, but never by its own blast. How often: the `alone`
+    // run of experiments/cpu-matches.ts.)
+    if (level === 'beginner' && !p.alive) {
+      assert.equal(cause, 'block', `${level}, ${where}: if caught, by a block, not its own bomb`);
+      continue;
+    }
     assert.ok(p.alive, `${level}, ${where}: still in five seconds after the blocks stop (went at tick ${w.tick} of ${end})`);
     assert.ok(keptOpen(w.w, w.h, Math.round(p.y) * w.w + Math.round(p.x)), `${level}, ${where}: inside the square`);
   }

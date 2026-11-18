@@ -158,13 +158,13 @@ The timer at the top counts down **1 minute 30 seconds**. (It was 2 minutes at f
 
 1. **While the timer runs** nothing falls. The timer is white, turns amber for the last 30 seconds as a warning, and red for the last 10.
 2. **When it reaches 0:00 the blocks start to fall.** It stays at 0:00, in red. The blocks take 50 seconds.
-3. **Then the blocks stop**, and whoever is left fights on in the square in the middle until someone wins. The round has no time limit.
+3. **Then the blocks stop**, and whoever is left fights on in the open area in the middle until someone wins. The round has no time limit.
 
 How the blocks fall:
 
 - **One at a time**, about half a second apart. The first one starts to fall the moment the timer reaches 0:00.
 - **Where:** round the edge of the arena, starting at the top-left corner and going clockwise: along the top, down the right side, back along the bottom, up the left side. Then the same again one ring further in, and once more. Pillars are skipped: they are solid already.
-- **A square in the middle is left open.** It is 5 tiles by 5: columns 5 to 9, rows 4 to 8. No block ever falls in it, and whatever is in it (bricks, power-ups) is untouched. The last four blocks close the two columns either side of it.
+- **An area in the middle is left open.** It is 7 tiles across by 5 down (columns 4 to 10, rows 4 to 8 on the Standard arena). No block ever falls in it, and whatever is in it (bricks, power-ups) is untouched. It was a 5 by 5 square until the owner had it widened (18 November 2026): the last four blocks used to close the two columns either side of it.
 - **Warning:** each block is in the air for a little under two thirds of a second (0.63 s) before it lands. Its tile is marked with a red outline and a shadow that darkens as it comes down.
 - **Landing:** the tile becomes a solid block for the rest of the round. A brick there, and anything under it, is gone. So is a power-up, a blast, or a bomb (it does not go off, and its owner gets it back).
 - **A robot under a landing block is knocked out.** A shield does not help: it stops a blast, not a block.
@@ -176,12 +176,11 @@ When each part is finished, in a 13 by 11 arena:
 
 | Part | Blocks | Finished this long after 0:00 |
 |---|---|---|
-| The outer edge | 44 | 23 seconds |
-| The second ring | 18 | 33 seconds |
-| The third ring | 28 | 48 seconds |
-| The two columns beside the square | 4 | 50 seconds |
+| The outer edge | 44 | 24.5 seconds |
+| The second ring | 18 | 34.5 seconds |
+| The third ring | 28 | 50 seconds |
 
-The square has 19 tiles to stand on: 25 less the 6 pillars inside it.
+The open area has 23 tiles to stand on there: 35 less the 12 pillars inside it. On the Mini arena (50 blocks, two rings) and the Big one (124 blocks, four rings) its edges fall between the pillars, so it has 29 tiles to stand on: 35 less 6 pillars.
 
 An earlier version dropped the blocks during the last minute of the timer, so that they stopped at 0:00. That was changed in play-testing: the whole of the timer is now played on the whole arena.
 
@@ -300,7 +299,7 @@ All of these are named constants near the top of `src/sim.ts`. Changing one chan
 | `MAX_BOMBS` | 8 | Most bombs out at once |
 | `START_FIRE` | 1 | How long a blast is, in tiles each way, before any flame power-up |
 | `MAX_FIRE` | 8 | Longest blast, in tiles |
-| `KEEP_OPEN` | 5 | The falling blocks leave a square this many tiles across open in the middle |
+| `KEEP_OPEN_W`, `KEEP_OPEN_H` | 7, 5 | The falling blocks leave an area this many tiles across and down open in the middle (it was a 5 by 5 square, `KEEP_OPEN`) |
 | `FUSE_TICKS` | 150 | Fuse of a dropped bomb (2.5 s) |
 | `FLAME_TICKS` | 27 | How long a blast and a burning brick last (0.45 s) |
 | `CHAIN_TICKS` | 5 | Delay before a bomb caught in a blast goes off |
