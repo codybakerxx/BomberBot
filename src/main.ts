@@ -1539,7 +1539,7 @@ $('change').addEventListener('click', () => {
   else
     confirmFirst('Leave to the lobby?', 'This match ends and its score is not kept. In the lobby you can change the players and the rules.', 'Leave match', (yes) => {
       if (yes) showLobby(true);
-    });
+    }, $('resultCard')); // (where the result panel is: the owner's ask)
 });
 
 

@@ -1264,7 +1264,8 @@ export function createLobby(host: LobbyHost): {
   // No bottom bar (the owner's ask): Start is at the end of the Match page (and under the arena), and Next › at
   // the end of the Players page, lit once you are ready. Other ways on: Ready's own Next ›, the page name, RB or E.
   $('lobbyStart').addEventListener('click', tryStart);
-  $('playersNext').addEventListener('click', () => setPage('match'));
+  // Ready first, then Next ›, like the button under the colours (the owner's ask)
+  $('playersNext').addEventListener('click', () => (ready && pick === host.myColor ? setPage('match') : readyUp()));
   // a second Start right under the arena picture, close to hand (the owner's ask); the same as the one in the bar
   $('arenaStart').addEventListener('click', tryStart);
   /** The other players here who have not pressed Ready (with the robot they are showing). */
@@ -1433,8 +1434,10 @@ export function createLobby(host: LobbyHost): {
     const toMatch = page === 'players' && !wide();
     const nx = $<HTMLButtonElement>('playersNext');
     nx.hidden = wide();
-    nx.disabled = !(ready && pick === host.myColor);
-    nx.setAttribute('aria-label', nx.disabled ? 'Next: press Ready first' : 'Next: the Match page');
+    const done = ready && pick === host.myColor;
+    nx.disabled = false;
+    nx.textContent = done ? 'Next ›' : 'Ready';
+    nx.setAttribute('aria-label', done ? 'Next: the Match page' : 'Ready');
     const why = problem(s(), G);
     go.disabled = !!why;
     ($('arenaStart') as HTMLButtonElement).disabled = !!why;

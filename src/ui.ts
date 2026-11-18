@@ -323,9 +323,10 @@ let confirmFrom: HTMLElement | null = null;
 /**
  * Ask before something that cannot be undone (leaving a match, restarting a round, removing a player).
  * Shows the #confirm panel; `then(true)` if the player says yes. Escape, Cancel or a tap outside the panel
- * all mean no.
+ * all mean no. With `over`, the panel sits where that element is (centred on it, as wide as it, kept on the
+ * screen): the owner's ask, so asking from the result panel does not jump to the middle of the arena.
  */
-export function confirmFirst(title: string, text: string, yes: string, then: (yes: boolean) => void): void {
+export function confirmFirst(title: string, text: string, yes: string, then: (yes: boolean) => void, over?: HTMLElement): void {
   const box = document.getElementById('confirm')!;
   document.getElementById('confirmTitle')!.textContent = title;
   document.getElementById('confirmText')!.textContent = text;
@@ -333,6 +334,17 @@ export function confirmFirst(title: string, text: string, yes: string, then: (ye
   confirmFrom = document.activeElement as HTMLElement | null;
   confirmDone = then;
   box.hidden = false;
+  const sheet = box.querySelector<HTMLElement>('.sheet')!;
+  sheet.style.cssText = '';
+  box.classList.toggle('over', !!over);
+  if (over) {
+    const r = over.getBoundingClientRect();
+    sheet.style.width = `${Math.round(r.width)}px`;
+    sheet.style.left = `${Math.round(r.left)}px`;
+    const h = sheet.offsetHeight;
+    const top = Math.min(Math.max(8, r.top + r.height / 2 - h / 2), window.innerHeight - h - 8);
+    sheet.style.top = `${Math.round(Math.max(8, top))}px`;
+  }
   (document.getElementById('confirmNo') as HTMLButtonElement).focus();
 }
 export function confirmOpen(): boolean {
