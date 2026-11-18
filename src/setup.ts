@@ -445,8 +445,9 @@ export function seatLast(s: MatchSetup, colours: string[], a: string): void {
 }
 
 /**
- * Picking a team size. Into Custom, everyone keeps the team they had; into Teams of 2 or 4, each row takes
- * the team of whoever sits first in it, and the rows are then kept to that size's rules.
+ * Picking a team size. Into Custom, everyone is on a team of their own again, each in a colour of their own
+ * (the owner's ask: however the sizes were gone through); into Teams of 2 or 4, each row takes the team of
+ * whoever sits first in it, and the rows are then kept to that size's rules.
  */
 export function setTeamSize(s: MatchSetup, colours: string[], size: number): void {
   const before = teamsFor(s, colours);
@@ -454,7 +455,7 @@ export function setTeamSize(s: MatchSetup, colours: string[], size: number): voi
   s.seats = seats;
   s.teamSize = size;
   if (fixedSize(s, colours.length)) s.rowTeams = Array.from({ length: Math.ceil(seats.length / 2) }, (_, r) => before[colours.indexOf(seats[r * 2])]);
-  else s.teams = Object.fromEntries(colours.map((c, i) => [c, before[i]]));
+  else s.teams = {};
   settle(s, colours);
 }
 

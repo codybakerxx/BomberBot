@@ -450,10 +450,10 @@ assert.strictEqual(back.last('room')!.host, back.last('room')!.you, 'the friend 
   // dropped on the empty place at the end: the last seat
   seatLast(s, eight, 'gold');
   assert.equal(seating(s, eight)[7], 'gold');
-  // back to Custom: everyone keeps the team they had
-  const before = teamsFor(s, eight);
+  // back to Custom: everyone on a team of their own again, each a colour of their own
   setTeamSize(s, eight, 0);
-  assert.deepStrictEqual(teamsFor(s, eight), before);
+  assert.equal(new Set(teamsFor(s, eight)).size, 8);
+  assert.equal(lineUp(s, eight), '8 teams');
   assert.equal(fixedSize({ ...s, teamSize: 2 }, 9), 0, 'a player more: Custom');
   assert.equal(readSetup({ ...s, teamSize: 3 }, 'pink', COLOR_IDS).teamSize, 0, 'whole rows only: Teams of 2 or 4');
 }
