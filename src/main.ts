@@ -1902,7 +1902,7 @@ function showSettings(tab?: SetTab, from?: 'lobby' | 'pause'): void {
 }
 function showSetTab(t: SetTab): void {
   setTab = t;
-  if (t !== 'controls' && t !== 'gamepad') remap?.cancel();
+  if (t !== 'gamepad') remap?.cancel(); // (keys and buttons are both changed on Gamepad)
   if (t === 'gamepad') remap?.refresh(); // says which controllers are connected now
   if (t === 'app') showApp();
   const i = SET_TABS.indexOf(t);

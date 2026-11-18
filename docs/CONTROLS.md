@@ -56,8 +56,8 @@ The caption on the swipe pad ("Medium sensitivity") is centred along its bottom 
 
 | Page | What is on it |
 |---|---|
-| **Controls** | **Steering thumb** and **Swipe direction** (both described below), how strongly the touch controls show, then **Keyboard**: the keys for each action, which can be changed (below). |
-| **Gamepad** | Which controllers are connected, the **Buttons** for each action (changed the same way as keys), **Rumble**, and two short notes: the menu buttons, and how other controllers join. |
+| **Controls** | **Steering thumb** and **Movement sensitivity** (both described below), and how strongly the touch controls show. |
+| **Gamepad** | Two parts, each under its own label. **Controller**: which controllers are connected, the **Buttons** for each action, **Rumble**, and two short notes: the menu buttons, and how other controllers join. **Keyboard**: the **Keys** for each action, changed the same way as buttons (below). The keys were on Controls until November 2026. |
 | **Sound** | Sound effects on or off, with the volume under it when on. Then a switch for each sound, with ▶ to hear it. |
 | **Graphics** | Sharpness (Sharpest, Balanced, Battery saver), Ghosts on or off, Less movement. |
 
@@ -90,12 +90,12 @@ In the menus with a controller: the stick or D-pad moves the highlight, and held
 
 ### Changing keys and buttons
 
-Keys are changed in **Settings › Controls**, buttons in **Settings › Gamepad**. Each action has a row of boxes: up to three keys and up to two controller buttons. Tap a box (or highlight it and press A or Enter) and press the new key or button. A box with + adds one more. While a box is waiting:
+Keys and buttons are both changed in **Settings › Gamepad**, buttons under Controller and keys under Keyboard. Each action has a row of boxes: up to three keys and up to two controller buttons. Tap a box (or highlight it and press A or Enter) and press the new key or button. A box with + adds one more. While a box is waiting:
 
 - **Backspace** or **Delete** empties it; **Escape** leaves it as it was; tapping it again leaves it too. After 8 seconds with nothing pressed it gives up.
 - A key or button that another action already has asks first: **Swap** gives that action this box's old one (or, if the box was empty, it just moves).
 - Escape and Tab keep their own jobs and cannot be given to an action. The stick and D-pad always move. The menu buttons above (A pick, B back, LB and RB pages, Y Ready, ≡ Start) stay the same in the menus whatever is changed: changing buttons changes only what they do in a round.
-- **Reset** beside Keyboard (or Buttons) puts them all back, and asks first.
+- **Reset** beside Keys (or Buttons) puts them all back, and asks first.
 
 Changes are saved on this device. Every controller uses the same buttons.
 
