@@ -54,6 +54,7 @@ import {
   dropOnto,
   pickTeam,
   recolour,
+  rowTeams,
   settleTeams,
   setTeamSize,
   startTeams,
@@ -581,8 +582,8 @@ export function createLobby(host: LobbyHost): {
   // Each card (the owner's design, 17 November 2026): the robot, its name, P-number and whether it is ready;
   // then along its foot a ‹ › for each thing to pick: Team (in a teams match), Level (a CPU player) and Emote.
   // A tap on a CPU player's robot gives it the next colour free; a tap where the name is gives the robot's
-  // team the next colour (in Custom the next one no other team has; with Teams of 2 or 4 its row's next colour,
-  // another team's too, which makes them one team). A card held down can be dragged onto another: it joins that
+  // team the next colour (in Custom the next one no other team has; with Teams of 2 or 4 its whole row's next
+  // colour, another team's too, which makes them one team; the Team ‹ › change only that robot). A card held down can be dragged onto another: it joins that
   // robot's team and, for a CPU player, takes the place after it. (There was a panel for each CPU player.)
   const CHEV_L = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>';
   const CHEV_R = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg>';
@@ -631,9 +632,9 @@ export function createLobby(host: LobbyHost): {
     return row;
   }
   /**
-   * The Team row on a card: ‹ its team colour ›, through `teamChoices` (every colour). In Custom a colour another
-   * robot has puts it on that team; with Teams of 2 or 4 its whole row (its team's rows) changes colour, and
-   * another team's colour makes the two one team (the owner's ask: any team's colour can be overridden).
+   * The Team row on a card: ‹ its team colour ›, through `teamChoices` (every colour). It changes this one robot's
+   * team, in Custom and with Teams of 2 or 4 alike (the owner's ask, 18 November 2026): a colour another robot
+   * has puts it on that team. The whole row (a team of 2 or 4) is the tap where the name is (`recolour`).
    */
   function teamRow(who: string): HTMLElement {
     const colour = colourOf(who);
@@ -830,20 +831,20 @@ export function createLobby(host: LobbyHost): {
     made.sort((a, b) => seats.indexOf(a[0]) - seats.indexOf(b[0]));
     const items = [...made.map(([, w]) => w), ...extras];
     const order = inOrder();
-    const teams = teamsFor(s(), order);
+    const rowsNow = rowTeams(s(), order.length);
     for (let r = 0; r * 2 < items.length; r++) {
       const row = document.createElement('div');
       row.className = 'slot-row';
       row.append(...items.slice(r * 2, r * 2 + 2));
       const first = made[r * 2];
-      // (the rows are tinted only with Teams of 2 or 4, where the row is the team; in Custom each card shows its own)
+      // (the rows are tinted only with Teams of 2 or 4, where the row is the team, in the row's colour: a card
+      // given a team of its own by its ‹ › shows its own colour along its top; in Custom each card shows its own)
       if (s().teamsOn && first && fixedSize(s(), order.length)) {
-        const t = teams[order.indexOf(first[0])];
+        const t = rowsNow[r];
         row.classList.add('teamed');
         row.style.setProperty('--team', TEAMS[t].color);
         // (the same team as the row before: drawn joined to it)
-        const prev = made[r * 2 - 2];
-        if (prev && teams[order.indexOf(prev[0])] === t) row.classList.add('same');
+        if (r > 0 && rowsNow[r - 1] === t) row.classList.add('same');
       }
       box.append(row);
     }
