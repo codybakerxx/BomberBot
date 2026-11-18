@@ -251,24 +251,25 @@ export function group(label: string, icon: string, opts: Opt[], reset?: GroupRes
   name.id = id;
   head.append(name);
   box.setAttribute('aria-labelledby', id);
-  // a group's own reset (the owner's ask, 18 November 2026): a small round arrow at the end of its label,
-  // dimmed when the group is already at its defaults; it spins once when pressed
+  // a group's own reset (the owner's design, 18 November 2026): a slim "↺ Reset" chip at the end of its
+  // label's line, shown only while something in the group differs from its defaults; pressed, the group's
+  // cards glow once so it is clear what went back
   let btn: HTMLButtonElement | null = null;
   if (reset) {
     btn = el('button', 'group-reset');
     btn.type = 'button';
     btn.setAttribute('aria-label', `Reset ${label} to default`);
-    btn.title = `Reset ${label}`;
-    btn.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4.5 12a7.5 7.5 0 1 0 2.2-5.3"/><path d="M4 3.5v4.2h4.2"/></svg>';
-    const b = btn;
-    b.addEventListener('click', () => {
-      if (b.disabled) return;
-      b.classList.remove('spin');
-      void b.offsetWidth; // (so the spin starts again on a second press)
-      b.classList.add('spin');
+    btn.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4.5 12a7.5 7.5 0 1 0 2.2-5.3"/><path d="M4 3.5v4.2h4.2"/></svg><span>Reset</span>';
+    btn.addEventListener('click', () => {
       reset.reset();
+      box.classList.remove('was-reset');
+      void box.offsetWidth; // (so the glow starts again on another reset)
+      box.classList.add('was-reset');
     });
-    head.append(b);
+    box.addEventListener('animationend', (e) => {
+      if ((e as AnimationEvent).animationName === 'reset-glow') box.classList.remove('was-reset');
+    });
+    head.append(btn);
   }
   const list = el('div', 'opts');
   for (const o of opts) list.append(o.el);
@@ -277,7 +278,7 @@ export function group(label: string, icon: string, opts: Opt[], reset?: GroupRes
     el: box,
     refresh(): void {
       for (const o of opts) o.refresh();
-      if (btn && reset) btn.disabled = reset.isDefault();
+      if (btn && reset) btn.hidden = reset.isDefault();
     },
   };
 }

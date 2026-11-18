@@ -700,13 +700,21 @@
   #soundOpts > .set-group + .hint { margin-top: 8px; }
   #setGamepad .keys-head { margin-top: 22px; } /* the keyboard well apart from the controller */
   .group-head::after { order: 1; } /* the line runs between the label and the group's reset */
-  .group-reset { order: 2; flex: none; display: grid; place-items: center; width: 34px; height: 34px; margin: -8px -4px -8px 0; padding: 0; color: var(--accent); background: rgba(255, 255, 255, 0.03); border: 1px solid var(--line); border-radius: 999px; cursor: pointer; }
-  .group-reset svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
-  .group-reset:disabled { color: var(--ink-dim); opacity: 0.35; cursor: default; }
-  .group-reset.spin svg { animation: reset-spin 0.5s cubic-bezier(0.3, 0.7, 0.4, 1); }
-  @keyframes reset-spin { from { transform: rotate(0); } to { transform: rotate(-360deg); } }
-  body.calm .group-reset.spin svg { animation: none; }
-  #lobbyMatch.readonly .group-reset { visibility: hidden; }
+  /* a group's reset (group() in ui.ts; the owner's design, 18 November 2026): a slim "↺ Reset" chip at the end
+     of the label's line, in the label's own type, shown only while something in the group differs from its
+     defaults; pressed, the group's cards glow once to show what went back */
+  .group-head:has(.group-reset) { min-height: 24px; }
+  .group-reset { order: 2; flex: none; display: inline-flex; align-items: center; gap: 5px; height: 24px; margin: 0; padding: 0 10px 0 8px; font: 700 10.5px/1 var(--font-display); letter-spacing: 0.14em; text-transform: uppercase; color: var(--accent); background: rgba(255, 197, 106, 0.08); border: 1px solid rgba(255, 197, 106, 0.32); border-radius: 999px; cursor: pointer; animation: reset-in 0.22s ease-out; -webkit-tap-highlight-color: transparent; }
+  .group-head .group-reset svg { width: 12px; height: 12px; stroke-width: 2.6; }
+  .group-reset:active { background: rgba(255, 197, 106, 0.18); }
+  .group-reset[hidden] { display: none; }
+  .group-reset { position: relative; }
+  .group-reset::before { content: ""; position: absolute; inset: -10px -6px; } /* a bigger target for a thumb than it looks */
+  @keyframes reset-in { from { opacity: 0; transform: translateX(6px) scale(0.92); } }
+  .set-group.was-reset .opts > .opt { animation: reset-glow 0.7s ease-out; }
+  @keyframes reset-glow { from { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent), 0 0 18px rgba(255, 197, 106, 0.25); } }
+  body.calm .group-reset, body.calm .set-group.was-reset .opts > .opt { animation: none; }
+  #lobbyMatch.readonly .group-reset { display: none; }
   .group-head::after { content: ''; flex: 1; height: 1px; margin-left: 2px; background: linear-gradient(to right, var(--line), transparent); }
   .opt { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 54px; padding: 6px 6px 6px 14px; }
   .opt.off { opacity: 0.45; }
