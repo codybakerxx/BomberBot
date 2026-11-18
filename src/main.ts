@@ -1901,7 +1901,6 @@ function showSettings(tab?: SetTab, from?: 'lobby' | 'pause'): void {
   $('setDone').focus({ preventScroll: true });
 }
 function showSetTab(t: SetTab): void {
-  if (t !== setTab) hideUndo(); // (an Undo belongs to the page it was made on)
   setTab = t;
   if (t !== 'gamepad') remap?.cancel(); // (keys and buttons are both changed on Gamepad)
   if (t === 'gamepad') remap?.refresh(); // says which controllers are connected now
@@ -1929,7 +1928,6 @@ function stepSettings(d: number): void {
 }
 function closeSettings(): void {
   remap.cancel();
-  hideUndo();
   if (setFrom === 'pause') showPause();
   else showLobby();
 }
@@ -1962,25 +1960,6 @@ function applyPrefs(): void {
 const SPEAKER_ICON = '<path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z"/><path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11"/>';
 const STEER_ICON = '<circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="2.5"/><path d="M12 3.5v6M12 14.5v6M3.5 12h6M14.5 12h6"/>';
 const EYE_ICON = '<path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z"/><circle cx="12" cy="12" r="3"/>';
-
-/** Undo for a group's Reset in Settings: a bar over the foot for six seconds (as in the lobby). */
-let undoSetting: (() => void) | null = null;
-let setUndoTimer = 0;
-function setUndo(text: string, undo: () => void): void {
-  undoSetting = undo;
-  $('setUndoText').textContent = text;
-  $('setUndo').hidden = false;
-  clearTimeout(setUndoTimer);
-  setUndoTimer = window.setTimeout(hideUndo, 6000);
-}
-function hideUndo(): void {
-  undoSetting = null;
-  $('setUndo').hidden = true;
-}
-$('setUndoBtn').addEventListener('click', () => {
-  undoSetting?.();
-  hideUndo();
-});
 
 /** The icon on each group of sound switches (SOUND_GROUPS in setup.ts). */
 const SOUND_ICONS: Record<string, string> = {
@@ -2044,14 +2023,9 @@ const soundOpts: Opt[] = [
   ], {
     isDefault: () => prefs.soundOn === defaultPrefs().soundOn && prefs.volume === defaultPrefs().volume,
     reset: () => {
-      const was = { soundOn: prefs.soundOn, volume: prefs.volume };
       prefs.soundOn = defaultPrefs().soundOn;
       prefs.volume = defaultPrefs().volume;
       prefsChanged();
-      setUndo('Volume reset to default.', () => {
-        Object.assign(prefs, was);
-        prefsChanged();
-      });
     },
   }),
   heading('Which sounds play', 'Tap ▶ to hear one'),
@@ -2065,13 +2039,8 @@ const soundOpts: Opt[] = [
         // every sound in the group back on (the default)
         isDefault: () => !ids.some((id) => prefs.muted.includes(id)),
         reset: () => {
-          const was = [...prefs.muted];
           prefs.muted = prefs.muted.filter((m) => !ids.includes(m));
           prefsChanged();
-          setUndo(`${label} reset to default.`, () => {
-            prefs.muted = was;
-            prefsChanged();
-          });
         },
       },
     ),
@@ -2162,26 +2131,16 @@ const controlOpts: Opt[] = [
   group('Steering', STEER_ICON, [{ el: $('steerSet'), refresh() {} }, ...sensOpts], {
     isDefault: () => settings.hand === 'left' && settings.sens === DEFAULT_SENS,
     reset: () => {
-      const was = { ...settings };
       settings.hand = 'left';
       settings.sens = DEFAULT_SENS;
       applySettings(true);
-      setUndo('Steering reset to default.', () => {
-        Object.assign(settings, was);
-        applySettings(true);
-      });
     },
   }),
   group('Visibility', EYE_ICON, padOpts, {
     isDefault: () => prefs.padShow === defaultPrefs().padShow,
     reset: () => {
-      const was = prefs.padShow;
       prefs.padShow = defaultPrefs().padShow;
       prefsChanged();
-      setUndo('Visibility reset to default.', () => {
-        prefs.padShow = was;
-        prefsChanged();
-      });
     },
   }),
 ];
@@ -2197,7 +2156,6 @@ $('controlsReset').addEventListener('click', () =>
     applySettings(true);
     prefs.padShow = defaultPrefs().padShow;
     prefsChanged();
-    hideUndo();
   }),
 );
 $('soundReset').addEventListener('click', () =>
@@ -2208,7 +2166,6 @@ $('soundReset').addEventListener('click', () =>
     prefs.volume = d.volume;
     prefs.muted = [];
     prefsChanged();
-    hideUndo();
   }),
 );
 const refreshGfx = mount($('gfxOpts'), gfxOpts);

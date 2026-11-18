@@ -71,7 +71,6 @@ import {
   type MapId,
   type RuleGroup,
   groupIsDefault,
-  groupValues,
   resetGroup,
 } from './setup';
 import { DANCES, danceFrame, danceOf, stepDance, type DanceId } from './dances';
@@ -1300,8 +1299,6 @@ export function createLobby(host: LobbyHost): {
   // ------------------------------------------------------------ removing, and Undo
   /** The CPU player removed last, and where it was, until Undo is pressed or the bar goes away. */
   let removed: { cpu: CpuSlot; at: number } | null = null;
-  /** or the rules a group's reset changed, to put back (groupReset) */
-  let undoReset: (() => void) | null = null;
   let undoTimer = 0;
   /**
    * Remove a CPU player at once (the bin on its card, or Remove on its panel): the owner asked for a quick
@@ -1311,7 +1308,6 @@ export function createLobby(host: LobbyHost): {
     if (s().cpus.length + guests().length <= 1 || !s().cpus[i]) return;
     const [cpu] = s().cpus.splice(i, 1);
     removed = { cpu, at: i };
-    undoReset = null;
     $('undoText').textContent = `${botName(colorById(cpu.colorId))} removed.`;
     $('undoBtn').hidden = false;
     $('undoBar').hidden = false;
@@ -1322,16 +1318,9 @@ export function createLobby(host: LobbyHost): {
   }
   function hideUndo(): void {
     removed = null;
-    undoReset = null;
     $('undoBar').hidden = true;
   }
   $('undoBtn').addEventListener('click', () => {
-    if (undoReset) {
-      if (canEdit()) undoReset();
-      hideUndo();
-      changed();
-      return;
-    }
     if (!removed || s().cpus.length >= maxCpus()) return hideUndo();
     const { cpu, at } = removed;
     // its colour back if nobody has taken it meanwhile, else a free one
@@ -1452,22 +1441,14 @@ export function createLobby(host: LobbyHost): {
   });
   // The rules in groups, each under a small label (the owner's ask, 18 November 2026): the round's time, how
   // the match is won, lives and what comes after, the arena, and what the robots start with. Each label ends
-  // in its own reset, which puts back only that group's rules (RULE_GROUPS in setup.ts) at once, with Undo
-  // on the bar at the foot of the screen for a few seconds (nothing that cannot be undone, so it does not ask).
-  function groupReset(key: RuleGroup, label: string): GroupReset {
+  // in its own Reset, which puts back only that group's rules (RULE_GROUPS in setup.ts) at once, with no
+  // question and no note at the foot (the owner's call: the group's cards glow once, which is enough).
+  function groupReset(key: RuleGroup): GroupReset {
     return {
       isDefault: () => groupIsDefault(s(), key, host.myColor),
       reset: () => {
         if (!canEdit()) return;
-        const before = groupValues(s(), key);
         resetGroup(s(), key, host.myColor);
-        removed = null;
-        undoReset = () => Object.assign(s(), structuredClone(before));
-        $('undoText').textContent = `${label} reset to default.`;
-        $('undoBtn').hidden = false;
-        $('undoBar').hidden = false;
-        clearTimeout(undoTimer);
-        undoTimer = window.setTimeout(hideUndo, 6000);
         changed();
       },
     };
@@ -1510,7 +1491,7 @@ export function createLobby(host: LobbyHost): {
           }),
         ],
       }),
-    ], groupReset('time', 'Round time')),
+    ], groupReset('time')),
     group('Winning', '<path d="M8 4h8v5a4 4 0 0 1-8 0z"/><path d="M8 6H5.5a2.5 2.5 0 0 0 2.8 3.6M16 6h2.5a2.5 2.5 0 0 1-2.8 3.6M12 13v3.5M8.5 20h7M10 16.5h4V20h-4z"/>', [
       slider({
         label: 'Rounds to win',
@@ -1524,7 +1505,7 @@ export function createLobby(host: LobbyHost): {
         },
         text: (v) => (v === 1 ? 'One round' : `First to ${v}`),
       }),
-    ], groupReset('winning', 'Winning')),
+    ], groupReset('winning')),
     group('Lives', '<path d="M12 20s-7.5-4.6-7.5-10.2A4.2 4.2 0 0 1 12 7.3a4.2 4.2 0 0 1 7.5 2.5C19.5 15.4 12 20 12 20z"/>', [
       slider({
         label: 'Lives',
@@ -1539,7 +1520,7 @@ export function createLobby(host: LobbyHost): {
         text: (v) => (v === 1 ? 'One life' : `${v} lives`),
       }),
       postMortem,
-    ], groupReset('lives', 'Lives')),
+    ], groupReset('lives')),
     group('Arena', '<rect x="3" y="5" width="18" height="14" rx="1.5"/><path d="M3 12h18M9.5 5v7M14.5 12v7"/>', [
       slider({
         label: 'Bricks',
@@ -1577,7 +1558,7 @@ export function createLobby(host: LobbyHost): {
           }),
         ),
       }),
-    ], groupReset('arena', 'Arena')),
+    ], groupReset('arena')),
     group('Starting kit', BOMB_ICON, [
       toggle({
         label: 'Custom start',
@@ -1594,7 +1575,7 @@ export function createLobby(host: LobbyHost): {
           slider({ label: 'Speed', min: 0, max: MAX_SPEED_ITEMS, get: () => s().startSpeed, set: (v) => ((s().startSpeed = v), changed()), text: (v) => (v === 0 ? 'Normal' : `+${v}`) }),
         ],
       }),
-    ], groupReset('start', 'Starting kit')),
+    ], groupReset('start')),
   ];
   const refreshRules = mount($('rules'), rules);
   $('rulesReset').addEventListener('click', () =>
