@@ -12,5 +12,6 @@ import './room.test';
 import './predict.test';
 import './push.test';
 import './friends.test';
+import './page.test';
 
 console.log('all checks passed');

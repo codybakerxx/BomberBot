@@ -1001,7 +1001,7 @@ function keepSharp(now: number): void {
 
 /**
  * Twice a second, where the arena really is on the screen and how big, compared with the pixels it was drawn
- * with: shown in Settings › Graphics under Sharpness ("Arena: sharp, pixel for pixel", or what is off), so a
+ * with: shown in Settings › Graphics under Sharpness ("Arena: laid out pixel for pixel", or what is off), so a
  * blurry screen can be reported with its reason. If it is shown stretched it is laid out again (a few times
  * at most). It does not otherwise touch the arena: for a day in November 2026 it also showed it pixelated,
  * moved it onto the screen's grid and followed the page's zoom, and the owner found the arena looked worse.
@@ -1096,7 +1096,9 @@ function checkSharp(now: number): void {
   if (stretched) bits.push(`shown ${Math.round(Math.abs(1 / stretch - 1) * 1000) / 10}% ${stretch < 1 ? 'bigger' : 'smaller'} than drawn`);
   if (offGrid) bits.push(`${Math.round(Math.max(Math.abs(dx), Math.abs(dy)) * 100) / 100} of a pixel off the grid`);
   const shrunk = want > screenDensity() + 0.001;
-  sharp = bits.length ? { ok: false, text: bits.join('; ') } : { ok: true, text: shrunk ? `drawn at ${Math.round((want / screenDensity()) * 100) / 100}× the screen and shrunk to fit` : 'sharp, pixel for pixel' };
+  // (this measures the page, not what the browser does with it: the blur of November 2026 was inside WebKit,
+  // where this line said "pixel for pixel" throughout. See page.html, #cv)
+  sharp = bits.length ? { ok: false, text: bits.join('; ') } : { ok: true, text: shrunk ? `drawn at ${Math.round((want / screenDensity()) * 100) / 100}× the screen and shrunk to fit` : 'laid out pixel for pixel' };
   if (bits.length && exact) {
     // the numbers, for a screenshot of Settings › Graphics: the screen's density, the page's zoom and shift, and
     // where the arena is and how big, against what it was drawn with
@@ -2371,6 +2373,9 @@ window.addEventListener('orientationchange', () => setTimeout(layout, 200));
 unshift();
 newWorld();
 layout();
+// The canvases are sized for the screen now: they may be shown (page.html, html.booting). Shown before, at a
+// canvas's default 300 x 150, an iPhone (WebKit) gives each one a layer a third as sharp and keeps it so.
+document.documentElement.classList.remove('booting');
 wireConfirm();
 wireFlash(); // every menu button lights up for a moment when pressed
 applyPrefs();

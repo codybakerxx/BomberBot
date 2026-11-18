@@ -34,7 +34,8 @@
               pauseRestart (the whole match again, from 0), pauseLobby
     confirm   "are you sure?" before anything that cannot be undone (ui.ts)
 -->
-<html lang="en">
+<!-- class "booting": taken off by main.ts once the canvases have been sized for the screen (see the styles for html.booting) -->
+<html lang="en" class="booting">
 <head>
 <meta charset="UTF-8">
 <!-- (minimum-scale and shrink-to-fit: an iPhone must never zoom the page out to fit it, not even a hair: the arena's picture would be shrunk and soft; see unshift in main.ts) -->
@@ -80,7 +81,25 @@
     -webkit-touch-callout: none;
     -webkit-tap-highlight-color: transparent;
   }
-  #cv { position: fixed; display: block; }
+  /*
+   * The arena was blurry at random on iPhones (Safari and Chrome both: WebKit), November 2026. The cause is in
+   * WebKit, and the page cannot see it: a canvas whose CSS size equals its own pixel size (a plain 300 x 150
+   * canvas before the game has sized it) and that has its own layer (every position: fixed element has one on
+   * an iPhone) is put on a layer WITHOUT the screen's density, as an optimisation. Once that layer exists it
+   * keeps its scale: sizing the canvas for the screen afterwards flips WebKit's flag back, but the layer is
+   * never redrawn at the new scale (GraphicsLayer::setAppliesDeviceScale does not mark the contents scale as
+   * changed). So if the browser showed the page once before the game's script ran (a slow connection, or the
+   * font arriving first: a race, different on every refresh), the arena was drawn at full detail and shown
+   * through a layer a third as sharp, for as long as the page stayed open. Reproduced in WebKit itself
+   * (tools/webkit-check.py). Two guards:
+   * - the arena canvas has a background (the canvas is opaque, so it never shows): WebKit never uses that
+   *   layer for a canvas with a background;
+   * - the canvases with layers of their own (position: fixed) are not shown at all until main.ts has sized them
+   *   (html.booting, taken off right after the first layout).
+   * Do not remove either. A new position: fixed canvas goes in the html.booting rule (tests/page.test.ts).
+   */
+  #cv { position: fixed; display: block; background: var(--void); }
+  html.booting #cv, html.booting #score, html.booting #ghosts { display: none !important; }
   /* the round timer. layout() in main.ts sets `left` to the middle of the screen (upright) or of the side column (sideways). */
   #timer {
     position: fixed;
