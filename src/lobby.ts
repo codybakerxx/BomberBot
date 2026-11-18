@@ -71,7 +71,7 @@ import {
   type MapId,
 } from './setup';
 import { DANCES, danceFrame, danceOf, stepDance, type DanceId } from './dances';
-import { Opt, choice, confirmFirst, heading, mount, note, slider, swipeable, toggle } from './ui';
+import { Opt, choice, confirmFirst, group, heading, mount, note, slider, swipeable, toggle } from './ui';
 
 /** What the lobby needs to know in an online room (main.ts keeps the connection, online.ts). */
 export interface OnlineView {
@@ -1436,119 +1436,131 @@ export function createLobby(host: LobbyHost): {
     offText: 'Out of lives, you watch the rest of the round.',
     under: [lifeAfter('angel'), angelsBack, lifeAfter('zombie')],
   });
+  // The rules in groups, each under a small label (the owner's ask, 18 November 2026): the round's time, how
+  // the match is won, lives and what comes after, the arena, and what the robots start with.
   const rules: Opt[] = [
-    toggle({
-      label: 'Round timer',
-      hint: 'When it runs out, blocks fall in from the edge',
-      get: () => s().timerOn,
-      set: (v) => {
-        s().timerOn = v;
-        changed();
-      },
-      offText: 'No timer: a round lasts until one robot is left, and no blocks fall.',
-      under: [
-        slider({
-          label: 'Round length',
-          min: ROUND_MIN,
-          max: ROUND_MAX,
-          step: ROUND_STEP,
-          get: () => s().roundSecs,
-          set: (v) => {
-            s().roundSecs = v;
-            changed();
-          },
-          text: clockText,
-        }),
-        slider({
-          label: 'Closing in',
-          hint: () => `The blocks take ${CLOSE_IN[s().closeIn].secs} seconds to fall. A 5 by 5 square in the middle stays open.`,
-          min: 0,
-          max: CLOSE_IN.length - 1,
-          get: () => s().closeIn,
-          set: (v) => {
-            s().closeIn = v;
-            changed();
-          },
-          text: (v) => CLOSE_IN[v].name,
-        }),
-      ],
-    }),
-    slider({
-      label: 'Rounds to win',
-      hint: 'The first to win this many rounds wins the match',
-      min: 1,
-      max: MAX_FIRST_TO,
-      get: () => s().firstTo,
-      set: (v) => {
-        s().firstTo = v;
-        changed();
-      },
-      text: (v) => (v === 1 ? 'One round' : `First to ${v}`),
-    }),
-    slider({
-      label: 'Lives',
-      hint: 'Each round. Lose one and you are back in your corner, starting from scratch',
-      min: 1,
-      max: MAX_LIVES,
-      get: () => s().lives,
-      set: (v) => {
-        s().lives = v;
-        changed();
-      },
-      text: (v) => (v === 1 ? 'One life' : `${v} lives`),
-    }),
-    postMortem,
-    slider({
-      label: 'Bricks',
-      hint: 'How much of the arena starts filled. The picture above shows it.',
-      min: 0,
-      max: BRICKS.length - 1,
-      get: () => s().bricks,
-      set: (v) => {
-        s().bricks = v;
-        changed();
-      },
-      text: (v) => BRICKS[v].name,
-    }),
-    toggle({
-      label: 'Custom start',
-      hint: 'What everyone starts each round with',
-      get: () => s().startOn,
-      set: (v) => {
-        s().startOn = v;
-        changed();
-      },
-      offText: 'Everyone starts with 1 bomb, a 1-tile blast and normal speed.',
-      under: [
-        slider({ label: 'Bombs', min: 1, max: MAX_BOMBS, get: () => s().startBombs, set: (v) => ((s().startBombs = v), changed()), text: (v) => `${v} at a time` }),
-        slider({ label: 'Blast', min: START_FIRE, max: MAX_FIRE, get: () => s().startFire, set: (v) => ((s().startFire = v), changed()), text: (v) => (v === 1 ? '1 tile' : `${v} tiles`) }),
-        slider({ label: 'Speed', min: 0, max: MAX_SPEED_ITEMS, get: () => s().startSpeed, set: (v) => ((s().startSpeed = v), changed()), text: (v) => (v === 0 ? 'Normal' : `+${v}`) }),
-      ],
-    }),
-    toggle({
-      label: 'Custom power-ups',
-      hint: 'How often each power-up turns up under the bricks',
-      get: () => s().itemsOn,
-      set: (v) => {
-        s().itemsOn = v;
-        changed();
-      },
-      offText: 'The usual mix: about half the bricks hide a power-up. Shields and curses are very rare.',
-      under: ITEM_NAMES.map(([kind, name, what]) =>
-        slider({
-          label: name,
-          hint: what,
-          min: 0,
-          max: ITEM_AMOUNTS.length - 1,
-          get: () => s().items[kind],
-          set: (v) => {
-            s().items[kind] = v;
-            changed();
-          },
-          text: (v) => ITEM_AMOUNTS[v].name,
-        }),
-      ),
-    }),
+    group('Round time', '<circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2M9.5 2.5h5"/>', [
+      toggle({
+        label: 'Round timer',
+        hint: 'When it runs out, blocks fall in from the edge',
+        get: () => s().timerOn,
+        set: (v) => {
+          s().timerOn = v;
+          changed();
+        },
+        offText: 'No timer: a round lasts until one robot is left, and no blocks fall.',
+        under: [
+          slider({
+            label: 'Round length',
+            min: ROUND_MIN,
+            max: ROUND_MAX,
+            step: ROUND_STEP,
+            get: () => s().roundSecs,
+            set: (v) => {
+              s().roundSecs = v;
+              changed();
+            },
+            text: clockText,
+          }),
+          slider({
+            label: 'Closing in',
+            hint: () => `The blocks take ${CLOSE_IN[s().closeIn].secs} seconds to fall. A 5 by 5 square in the middle stays open.`,
+            min: 0,
+            max: CLOSE_IN.length - 1,
+            get: () => s().closeIn,
+            set: (v) => {
+              s().closeIn = v;
+              changed();
+            },
+            text: (v) => CLOSE_IN[v].name,
+          }),
+        ],
+      }),
+    ]),
+    group('Winning', '<path d="M8 4h8v5a4 4 0 0 1-8 0z"/><path d="M8 6H5.5a2.5 2.5 0 0 0 2.8 3.6M16 6h2.5a2.5 2.5 0 0 1-2.8 3.6M12 13v3.5M8.5 20h7M10 16.5h4V20h-4z"/>', [
+      slider({
+        label: 'Rounds to win',
+        hint: 'The first to win this many rounds wins the match',
+        min: 1,
+        max: MAX_FIRST_TO,
+        get: () => s().firstTo,
+        set: (v) => {
+          s().firstTo = v;
+          changed();
+        },
+        text: (v) => (v === 1 ? 'One round' : `First to ${v}`),
+      }),
+    ]),
+    group('Lives', '<path d="M12 20s-7.5-4.6-7.5-10.2A4.2 4.2 0 0 1 12 7.3a4.2 4.2 0 0 1 7.5 2.5C19.5 15.4 12 20 12 20z"/>', [
+      slider({
+        label: 'Lives',
+        hint: 'Each round. Lose one and you are back in your corner, starting from scratch',
+        min: 1,
+        max: MAX_LIVES,
+        get: () => s().lives,
+        set: (v) => {
+          s().lives = v;
+          changed();
+        },
+        text: (v) => (v === 1 ? 'One life' : `${v} lives`),
+      }),
+      postMortem,
+    ]),
+    group('Arena', '<rect x="3" y="5" width="18" height="14" rx="1.5"/><path d="M3 12h18M9.5 5v7M14.5 12v7"/>', [
+      slider({
+        label: 'Bricks',
+        hint: 'How much of the arena starts filled. The picture above shows it.',
+        min: 0,
+        max: BRICKS.length - 1,
+        get: () => s().bricks,
+        set: (v) => {
+          s().bricks = v;
+          changed();
+        },
+        text: (v) => BRICKS[v].name,
+      }),
+      toggle({
+        label: 'Custom power-ups',
+        hint: 'How often each power-up turns up under the bricks',
+        get: () => s().itemsOn,
+        set: (v) => {
+          s().itemsOn = v;
+          changed();
+        },
+        offText: 'The usual mix: about half the bricks hide a power-up. Shields and curses are very rare.',
+        under: ITEM_NAMES.map(([kind, name, what]) =>
+          slider({
+            label: name,
+            hint: what,
+            min: 0,
+            max: ITEM_AMOUNTS.length - 1,
+            get: () => s().items[kind],
+            set: (v) => {
+              s().items[kind] = v;
+              changed();
+            },
+            text: (v) => ITEM_AMOUNTS[v].name,
+          }),
+        ),
+      }),
+    ]),
+    group('Starting kit', '<circle cx="10" cy="14.5" r="6.5"/><path d="M7 13.2a3.2 3.2 0 0 1 2.4-2.3M14.6 9.9l1.9-1.9M16.5 8c.4-1.6 1.6-2.4 3-2"/><path d="M21 2.8v1.4M22.6 5.3h-1.4M19.6 3.9l.8.8"/>', [
+      toggle({
+        label: 'Custom start',
+        hint: 'What everyone starts each round with',
+        get: () => s().startOn,
+        set: (v) => {
+          s().startOn = v;
+          changed();
+        },
+        offText: 'Everyone starts with 1 bomb, a 1-tile blast and normal speed.',
+        under: [
+          slider({ label: 'Bombs', min: 1, max: MAX_BOMBS, get: () => s().startBombs, set: (v) => ((s().startBombs = v), changed()), text: (v) => `${v} at a time` }),
+          slider({ label: 'Blast', min: START_FIRE, max: MAX_FIRE, get: () => s().startFire, set: (v) => ((s().startFire = v), changed()), text: (v) => (v === 1 ? '1 tile' : `${v} tiles`) }),
+          slider({ label: 'Speed', min: 0, max: MAX_SPEED_ITEMS, get: () => s().startSpeed, set: (v) => ((s().startSpeed = v), changed()), text: (v) => (v === 0 ? 'Normal' : `+${v}`) }),
+        ],
+      }),
+    ]),
   ];
   const refreshRules = mount($('rules'), rules);
   $('rulesReset').addEventListener('click', () =>

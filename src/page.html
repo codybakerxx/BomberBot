@@ -691,6 +691,12 @@
   .opts { display: flex; flex-direction: column; gap: 6px; }
   .opt-group { display: flex; flex-direction: column; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; }
   .opts > .opt { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; }
+  /* options in groups, each under a small label with an icon (group() in ui.ts; the Match page's rules) */
+  #rules { gap: 22px; }
+  .set-group { display: flex; flex-direction: column; gap: 8px; }
+  .group-head { display: flex; align-items: center; gap: 8px; padding: 0 2px; font: 700 12px/1 var(--font-display); letter-spacing: 0.16em; text-transform: uppercase; color: var(--accent); }
+  .group-head svg { flex: none; width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+  .group-head::after { content: ''; flex: 1; height: 1px; margin-left: 2px; background: linear-gradient(to right, var(--line), transparent); }
   .opt { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 54px; padding: 6px 6px 6px 14px; }
   .opt.off { opacity: 0.45; }
   .opt-name { display: flex; flex-direction: column; gap: 3px; min-width: 0; flex: 1 1 auto; cursor: default; }

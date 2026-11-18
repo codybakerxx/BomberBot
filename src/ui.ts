@@ -234,6 +234,30 @@ export function heading(text: string, end = ''): Opt {
   return { el: h, refresh() {} };
 }
 
+/**
+ * Options that belong together, under a small label of their own with an icon (the owner's ask, 18 November
+ * 2026: the Match page's rules spaced out into groups, each with a label for its kind of setting).
+ * `icon` is the inside of a 24 by 24 SVG, drawn with lines like the other icons.
+ */
+export function group(label: string, icon: string, opts: Opt[]): Opt {
+  const box = el('section', 'set-group');
+  const head = el('div', 'group-head');
+  const id = nextId('grp');
+  head.id = id;
+  head.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true">${icon}</svg>`;
+  head.append(el('span', '', label));
+  box.setAttribute('aria-labelledby', id);
+  const list = el('div', 'opts');
+  for (const o of opts) list.append(o.el);
+  box.append(head, list);
+  return {
+    el: box,
+    refresh(): void {
+      for (const o of opts) o.refresh();
+    },
+  };
+}
+
 /** A line of explanation. */
 export function note(text: string | (() => string)): Opt {
   const p = el('p', 'hint');
