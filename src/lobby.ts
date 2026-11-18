@@ -71,7 +71,7 @@ import {
   type MapId,
 } from './setup';
 import { DANCES, danceFrame, danceOf, stepDance, type DanceId } from './dances';
-import { Opt, choice, confirmFirst, group, heading, mount, note, slider, swipeable, toggle } from './ui';
+import { BOMB_ICON, Opt, choice, confirmFirst, group, heading, mount, note, slider, swipeable, toggle } from './ui';
 
 /** What the lobby needs to know in an online room (main.ts keeps the connection, online.ts). */
 export interface OnlineView {
@@ -1544,7 +1544,7 @@ export function createLobby(host: LobbyHost): {
         ),
       }),
     ]),
-    group('Starting kit', '<circle cx="10" cy="14.5" r="6.5"/><path d="M7 13.2a3.2 3.2 0 0 1 2.4-2.3M14.6 9.9l1.9-1.9M16.5 8c.4-1.6 1.6-2.4 3-2"/><path d="M21 2.8v1.4M22.6 5.3h-1.4M19.6 3.9l.8.8"/>', [
+    group('Starting kit', BOMB_ICON, [
       toggle({
         label: 'Custom start',
         hint: 'What everyone starts each round with',

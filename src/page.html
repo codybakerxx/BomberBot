@@ -696,6 +696,8 @@
   .set-group { display: flex; flex-direction: column; gap: 8px; }
   .group-head { display: flex; align-items: center; gap: 8px; padding: 0 2px; font: 700 12px/1 var(--font-display); letter-spacing: 0.16em; text-transform: uppercase; color: var(--accent); }
   .group-head svg { flex: none; width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+  #soundOpts > .set-group { margin-top: 12px; } /* the groups of sounds apart from each other */
+  #soundOpts > .set-group + .hint { margin-top: 8px; }
   #setGamepad .keys-head { margin-top: 22px; } /* the keyboard well apart from the controller */
   .group-head::after { content: ''; flex: 1; height: 1px; margin-left: 2px; background: linear-gradient(to right, var(--line), transparent); }
   .opt { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 54px; padding: 6px 6px 6px 14px; }
@@ -1054,9 +1056,9 @@
   </header>
   <nav class="pages five" role="tablist" aria-label="Settings pages">
     <button type="button" role="tab" id="pgControls" aria-controls="setControls">Controls</button>
-    <button type="button" role="tab" id="pgGamepad" aria-controls="setGamepad">Gamepad</button>
     <button type="button" role="tab" id="pgSound" aria-controls="setSound">Sound</button>
     <button type="button" role="tab" id="pgGraphics" aria-controls="setGraphics">Graphics</button>
+    <button type="button" role="tab" id="pgGamepad" aria-controls="setGamepad">Gamepad</button>
     <button type="button" role="tab" id="pgApp" aria-controls="setApp">App</button>
   </nav>
   <div class="scroll">

@@ -57,9 +57,9 @@ The caption on the swipe pad ("Medium sensitivity") is centred along its bottom 
 | Page | What is on it |
 |---|---|
 | **Controls** | **Steering thumb** and **Movement sensitivity** (both described below), and how strongly the touch controls show. |
-| **Gamepad** | Two parts, each under its own label. **Controller**: which controllers are connected, the **Buttons** for each action, **Rumble**, and two short notes: the menu buttons, and how other controllers join. **Keyboard**: the **Keys** for each action, changed the same way as buttons (below). The keys were on Controls until November 2026. |
-| **Sound** | Sound effects on or off, with the volume under it when on. Then a switch for each sound, with ▶ to hear it. |
+| **Sound** | Sound effects on or off, with the volume under it when on. Then a switch for each sound, with ▶ to hear it, in four groups: **Bombs** (dropping, blast, kick and throw, lift and land), **Power-ups** (power-up, shield, curse), **Falling blocks** (about to fall, landing) and **Knockouts and wins**. |
 | **Graphics** | Sharpness (Sharpest, Balanced, Battery saver), Ghosts on or off, Less movement. |
+| **Gamepad** | Two parts, each under its own label. **Controller**: which controllers are connected, the **Buttons** for each action, **Rumble**, and two short notes: the menu buttons, and how other controllers join. **Keyboard**: the **Keys** for each action, changed the same way as buttons (below). The keys were on Controls until November 2026. |
 
 The **menu during a match** (the three bars at the top right, or Escape) pauses the round. It says whether the match is local, whether the round is paused or over, which round it is, the rules and the time left, and every player's state (in or out) and rounds won. Then **Resume** (back into the round, or back to its result), **Settings**, and the host's choices: **Restart** (the whole match again: everyone's score back to 0, round 1, same players and rules) and **Leave to the lobby**. Both ask first.
 

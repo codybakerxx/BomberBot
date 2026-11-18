@@ -219,3 +219,4 @@ The rules were written with this in mind from the start: they use no browser fea
 - 18 November 2026 (the owner): the map can be held and dragged: it follows the finger along the swoop's arc with the next map coming in from the other side, can be brought back before letting go, and goes on a third of the way or a flick, otherwise springs back.
 - 18 November 2026 (the owner): the Match page's rules are spaced out in groups, each under a small label with an icon: Round time, Winning, Lives, Arena (Bricks, Custom power-ups) and Starting kit (Custom start).
 - 18 November 2026 (the owner): the keyboard's keys moved from Settings › Controls to Settings › Gamepad, which now has two labelled parts, Controller and Keyboard.
+- 18 November 2026 (the owner): Settings' pages are now Controls, Sound, Graphics, Gamepad, App; the Sound page's switches are in four labelled groups (Bombs, Power-ups, Falling blocks, Knockouts and wins).

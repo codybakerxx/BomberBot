@@ -795,6 +795,17 @@ export const SOUND_NAMES: [string, string][] = [
 ];
 
 /**
+ * The sound switches in Settings › Sound, in groups (the owner's ask, 18 November 2026: easier to look at).
+ * Every id in SOUND_NAMES once (tests/room.test.ts checks).
+ */
+export const SOUND_GROUPS: [string, string[]][] = [
+  ['Bombs', ['place', 'explode', 'kick', 'lift']],
+  ['Power-ups', ['pickup', 'shield', 'curse']],
+  ['Falling blocks', ['hurry', 'block']],
+  ['Knockouts and wins', ['death', 'win']],
+];
+
+/**
  * How sharp the game is drawn: the most of the screen's pixels it uses for each of the page's (`cap`), and
  * `over`: drawn with that many times the screen's own pixels each way, and shrunk to fit by the browser.
  * Smoothest (November 2026) is the owner's report that the arena looked best on his iPhone with Safari's

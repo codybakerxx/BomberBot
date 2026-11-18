@@ -23,7 +23,7 @@ import {
   type ServerMsg,
 } from '../src/net';
 import { makeRng } from '../src/sim';
-import { ARENAS, MAPS, defaultRules, itemChances, defaultSetup, dropOnto, fixedSize, lineUp, pickTeam, readSetup, recolour, rollCpus, seatLast, seating, setTeamSize, settleTeams, evenTeams, startTeams, summary, swapTeams, canEven, teamChoices, teamSizes, teamsFor, wholeTile, worldConfig } from '../src/setup';
+import { ARENAS, MAPS, defaultRules, itemChances, defaultSetup, dropOnto, fixedSize, lineUp, pickTeam, readSetup, recolour, rollCpus, seatLast, seating, setTeamSize, settleTeams, evenTeams, startTeams, summary, swapTeams, canEven, SOUND_GROUPS, SOUND_NAMES, teamChoices, teamSizes, teamsFor, wholeTile, worldConfig } from '../src/setup';
 import { BOT_LEVELS } from '../src/bot';
 import { DANCE_IDS } from '../src/dances';
 import type { World } from '../src/sim';
@@ -596,3 +596,9 @@ assert.strictEqual(back.last('room')!.host, back.last('room')!.you, 'the friend 
 }
 
 console.log('room checks passed');
+
+// Settings › Sound: every sound switch is in exactly one group (the owner's ask: sounds in groups)
+{
+  const grouped = SOUND_GROUPS.flatMap(([, ids]) => ids);
+  assert.deepStrictEqual([...grouped].sort(), SOUND_NAMES.map(([id]) => id).sort(), 'every sound in one group, once');
+}

@@ -21,8 +21,8 @@ import { readDance, type DanceId } from './dances';
 import { createPadNav } from './padnav';
 import { PAD } from './bindings';
 import { createRemap } from './remap';
-import { CpuSlot, Guest, ITEM_NAMES, MatchSetup, Prefs, SHARPNESS, SOUND_NAMES, TEAMS, arenaOf, clockText, defaultSetup, load, readPrefs, readSetup, rollCpus, save, summary, wholeTile, worldConfig } from './setup';
-import { Opt, answerConfirm, choice, confirmFirst, confirmOpen, heading, mount, note, slider, toggle, wireConfirm, wireFlash } from './ui';
+import { CpuSlot, Guest, ITEM_NAMES, MatchSetup, Prefs, SHARPNESS, SOUND_GROUPS, SOUND_NAMES, TEAMS, arenaOf, clockText, defaultSetup, load, readPrefs, readSetup, rollCpus, save, summary, wholeTile, worldConfig } from './setup';
+import { BOMB_ICON, Opt, answerConfirm, choice, confirmFirst, confirmOpen, group, heading, mount, note, slider, toggle, wireConfirm, wireFlash } from './ui';
 import { Hand, SENSITIVITY, DEFAULT_SENS, STRAIGHT, standardAims } from './swipe';
 import { Online } from './online';
 import { canInstall, howToAdd, install, isApple, myEndpoint, onWebsite, pushOff, pushOn, pushState, type PushState } from './app';
@@ -1876,7 +1876,7 @@ $('roomShare').addEventListener('click', async () => {
 // ------------------------------------------------ Settings
 
 type SetTab = 'sound' | 'controls' | 'gamepad' | 'graphics' | 'app';
-const SET_TABS: SetTab[] = ['controls', 'gamepad', 'sound', 'graphics', 'app']; // the owner's order (Gamepad its own page, after Controls); App last
+const SET_TABS: SetTab[] = ['controls', 'sound', 'graphics', 'gamepad', 'app']; // the owner's order (Gamepad after Graphics, his ask of 18 November 2026); App last
 const SET_NAMES: Record<SetTab, string> = { sound: 'Sound', controls: 'Controls', gamepad: 'Gamepad', graphics: 'Graphics', app: 'App' };
 const SET_IDS: Record<SetTab, [string, string]> = {
   sound: ['pgSound', 'setSound'],
@@ -1956,6 +1956,14 @@ function applyPrefs(): void {
 }
 
 /** A sound's row: a switch for whether it plays, and a button that plays it. */
+/** The icon on each group of sound switches (SOUND_GROUPS in setup.ts). */
+const SOUND_ICONS: Record<string, string> = {
+  Bombs: BOMB_ICON,
+  'Power-ups': '<path d="M12 3.2l2.5 5.4 5.9.6-4.4 4 1.3 5.8L12 16.1 6.7 19l1.3-5.8-4.4-4 5.9-.6z"/>',
+  'Falling blocks': '<rect x="5.5" y="13" width="13" height="8" rx="1.5"/><path d="M12 2.5v7M8.8 6.5 12 9.7l3.2-3.2"/>',
+  'Knockouts and wins': '<path d="M5.5 21V3.5M5.5 4.5h11l-2.2 4 2.2 4h-11"/>',
+};
+
 function soundRow(id: string, name: string): Opt {
   const o = toggle({
     label: name,
@@ -2007,7 +2015,14 @@ const soundOpts: Opt[] = [
     ],
   }),
   heading('Which sounds play', 'Tap ▶ to hear one'),
-  ...SOUND_NAMES.map(([id, name]) => soundRow(id, name)),
+  // in groups, each under a small label (the owner's ask, 18 November 2026: easier to look at)
+  ...SOUND_GROUPS.map(([label, ids]) =>
+    group(
+      label,
+      SOUND_ICONS[label],
+      ids.map((id) => soundRow(id, SOUND_NAMES.find(([s]) => s === id)![1])),
+    ),
+  ),
   note('There is no music yet. It will come with the new sound effects, with a switch of its own.'),
 ];
 const padOpts: Opt[] = [

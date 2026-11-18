@@ -234,6 +234,9 @@ export function heading(text: string, end = ''): Opt {
   return { el: h, refresh() {} };
 }
 
+/** A bomb with a lit fuse, for group labels (`group`). */
+export const BOMB_ICON = '<circle cx="10" cy="14.5" r="6.5"/><path d="M7 13.2a3.2 3.2 0 0 1 2.4-2.3M14.6 9.9l1.9-1.9M16.5 8c.4-1.6 1.6-2.4 3-2"/><path d="M21 2.8v1.4M22.6 5.3h-1.4M19.6 3.9l.8.8"/>';
+
 /**
  * Options that belong together, under a small label of their own with an icon (the owner's ask, 18 November
  * 2026: the Match page's rules spaced out into groups, each with a label for its kind of setting).
