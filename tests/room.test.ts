@@ -23,7 +23,7 @@ import {
   type ServerMsg,
 } from '../src/net';
 import { makeRng } from '../src/sim';
-import { ARENAS, MAPS, defaultRules, itemChances, defaultSetup, dropOnto, fixedSize, lineUp, pickTeam, readSetup, recolour, rollCpus, seatLast, seating, setTeamSize, evenTeams, startTeams, summary, swapTeams, teamChoices, teamSizes, teamsFor, wholeTile, worldConfig } from '../src/setup';
+import { ARENAS, MAPS, defaultRules, itemChances, defaultSetup, dropOnto, fixedSize, lineUp, pickTeam, readSetup, recolour, rollCpus, seatLast, seating, setTeamSize, settleTeams, evenTeams, startTeams, summary, swapTeams, teamChoices, teamSizes, teamsFor, wholeTile, worldConfig } from '../src/setup';
 import { BOT_LEVELS } from '../src/bot';
 import { DANCE_IDS } from '../src/dances';
 import type { World } from '../src/sim';
@@ -388,10 +388,36 @@ assert.strictEqual(back.last('room')!.host, back.last('room')!.you, 'the friend 
   // a tap where a name is: its whole team takes the next colour nobody has
   assert.equal(recolour(s, four, 'pink'), 2);
   assert.deepStrictEqual(teamsFor(s, four), [2, 1, 2, 5], 'you and pink both');
-  // never down to one team
+  // changing one robot's colour never changes anyone else's
   s.teams = { gold: 0, black: 0, pink: 0, blue: 1 };
-  assert.ok(!teamChoices(s, four, 'blue').includes(0));
-  assert.ok(!pickTeam(s, four, 'blue', 0));
+  s.seats = [...four];
+  assert.ok(pickTeam(s, four, 'pink', 4));
+  assert.deepStrictEqual(teamsFor(s, four), [0, 0, 4, 1], 'only pink changed');
+  dropOnto(s, four, 'black', 'blue', true);
+  assert.deepStrictEqual(teamsFor(s, four), [0, 1, 4, 1], 'dragged: only black changed');
+  // everyone can be one team (the round is then played together)
+  s.teams = { gold: 0, black: 0, pink: 0, blue: 1 };
+  assert.ok(teamChoices(s, four, 'blue').includes(0));
+  assert.ok(pickTeam(s, four, 'blue', 0));
+  assert.deepStrictEqual(teamsFor(s, four), [0, 0, 0, 0]);
+  assert.equal(lineUp(s, four), 'All one team');
+  // the card jumps to sit after the last robot of its new colour
+  s.seats = ['gold', 'black', 'pink', 'blue'];
+  s.teams = { gold: 0, black: 1, pink: 2, blue: 3 };
+  pickTeam(s, four, 'blue', 0);
+  assert.deepStrictEqual(seating(s, four), ['gold', 'blue', 'black', 'pink'], 'red like you: right after you');
+  pickTeam(s, four, 'pink', 1);
+  assert.deepStrictEqual(seating(s, four), ['gold', 'blue', 'black', 'pink'], 'blue like black: right after black');
+  // a team size that stops fitting (a player more) turns into Custom for good, nobody's team changing
+  const five = [...four, 'red'];
+  s.teamSize = 2;
+  s.seats = [...four];
+  settleTeams(s, four);
+  const before = teamsFor(s, four);
+  settleTeams(s, five);
+  assert.equal(s.teamSize, 0);
+  assert.deepStrictEqual(teamsFor(s, five).slice(0, 4), before, 'the four keep their teams');
+  assert.ok(!before.includes(teamsFor(s, five)[4]), 'and the newcomer is on a team of its own');
   // any mix in Custom: 3 v 2 v 1 v 1 v 1 with eight robots
   const eight = ['gold', 'black', 'pink', 'blue', 'red', 'orange', 'white', 'green'];
   startTeams(s, eight);

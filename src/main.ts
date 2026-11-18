@@ -870,6 +870,13 @@ function announce(): void {
   const winner = world.over ? world.over.winner : -1;
   const how = howOut();
   const teams = world.teams;
+  if (world.coop) {
+    // everyone on one team (the lobby's Custom teams, all one colour): the round is played together
+    if (matchWinner >= 0) finish('Your team wins the match', `Everyone on one team. First to ${setup.firstTo}. Final score ${scoreLine()}.`);
+    else if (winner >= 0) finish('You survived!', `Everyone on one team, and someone lasted until the last block fell. ${wins[mi]} of ${setup.firstTo} to win the match.`);
+    else finish('Nobody made it', 'Everyone on one team, and nobody lasted until the last block fell.');
+    return;
+  }
   if (couch()) {
     // several people here: say who, by name and P-number (or which side)
     if (matchWinner >= 0) finish(`${sideName(matchWinner)} wins the match`, `First to ${setup.firstTo}. Final score ${scoreLine()}.`);

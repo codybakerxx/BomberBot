@@ -7,6 +7,7 @@
  * Run with: npm test
  */
 import assert from 'node:assert';
+import { createBot, botInput } from '../src/bot';
 import {
   createWorld,
   step,
@@ -1190,9 +1191,10 @@ for (let seed = 1; seed <= 40; seed++) {
     const spots = [[3, 3], [3, 5], [9, 3], [9, 9]];
     w.players.forEach((p, i) => ([p.x, p.y] = spots[i]));
   };
-  // not a teams match with only one side, or none given
+  // not a teams match with none given; everyone on one side is a match played together
   assert.equal(createWorld({ seed: 1, players: four }).teams, false);
-  assert.equal(createWorld({ seed: 1, players: four, teams: [0, 0, 0, 0] }).teams, false);
+  assert.equal(createWorld({ seed: 1, players: four, teams: [0, 0, 0, 0] }).coop, true);
+  assert.equal(createWorld({ seed: 1, players: four, teams: [0, 0, 1, 1] }).coop, false);
   assert.ok(createWorld({ seed: 1, players: four }).players.every((p) => p.team === -1));
 
   // friendly fire off: a's blast reaches b, its teammate, and leaves it standing (a itself is still caught)
@@ -1254,4 +1256,34 @@ for (let seed = 1; seed <= 40; seed++) {
   run(w, 60, none);
   assert.deepStrictEqual(w.over, { winner: 4, team: 7 }, 'only the cyan team is left: it wins');
   assert.deepStrictEqual(winnersOf(w), [4, 5]);
+}
+
+// 25. everyone on one team (the owner's ask): no result while they stand, until the last block lands; nobody
+// goes after anyone, so CPU players only break blocks
+{
+  const four = Array.from({ length: 4 }, (_, i) => ({ colorId: String(i) }));
+  const w = createWorld({ seed: 6, players: four, teams: [3, 3, 3, 3], friendlyFire: false, roundTicks: 3 * TICK_HZ, shrinkTicks: 4 * TICK_HZ });
+  assert.ok(w.teams && w.coop);
+  run(w, 60, none);
+  assert.equal(w.over, null, 'all on one team: the round does not end at once');
+  // CPU players: none goes after another; bricks get broken
+  const bots = w.players.map((_, i) => createBot(i, 'hard', 40 + i));
+  const bricks = w.tiles.filter((t) => t === SOFT).length;
+  let knocked = 0;
+  while (!w.over && w.tick < 60 * 60) {
+    step(w, bots.map((b) => botInput(w, b)));
+    for (const e of w.events) if (e.type === 'death' && e.by >= 0 && e.by !== e.player) knocked++;
+  }
+  assert.equal(knocked, 0, 'nobody knocks a teammate out');
+  assert.ok(w.tiles.filter((t) => t === SOFT).length < bricks, 'the CPU players break bricks');
+  assert.ok(w.over, 'the round ends once the blocks have fallen');
+  if (w.over!.winner >= 0) {
+    assert.equal(w.over!.team, 3, 'won together');
+    assert.deepStrictEqual(winnersOf(w), [0, 1, 2, 3]);
+  }
+  // everyone out: a draw
+  const d = createWorld({ seed: 7, players: four, teams: [1, 1, 1, 1], roundTicks: 0 });
+  for (const p of d.players) Object.assign(p, { alive: false, lives: 0, respawnAt: -1 });
+  run(d, 60, none);
+  assert.deepStrictEqual(d.over, { winner: -1 });
 }

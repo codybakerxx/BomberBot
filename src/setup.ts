@@ -311,7 +311,8 @@ function customTeams(s: MatchSetup, seats: string[]): Map<string, number> {
 /**
  * The team of each robot in a match, given their colours in player order (you, the other players, the CPU
  * players). With Teams of 2 or 4, the team of the row it sits in (`seating`, `rowTeams`); in Custom, its own
- * (`teams`). Always at least two teams, with two robots or more.
+ * (`teams`), and nothing else ever changes it: everyone can even be on one team (the owner's ask; the round
+ * is then played together, sim.ts `coop`).
  */
 export function teamsFor(s: MatchSetup, colours: string[]): number[] {
   const seats = seating(s, colours);
@@ -323,7 +324,6 @@ export function teamsFor(s: MatchSetup, colours: string[]): number[] {
     const t = customTeams(s, seats);
     out = colours.map((c) => t.get(c)!);
   }
-  if (out.length > 1 && out.every((t) => t === out[0])) out[colours.indexOf(seats[seats.length - 1])] = out[0] === 0 ? 1 : 0;
   return out;
 }
 
@@ -332,6 +332,17 @@ export function teamsFor(s: MatchSetup, colours: string[]): number[] {
  * page (and the server, online) works them out the same. Returns the rows' teams.
  */
 export function settleTeams(s: MatchSetup, colours: string[]): number[] {
+  // a team size the players no longer divide into is Custom from now on, everyone keeping their team (it
+  // must not come back by itself, rearranging everyone, when a player comes or goes again)
+  if (s.teamSize && !fixedSize(s, colours.length)) {
+    // (each robot that was seated keeps the team of the row it sat in; a newcomer gets a team of its own)
+    s.teams = {};
+    s.seats.forEach((c, i) => {
+      const t = s.rowTeams[Math.floor(i / 2)];
+      if (colours.includes(c) && isTeam(t)) s.teams[c] = t;
+    });
+    s.teamSize = 0;
+  }
   s.seats = seating(s, colours);
   s.rowTeams = rowTeams(s, colours.length);
   if (!fixedSize(s, colours.length)) {
@@ -361,17 +372,18 @@ export function rowChoices(s: MatchSetup, colours: string[], row: number): numbe
 
 /**
  * The colours the Team ‹ › on a robot's card goes through, in TEAMS order. In Custom every colour: one another
- * robot has puts it on that robot's team; one nobody has, a team of its own. But not one that would leave only
- * one team. With Teams of 2 or 4, its row's team colour (`rowChoices`).
+ * robot has puts it on that robot's team; one nobody has, a team of its own (all of them one team, too). With
+ * Teams of 2 or 4, its row's team colour (`rowChoices`).
  */
 export function teamChoices(s: MatchSetup, colours: string[], colour: string): number[] {
   if (fixedSize(s, colours.length)) return rowChoices(s, colours, Math.floor(seating(s, colours).indexOf(colour) / 2));
-  const now = teamsFor(s, colours);
-  const i = colours.indexOf(colour);
-  return TEAMS.map((_, t) => t).filter((t) => t === now[i] || colours.length < 2 || new Set(now.map((x, k) => (k === i ? t : x))).size >= 2);
+  return TEAMS.map((_, t) => t);
 }
 
-/** In Custom: seat `colour` just after the last robot of team `team` (so teammates sit together). */
+/**
+ * In Custom: seat `colour` just after the last robot of team `team` (the owner's ask: the card jumps to sit
+ * after its new teammates). Nobody else's team changes.
+ */
 function seatBeside(s: MatchSetup, colour: string, team: number): void {
   const rest = s.seats.filter((c) => c !== colour);
   let at = -1;
@@ -431,8 +443,7 @@ export function dropOnto(s: MatchSetup, colours: string[], a: string, b: string,
     [s.seats[i], s.seats[j]] = [b, a];
     return;
   }
-  const t = s.teams[b];
-  if (teamsOn && teamChoices(s, colours, a).includes(t)) s.teams[a] = t;
+  if (teamsOn) s.teams[a] = s.teams[b]; // (only the one dragged changes team)
   const rest = s.seats.filter((c) => c !== a);
   const k = rest.indexOf(b);
   s.seats = [...rest.slice(0, k + 1), a, ...rest.slice(k + 1)];
@@ -503,6 +514,7 @@ export function startTeams(s: MatchSetup, colours: string[]): void {
 export function lineUp(s: MatchSetup, colours: string[]): string {
   const n = new Map<number, number>();
   for (const t of teamsFor(s, colours)) n.set(t, (n.get(t) ?? 0) + 1);
+  if (n.size === 1 && colours.length > 1) return 'All one team';
   return [...n.values()].sort((a, b) => b - a).join(n.size > 4 ? 'v' : ' v ');
 }
 

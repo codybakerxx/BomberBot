@@ -270,6 +270,12 @@ export interface World {
   start: { bombs: number; fire: number; speed: number };
   /** a teams match: the round is won by the last side standing (Player.team) */
   teams: boolean;
+  /**
+   * Every robot on one team (the owner's ask: allowed in the lobby's Custom teams). Nobody goes after anyone
+   * (the CPU players only break blocks), and the round is played together: the team wins it if someone is
+   * still standing when the last falling block has landed; everyone out is a draw.
+   */
+  coop: boolean;
   /** in a teams match, whether a teammate's blast can knock you out (your own always can) */
   friendlyFire: boolean;
 }
@@ -314,7 +320,8 @@ export interface WorldConfig {
   zombies?: boolean;
   /**
    * A teams match: the side of each player, in the order of `players` (0, 1...). The last side with a robot in
-   * the round wins it. Left out, or with fewer than two sides, every robot plays for itself.
+   * the round wins it. Everyone on one side: they play together (World.coop). Left out, every robot plays for
+   * itself.
    */
   teams?: number[];
   /** In a teams match, can a teammate's blast knock you out? Default true. Your own blast always can. */
@@ -491,7 +498,7 @@ export function createWorld(cfg: WorldConfig): World {
   const startFire = within(cfg.startFire, START_FIRE, MAX_FIRE, START_FIRE);
   const startSpeed = within(cfg.startSpeed, 0, MAX_SPEED_ITEMS, 0);
   const lives = within(cfg.lives, 1, MAX_LIVES, 1);
-  const teamsOn = !!cfg.teams && cfg.teams.length === cfg.players.length && new Set(cfg.teams).size > 1 && cfg.teams.every((t) => Number.isInteger(t) && t >= 0);
+  const teamsOn = !!cfg.teams && cfg.teams.length === cfg.players.length && cfg.players.length > 0 && cfg.teams.every((t) => Number.isInteger(t) && t >= 0);
   const players: Player[] = cfg.players.map((p, id) => ({
     id,
     colorId: p.colorId,
@@ -557,6 +564,7 @@ export function createWorld(cfg: WorldConfig): World {
     spawns: spawns.map((p) => ({ ...p })),
     start: { bombs: startBombs, fire: startFire, speed: startSpeed },
     teams: teamsOn,
+    coop: teamsOn && cfg.players.length > 1 && new Set(cfg.teams).size === 1,
     friendlyFire: cfg.friendlyFire ?? true,
   };
 }
@@ -665,7 +673,8 @@ function fallBlocks(world: World): void {
     world.events.push({ type: 'block', cx, cy });
     // The last robot standing wins even if a block gets it a moment after the others went.
     // (Several under the same block went together: that is left to end as a draw, unless they are teammates.)
-    if (!world.over && under.length >= 1 && oneSide(under) && world.players.length > 1 && !world.players.some(inRound) && under.every((u) => u.lives === 0 && !u.zombie)) {
+    // (everyone on one team: being crushed last is no win)
+    if (!world.over && !world.coop && under.length >= 1 && oneSide(under) && world.players.length > 1 && !world.players.some(inRound) && under.every((u) => u.lives === 0 && !u.zombie)) {
       world.over = decided(world, under);
     }
   }
@@ -1556,7 +1565,11 @@ export function step(world: World, inputs: (PlayerInput | undefined)[]): void {
     const still = world.players.filter(inRound);
     // (the ones left are all waiting to come back: let one come back first, so the winner is standing)
     const waitFor = still.length > 0 && !still.some((p) => p.alive);
-    if (oneSide(still) && world.players.length > 1 && !waitFor) {
+    // everyone on one team: the round is over when nobody is left, or once the last falling block has landed
+    const ended = world.coop
+      ? !still.length || (world.roundTicks > 0 && world.shrinkNext >= world.shrinkOrder.length && !world.falling.length && !waitFor)
+      : oneSide(still) && world.players.length > 1 && !waitFor;
+    if (ended) {
       if (world.overCountdown < 0) world.overCountdown = 45;
       else if (--world.overCountdown === 0) {
         world.over = decided(world, still);
