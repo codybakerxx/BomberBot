@@ -23,7 +23,7 @@ import {
   type ServerMsg,
 } from '../src/net';
 import { makeRng } from '../src/sim';
-import { ARENAS, MAPS, defaultRules, itemChances, defaultSetup, dropOnto, fixedSize, lineUp, pickTeam, readSetup, recolour, rollCpus, seatLast, seating, setTeamSize, settleTeams, evenTeams, startTeams, summary, swapTeams, teamChoices, teamSizes, teamsFor, wholeTile, worldConfig } from '../src/setup';
+import { ARENAS, MAPS, defaultRules, itemChances, defaultSetup, dropOnto, fixedSize, lineUp, pickTeam, readSetup, recolour, rollCpus, seatLast, seating, setTeamSize, settleTeams, evenTeams, startTeams, summary, swapTeams, canEven, teamChoices, teamSizes, teamsFor, wholeTile, worldConfig } from '../src/setup';
 import { BOT_LEVELS } from '../src/bot';
 import { DANCE_IDS } from '../src/dances';
 import type { World } from '../src/sim';
@@ -419,11 +419,14 @@ assert.strictEqual(back.last('room')!.host, back.last('room')!.you, 'the friend 
   const tBlue = teamsFor(s, eight)[3];
   assert.ok(pickTeam(s, eight, 'black', tGold) && pickTeam(s, eight, 'pink', tGold) && pickTeam(s, eight, 'red', tBlue));
   assert.equal(lineUp(s, eight), '3v2v1v1v1');
-  // Even out: the same teams and colours, as even as can be; teammates sit together
+  // Even out: equal teams; 8 do not divide into 5 teams, so the smallest give way to make 4 of 2;
+  // the colours are ones already there; teammates sit together
   const teamsBefore = new Set(teamsFor(s, eight));
+  assert.ok(canEven(s, eight));
   evenTeams(s, eight);
-  assert.equal(lineUp(s, eight), '2v2v2v1v1');
-  assert.deepStrictEqual(new Set(teamsFor(s, eight)), teamsBefore, 'the same teams, the same colours');
+  assert.equal(lineUp(s, eight), '2 v 2 v 2 v 2');
+  assert.ok(teamsFor(s, eight).every((t) => teamsBefore.has(t)), 'colours already there');
+  assert.ok(!canEven(s, eight), 'nothing more to even out');
   const seated = seating(s, eight).map((c) => teamsFor(s, eight)[eight.indexOf(c)]);
   assert.ok(seated.every((t, k) => k === 0 || t === seated[k - 1] || !seated.slice(0, k).includes(t)), 'each team sits together');
   s.teams = { gold: 0, black: 0, pink: 0, blue: 1 };
@@ -431,6 +434,21 @@ assert.strictEqual(back.last('room')!.host, back.last('room')!.you, 'the friend 
   evenTeams(s, four);
   assert.equal(lineUp(s, four), '2 v 2');
   assert.equal(teamsFor(s, four)[0], 0, 'you stay on your team');
+  // 2 v 1 v 1 used to stay as it was (the owner's report): it becomes 2 v 2
+  s.teams = { gold: 0, black: 0, pink: 1, blue: 2 };
+  s.seats = [...four];
+  evenTeams(s, four);
+  assert.equal(lineUp(s, four), '2 v 2');
+  assert.equal(teamsFor(s, four)[0], 0, 'the biggest team stays');
+  // everyone on their own is even already
+  startTeams(s, four);
+  assert.ok(!canEven(s, four));
+  // five robots divide no other way: 3 v 1 v 1 becomes 2 v 2 v 1
+  startTeams(s, five);
+  const [t5] = teamsFor(s, five);
+  pickTeam(s, five, 'black', t5); pickTeam(s, five, 'pink', t5);
+  evenTeams(s, five);
+  assert.equal(lineUp(s, five), '2 v 2 v 1');
   assert.deepStrictEqual(teamsFor(defaultSetup('gold'), ['gold', 'black']), [0, 1], 'two robots: one each');
   // a CPU player gives its colour up to you: each keeps its seat and team
   s.seats = [...four];

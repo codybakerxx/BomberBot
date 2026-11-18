@@ -63,6 +63,7 @@ import {
   seating,
   teamSizes,
   evenTeams,
+  canEven,
   swapTeams,
   TEAMS,
   teamsFor,
@@ -541,6 +542,7 @@ export function createLobby(host: LobbyHost): {
       refresh(): void {
         label.textContent = lineUp(s(), inOrder());
         b.hidden = !!fixedSize(s(), inOrder().length); // (teams all one size are even already)
+        b.disabled = !b.hidden && !canEven(s(), inOrder()); // already as even as it gets
       },
     };
   }

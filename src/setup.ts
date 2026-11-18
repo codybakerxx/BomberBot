@@ -489,23 +489,30 @@ export function setTeamSize(s: MatchSetup, colours: string[], size: number): voi
 }
 
 /**
- * Even out, in Custom (the owner's ask): the teams there are, with their colours, made as even as they can
- * be (8 robots in 1 v 1 v 1 v 2 v 3 become 2 v 2 v 2 v 1 v 1). As many robots as can stay on their own team
- * do; the rest go to the teams short of robots, and teammates then sit together. (Teams of 2 or 4 are even
- * already.)
+ * Even out, in Custom (the owner's ask): the teams made the same size. When the robots do not divide into
+ * the teams there are, the fewest teams are given up until they do (4 robots in 2 v 1 v 1 become 2 v 2;
+ * 6 in 2 v 2 v 1 v 1 become 2 v 2 v 2), the smallest teams going first; at first it only spread the robots
+ * as evenly as the same number of teams allowed, which left 2 v 1 v 1 as it was, so the button seemed to do
+ * nothing (the owner's report, 18 November 2026). When no smaller number of teams divides them (5 or 7
+ * robots), the teams stay and differ by one at most (5 in 3 v 1 v 1 become 2 v 2 v 1). As many robots as can
+ * stay on their own team do; the rest join the teams short of robots, and teammates then sit together.
+ * (Teams of 2 or 4 are even already.)
  */
 export function evenTeams(s: MatchSetup, colours: string[]): void {
   settle(s, colours);
   if (fixedSize(s, colours.length)) return;
   const seats = s.seats;
+  const n = seats.length;
   const order: number[] = []; // the teams, in the order their first robot sits
   for (const c of seats) if (!order.includes(s.teams[c])) order.push(s.teams[c]);
-  const k = order.length;
-  const want = order.map((_, i) => Math.floor(seats.length / k) + (i < seats.length % k ? 1 : 0));
-  // the biggest teams keep the bigger shares
   const size = (t: number): number => seats.filter((c) => s.teams[c] === t).length;
+  // the biggest teams first: they are the ones kept, and keep the bigger shares
   const byBig = [...order].sort((a, b) => size(b) - size(a) || order.indexOf(a) - order.indexOf(b));
-  const target = new Map(byBig.map((t, i) => [t, want[i]]));
+  let k = order.length;
+  for (let d = k; d >= 2; d--) if (n % d === 0) { k = d; break; }
+  const want = Array.from({ length: k }, (_, i) => Math.floor(n / k) + (i < n % k ? 1 : 0));
+  const target = new Map(order.map((t) => [t, 0]));
+  byBig.slice(0, k).forEach((t, i) => target.set(t, want[i]));
   const kept = new Map<number, number>();
   const spare: string[] = [];
   for (const c of seats) {
@@ -519,6 +526,15 @@ export function evenTeams(s: MatchSetup, colours: string[]): void {
     kept.set(t, (kept.get(t) ?? 0) + 1);
   }
   s.seats = order.flatMap((t) => seats.filter((c) => s.teams[c] === t));
+}
+
+/** Whether Even out would change anything (the button is dimmed when not, so a press never seems to do nothing). */
+export function canEven(s: MatchSetup, colours: string[]): boolean {
+  const copy: MatchSetup = JSON.parse(JSON.stringify(s));
+  settle(copy, colours);
+  const before = JSON.stringify(teamsFor(copy, colours));
+  evenTeams(copy, colours);
+  return JSON.stringify(teamsFor(copy, colours)) !== before;
 }
 
 /** Teams on: everyone on a team of their own in Custom (the owner's ask), or the rows as the team size makes them. */
