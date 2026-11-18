@@ -69,9 +69,13 @@ import {
   teamsFor,
   worldConfig,
   type MapId,
+  type RuleGroup,
+  groupIsDefault,
+  groupValues,
+  resetGroup,
 } from './setup';
 import { DANCES, danceFrame, danceOf, stepDance, type DanceId } from './dances';
-import { BOMB_ICON, Opt, choice, confirmFirst, group, heading, mount, note, slider, swipeable, toggle } from './ui';
+import { BOMB_ICON, type GroupReset, Opt, choice, confirmFirst, group, heading, mount, note, slider, swipeable, toggle } from './ui';
 
 /** What the lobby needs to know in an online room (main.ts keeps the connection, online.ts). */
 export interface OnlineView {
@@ -1296,6 +1300,8 @@ export function createLobby(host: LobbyHost): {
   // ------------------------------------------------------------ removing, and Undo
   /** The CPU player removed last, and where it was, until Undo is pressed or the bar goes away. */
   let removed: { cpu: CpuSlot; at: number } | null = null;
+  /** or the rules a group's reset changed, to put back (groupReset) */
+  let undoReset: (() => void) | null = null;
   let undoTimer = 0;
   /**
    * Remove a CPU player at once (the bin on its card, or Remove on its panel): the owner asked for a quick
@@ -1305,6 +1311,7 @@ export function createLobby(host: LobbyHost): {
     if (s().cpus.length + guests().length <= 1 || !s().cpus[i]) return;
     const [cpu] = s().cpus.splice(i, 1);
     removed = { cpu, at: i };
+    undoReset = null;
     $('undoText').textContent = `${botName(colorById(cpu.colorId))} removed.`;
     $('undoBtn').hidden = false;
     $('undoBar').hidden = false;
@@ -1315,9 +1322,16 @@ export function createLobby(host: LobbyHost): {
   }
   function hideUndo(): void {
     removed = null;
+    undoReset = null;
     $('undoBar').hidden = true;
   }
   $('undoBtn').addEventListener('click', () => {
+    if (undoReset) {
+      if (canEdit()) undoReset();
+      hideUndo();
+      changed();
+      return;
+    }
     if (!removed || s().cpus.length >= maxCpus()) return hideUndo();
     const { cpu, at } = removed;
     // its colour back if nobody has taken it meanwhile, else a free one
@@ -1437,7 +1451,27 @@ export function createLobby(host: LobbyHost): {
     under: [lifeAfter('angel'), angelsBack, lifeAfter('zombie')],
   });
   // The rules in groups, each under a small label (the owner's ask, 18 November 2026): the round's time, how
-  // the match is won, lives and what comes after, the arena, and what the robots start with.
+  // the match is won, lives and what comes after, the arena, and what the robots start with. Each label ends
+  // in its own reset, which puts back only that group's rules (RULE_GROUPS in setup.ts) at once, with Undo
+  // on the bar at the foot of the screen for a few seconds (nothing that cannot be undone, so it does not ask).
+  function groupReset(key: RuleGroup, label: string): GroupReset {
+    return {
+      isDefault: () => groupIsDefault(s(), key, host.myColor),
+      reset: () => {
+        if (!canEdit()) return;
+        const before = groupValues(s(), key);
+        resetGroup(s(), key, host.myColor);
+        removed = null;
+        undoReset = () => Object.assign(s(), structuredClone(before));
+        $('undoText').textContent = `${label} reset to default.`;
+        $('undoBtn').hidden = false;
+        $('undoBar').hidden = false;
+        clearTimeout(undoTimer);
+        undoTimer = window.setTimeout(hideUndo, 6000);
+        changed();
+      },
+    };
+  }
   const rules: Opt[] = [
     group('Round time', '<circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2M9.5 2.5h5"/>', [
       toggle({
@@ -1476,7 +1510,7 @@ export function createLobby(host: LobbyHost): {
           }),
         ],
       }),
-    ]),
+    ], groupReset('time', 'Round time')),
     group('Winning', '<path d="M8 4h8v5a4 4 0 0 1-8 0z"/><path d="M8 6H5.5a2.5 2.5 0 0 0 2.8 3.6M16 6h2.5a2.5 2.5 0 0 1-2.8 3.6M12 13v3.5M8.5 20h7M10 16.5h4V20h-4z"/>', [
       slider({
         label: 'Rounds to win',
@@ -1490,7 +1524,7 @@ export function createLobby(host: LobbyHost): {
         },
         text: (v) => (v === 1 ? 'One round' : `First to ${v}`),
       }),
-    ]),
+    ], groupReset('winning', 'Winning')),
     group('Lives', '<path d="M12 20s-7.5-4.6-7.5-10.2A4.2 4.2 0 0 1 12 7.3a4.2 4.2 0 0 1 7.5 2.5C19.5 15.4 12 20 12 20z"/>', [
       slider({
         label: 'Lives',
@@ -1505,7 +1539,7 @@ export function createLobby(host: LobbyHost): {
         text: (v) => (v === 1 ? 'One life' : `${v} lives`),
       }),
       postMortem,
-    ]),
+    ], groupReset('lives', 'Lives')),
     group('Arena', '<rect x="3" y="5" width="18" height="14" rx="1.5"/><path d="M3 12h18M9.5 5v7M14.5 12v7"/>', [
       slider({
         label: 'Bricks',
@@ -1543,7 +1577,7 @@ export function createLobby(host: LobbyHost): {
           }),
         ),
       }),
-    ]),
+    ], groupReset('arena', 'Arena')),
     group('Starting kit', BOMB_ICON, [
       toggle({
         label: 'Custom start',
@@ -1560,11 +1594,11 @@ export function createLobby(host: LobbyHost): {
           slider({ label: 'Speed', min: 0, max: MAX_SPEED_ITEMS, get: () => s().startSpeed, set: (v) => ((s().startSpeed = v), changed()), text: (v) => (v === 0 ? 'Normal' : `+${v}`) }),
         ],
       }),
-    ]),
+    ], groupReset('start', 'Starting kit')),
   ];
   const refreshRules = mount($('rules'), rules);
   $('rulesReset').addEventListener('click', () =>
-    confirmFirst('Reset to default?', `The timer, rounds, lives, post-mortem behavior, bricks, start and power-ups go back to the defaults for the ${arenaOf(s()).name} arena. The arena and your players stay as they are.`, 'Reset to Default', (yes) => {
+    confirmFirst('Reset all settings?', `Every match setting under the map (round time, winning, lives, arena and starting kit) goes back to the defaults for the ${arenaOf(s()).name} arena. The map, its size and your players stay as they are.`, 'Reset all', (yes) => {
       if (!yes) return;
       host.setup = defaultRules(s(), host.myColor);
       changed();

@@ -699,6 +699,14 @@
   #soundOpts > .set-group { margin-top: 12px; } /* the groups of sounds apart from each other */
   #soundOpts > .set-group + .hint { margin-top: 8px; }
   #setGamepad .keys-head { margin-top: 22px; } /* the keyboard well apart from the controller */
+  .group-head::after { order: 1; } /* the line runs between the label and the group's reset */
+  .group-reset { order: 2; flex: none; display: grid; place-items: center; width: 34px; height: 34px; margin: -8px -4px -8px 0; padding: 0; color: var(--accent); background: rgba(255, 255, 255, 0.03); border: 1px solid var(--line); border-radius: 999px; cursor: pointer; }
+  .group-reset svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
+  .group-reset:disabled { color: var(--ink-dim); opacity: 0.35; cursor: default; }
+  .group-reset.spin svg { animation: reset-spin 0.5s cubic-bezier(0.3, 0.7, 0.4, 1); }
+  @keyframes reset-spin { from { transform: rotate(0); } to { transform: rotate(-360deg); } }
+  body.calm .group-reset.spin svg { animation: none; }
+  #lobbyMatch.readonly .group-reset { visibility: hidden; }
   .group-head::after { content: ''; flex: 1; height: 1px; margin-left: 2px; background: linear-gradient(to right, var(--line), transparent); }
   .opt { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 54px; padding: 6px 6px 6px 14px; }
   .opt.off { opacity: 0.45; }
@@ -1032,7 +1040,7 @@
         </div>
         <div class="sec-head"><span>Rules</span><span class="host-tag">Host</span></div>
         <div class="opts" id="rules"></div>
-        <button class="mini wide" id="rulesReset" type="button">Reset to Default</button>
+        <button class="mini wide" id="rulesReset" type="button">Reset all settings to default</button>
         <!-- Start again at the end of the page, not always on screen (the owner's ask) -->
         <p class="foot-note" id="startNote" role="status"></p>
         <button id="lobbyStart" class="go page-end" type="button" data-pad="≡">Start</button>

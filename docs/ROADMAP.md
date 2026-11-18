@@ -220,3 +220,4 @@ The rules were written with this in mind from the start: they use no browser fea
 - 18 November 2026 (the owner): the Match page's rules are spaced out in groups, each under a small label with an icon: Round time, Winning, Lives, Arena (Bricks, Custom power-ups) and Starting kit (Custom start).
 - 18 November 2026 (the owner): the keyboard's keys moved from Settings › Controls to Settings › Gamepad, which now has two labelled parts, Controller and Keyboard.
 - 18 November 2026 (the owner): Settings' pages are now Controls, Sound, Graphics, Gamepad, App; the Sound page's switches are in four labelled groups (Bombs, Power-ups, Falling blocks, Knockouts and wins).
+- 18 November 2026 (the owner): each group of the Match page's rules has its own reset (a round arrow at the end of its label, Undo for a few seconds, dimmed at defaults), and the button at the foot is now Reset all settings to default (still asks first; the map, size and players stay).

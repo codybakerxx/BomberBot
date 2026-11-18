@@ -23,7 +23,7 @@ import {
   type ServerMsg,
 } from '../src/net';
 import { makeRng } from '../src/sim';
-import { ARENAS, MAPS, defaultRules, itemChances, defaultSetup, dropOnto, fixedSize, lineUp, pickTeam, readSetup, recolour, rollCpus, seatLast, seating, setTeamSize, settleTeams, evenTeams, startTeams, summary, swapTeams, canEven, SOUND_GROUPS, SOUND_NAMES, teamChoices, teamSizes, teamsFor, wholeTile, worldConfig } from '../src/setup';
+import { ARENAS, MAPS, defaultRules, itemChances, defaultSetup, dropOnto, fixedSize, lineUp, pickTeam, readSetup, recolour, rollCpus, seatLast, seating, setTeamSize, settleTeams, evenTeams, startTeams, summary, swapTeams, canEven, RULE_GROUPS, resetGroup, groupIsDefault, groupValues, SOUND_GROUPS, SOUND_NAMES, teamChoices, teamSizes, teamsFor, wholeTile, worldConfig } from '../src/setup';
 import { BOT_LEVELS } from '../src/bot';
 import { DANCE_IDS } from '../src/dances';
 import type { World } from '../src/sim';
@@ -601,4 +601,36 @@ console.log('room checks passed');
 {
   const grouped = SOUND_GROUPS.flatMap(([, ids]) => ids);
   assert.deepStrictEqual([...grouped].sort(), SOUND_NAMES.map(([id]) => id).sort(), 'every sound in one group, once');
+}
+
+// The Match page's groups of rules: each group's reset puts back its own rules and nothing else, and the
+// five together put back everything Reset all settings does (the owner's design, 18 November 2026)
+{
+  const me = COLORS[0].id;
+  const d = defaultSetup(me);
+  const s = defaultSetup(me);
+  s.arena = 'compact';
+  Object.assign(s, { timerOn: false, roundSecs: 200, closeIn: 4, firstTo: 3, lives: 4, postMortem: true, afterlife: 'zombie', angelsBack: true, bricks: 0, itemsOn: true, startOn: true, startBombs: 3, startFire: 4, startSpeed: 2 });
+  s.items = { ...s.items, bomb: 0 };
+  const all = defaultRules(s, me);
+  const groups = Object.keys(RULE_GROUPS) as (keyof typeof RULE_GROUPS)[];
+  // every rule Reset all puts back is in a group
+  const grouped = new Set<string>(groups.flatMap((g) => [...RULE_GROUPS[g]]));
+  for (const k of Object.keys(all) as (keyof typeof all)[]) {
+    if (JSON.stringify(all[k]) !== JSON.stringify(s[k])) assert.ok(grouped.has(k), `${k} is reset by Reset all but is in no group`);
+  }
+  assert.ok(!groupIsDefault(s, 'lives', me));
+  const before = groupValues(s, 'time');
+  resetGroup(s, 'lives', me);
+  assert.ok(groupIsDefault(s, 'lives', me));
+  assert.equal(s.lives, d.lives);
+  assert.equal(s.afterlife, d.afterlife);
+  assert.deepStrictEqual(groupValues(s, 'time'), before, 'the other groups are left alone');
+  assert.equal(s.firstTo, 3);
+  // the arena's own round length comes back with Round time (Mini: 1:00)
+  resetGroup(s, 'time', me);
+  assert.equal(s.timerOn, true);
+  assert.equal(s.roundSecs, ARENAS.find((a) => a.id === 'compact')!.roundSecs);
+  for (const g of groups) resetGroup(s, g, me);
+  assert.deepStrictEqual(s, all, 'all five resets together are Reset all');
 }

@@ -628,6 +628,40 @@ export function defaultRules(s: MatchSetup, myColor: string): MatchSetup {
 }
 
 /**
+ * The Match page's rules in groups (the owner's design, 18 November 2026), and what each group's reset puts
+ * back to the arena's defaults: the settings under that group's label and nothing else. Every rule
+ * `defaultRules` puts back is in one group (tests/room.test.ts checks).
+ */
+export const RULE_GROUPS = {
+  time: ['timerOn', 'roundSecs', 'closeIn'],
+  winning: ['firstTo'],
+  lives: ['lives', 'postMortem', 'afterlife', 'angelsBack'],
+  arena: ['bricks', 'itemsOn', 'items'],
+  start: ['startOn', 'startBombs', 'startFire', 'startSpeed'],
+} as const satisfies Record<string, readonly (keyof MatchSetup)[]>;
+export type RuleGroup = keyof typeof RULE_GROUPS;
+
+/** One group's rules put back to the defaults for the setup's arena (a group's reset); the rest left alone. */
+export function resetGroup(s: MatchSetup, group: RuleGroup, myColor: string): void {
+  const d = defaultRules(s, myColor) as unknown as Record<string, unknown>;
+  const to = s as unknown as Record<string, unknown>;
+  for (const k of RULE_GROUPS[group]) to[k] = structuredClone(d[k]);
+}
+
+/** Whether a group's rules are already the defaults for the setup's arena (its reset is then dimmed). */
+export function groupIsDefault(s: MatchSetup, group: RuleGroup, myColor: string): boolean {
+  const d = defaultRules(s, myColor) as unknown as Record<string, unknown>;
+  const now = s as unknown as Record<string, unknown>;
+  return RULE_GROUPS[group].every((k) => JSON.stringify(now[k]) === JSON.stringify(d[k]));
+}
+
+/** The settings of one group, to put back with Undo after its reset. */
+export function groupValues(s: MatchSetup, group: RuleGroup): Record<string, unknown> {
+  const now = s as unknown as Record<string, unknown>;
+  return Object.fromEntries(RULE_GROUPS[group].map((k) => [k, structuredClone(now[k])]));
+}
+
+/**
  * The CPU players as a match will have them: as on their cards, or, with Randomize CPUs on, each with an
  * emote or a level (or both) picked at random. `random` gives a number from 0 up to 1. A new list: the
  * setup's own CPU players are left as they are.
