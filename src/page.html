@@ -25,9 +25,10 @@
               dots youDots; the name over them, youName, with editName, the pencil that swaps it for a box (myName) to type your own; the player
               cards in slots, each with its victory dance along its foot (dp-prev-, dp-name-, dp-next-); allCpus) and lobbyMatch (the arena picture arenaPic with
               arenaPrev, arenaNext, arenaDots, the map buttons mapPick over it, and a Start under it, arenaStart; the rules; rulesReset; startNote and lobbyStart, Start again at the end); playersNext ends lobbyPlayers
-    settings  your own settings, five pages: setControls (Steering thumb: handLeft, handRight; Swipe
-              Movement sensitivity: sensOpts; padOpts; keys: remapKeys, resetKeys),
-              setGamepad (padStatus, remapPad, resetPad, rumbleBtn), setSound (soundOpts), setApp (appLead, appSteps,
+    settings  your own settings, five pages, in the order Controls, Sound, Graphics, Gamepad, App: setControls
+              (controlOpts: the Steering group with steerSet, handLeft, handRight and Movement sensitivity, the
+              Visibility group; controlsReset), setGamepad (padStatus, remapPad, resetPad, rumbleBtn; the keys:
+              remapKeys, resetKeys), setSound (soundOpts; soundReset), setUndo (a group's Reset's Undo), setApp (appLead, appSteps,
               appInstall, notifyOpts, notifyNote: the home screen and notifications, app.ts) and setGraphics
               (gfxOpts); then setPrev, setDone, setNext
     pause     the menu during a match: pauseState, pauseTitle, pauseInfo, standings, pauseResume, pauseSettings,
@@ -696,7 +697,8 @@
   .set-group { display: flex; flex-direction: column; gap: 8px; }
   .group-head { display: flex; align-items: center; gap: 8px; padding: 0 2px; font: 700 12px/1 var(--font-display); letter-spacing: 0.16em; text-transform: uppercase; color: var(--accent); }
   .group-head svg { flex: none; width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
-  #soundOpts > .set-group { margin-top: 12px; } /* the groups of sounds apart from each other */
+  #soundOpts > .set-group:not(:first-child), #controlOpts > .set-group + .set-group { margin-top: 12px; } /* the groups apart from each other */
+  #settings .reset-all { margin-top: 18px; } /* the Reset all button at the foot of Controls and Sound */
   #soundOpts > .set-group + .hint { margin-top: 8px; }
   #setGamepad .keys-head { margin-top: 22px; } /* the keyboard well apart from the controller */
   .group-head::after { order: 1; } /* the line runs between the label and the group's reset */
@@ -1080,7 +1082,10 @@
   <div class="scroll">
     <div class="cols one">
       <section id="setControls" class="page" role="tabpanel" aria-labelledby="pgControls">
-      <fieldset class="tune">
+        <!-- the settings in groups, each with a Reset chip when changed (controlOpts, built in main.ts; the
+             steering thumb below is moved into the Steering group there) -->
+        <div class="opts" id="controlOpts"></div>
+      <fieldset class="tune" id="steerSet">
         <legend>Steering thumb</legend>
         <p class="opt-desc">The swipe pad goes on this side, and A and B on the other.</p>
         <div class="switch" role="group" aria-label="Steering thumb">
@@ -1088,9 +1093,8 @@
           <button type="button" id="handRight"><span class="on-tag">On</span><b>Right thumb</b><small>pad on the right</small></button>
         </div>
       </fieldset>
-        <div class="opts" id="sensOpts"></div>
         <p class="opt-note" id="saveNote" hidden>This browser is not saving settings, so they last only until you close the game.</p>
-        <div class="opts" id="padOpts"></div>
+        <button class="mini wide reset-all" id="controlsReset" type="button">Reset all control settings to default</button>
       </section>
       <section id="setGamepad" class="page" role="tabpanel" aria-labelledby="pgGamepad">
         <!-- the controller first, then the keyboard, each under a label of its own (the owner's ask, 18 November
@@ -1118,6 +1122,7 @@
       </section>
       <section id="setSound" class="page" role="tabpanel" aria-labelledby="pgSound">
         <div class="opts" id="soundOpts"></div>
+        <button class="mini wide reset-all" id="soundReset" type="button">Reset all sound settings to default</button>
       </section>
       <section id="setGraphics" class="page" role="tabpanel" aria-labelledby="pgGraphics">
         <div class="opts" id="gfxOpts"></div>
@@ -1157,6 +1162,7 @@
       </section>
     </div>
   </div>
+  <div class="undo" id="setUndo" role="status" hidden><span id="setUndoText"></span><button class="mini" id="setUndoBtn" type="button">Undo</button></div>
   <footer class="foot">
     <button id="setPrev" class="side-btn" type="button" data-pad="LB" data-key="Q"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg><span></span></button>
     <button id="setDone" class="go big" type="button">Done</button>

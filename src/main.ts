@@ -21,7 +21,7 @@ import { readDance, type DanceId } from './dances';
 import { createPadNav } from './padnav';
 import { PAD } from './bindings';
 import { createRemap } from './remap';
-import { CpuSlot, Guest, ITEM_NAMES, MatchSetup, Prefs, SHARPNESS, SOUND_GROUPS, SOUND_NAMES, TEAMS, arenaOf, clockText, defaultSetup, load, readPrefs, readSetup, rollCpus, save, summary, wholeTile, worldConfig } from './setup';
+import { CpuSlot, Guest, ITEM_NAMES, MatchSetup, Prefs, SHARPNESS, SOUND_GROUPS, SOUND_NAMES, TEAMS, arenaOf, clockText, defaultPrefs, defaultSetup, load, readPrefs, readSetup, rollCpus, save, summary, wholeTile, worldConfig } from './setup';
 import { BOMB_ICON, Opt, answerConfirm, choice, confirmFirst, confirmOpen, group, heading, mount, note, slider, toggle, wireConfirm, wireFlash } from './ui';
 import { Hand, SENSITIVITY, DEFAULT_SENS, STRAIGHT, standardAims } from './swipe';
 import { Online } from './online';
@@ -1901,6 +1901,7 @@ function showSettings(tab?: SetTab, from?: 'lobby' | 'pause'): void {
   $('setDone').focus({ preventScroll: true });
 }
 function showSetTab(t: SetTab): void {
+  if (t !== setTab) hideUndo(); // (an Undo belongs to the page it was made on)
   setTab = t;
   if (t !== 'gamepad') remap?.cancel(); // (keys and buttons are both changed on Gamepad)
   if (t === 'gamepad') remap?.refresh(); // says which controllers are connected now
@@ -1928,6 +1929,7 @@ function stepSettings(d: number): void {
 }
 function closeSettings(): void {
   remap.cancel();
+  hideUndo();
   if (setFrom === 'pause') showPause();
   else showLobby();
 }
@@ -1956,6 +1958,30 @@ function applyPrefs(): void {
 }
 
 /** A sound's row: a switch for whether it plays, and a button that plays it. */
+// icons for the Settings groups' labels
+const SPEAKER_ICON = '<path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z"/><path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11"/>';
+const STEER_ICON = '<circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="2.5"/><path d="M12 3.5v6M12 14.5v6M3.5 12h6M14.5 12h6"/>';
+const EYE_ICON = '<path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z"/><circle cx="12" cy="12" r="3"/>';
+
+/** Undo for a group's Reset in Settings: a bar over the foot for six seconds (as in the lobby). */
+let undoSetting: (() => void) | null = null;
+let setUndoTimer = 0;
+function setUndo(text: string, undo: () => void): void {
+  undoSetting = undo;
+  $('setUndoText').textContent = text;
+  $('setUndo').hidden = false;
+  clearTimeout(setUndoTimer);
+  setUndoTimer = window.setTimeout(hideUndo, 6000);
+}
+function hideUndo(): void {
+  undoSetting = null;
+  $('setUndo').hidden = true;
+}
+$('setUndoBtn').addEventListener('click', () => {
+  undoSetting?.();
+  hideUndo();
+});
+
 /** The icon on each group of sound switches (SOUND_GROUPS in setup.ts). */
 const SOUND_ICONS: Record<string, string> = {
   Bombs: BOMB_ICON,
@@ -1988,31 +2014,45 @@ function soundRow(id: string, name: string): Opt {
 }
 
 const soundOpts: Opt[] = [
-  toggle({
-    label: 'Sound effects',
-    hint: 'Every sound in the game',
-    get: () => prefs.soundOn,
-    set: (v) => {
-      prefs.soundOn = v;
+  group('Volume', SPEAKER_ICON, [
+    toggle({
+      label: 'Sound effects',
+      hint: 'Every sound in the game',
+      get: () => prefs.soundOn,
+      set: (v) => {
+        prefs.soundOn = v;
+        prefsChanged();
+      },
+      offText: 'All sounds are off. Switch them on to set the volume.',
+      under: [
+        slider({
+          label: 'Volume',
+          min: 0,
+          max: 100,
+          step: 10,
+          get: () => prefs.volume,
+          set: (v) => {
+            prefs.volume = v;
+            prefsChanged();
+            initAudio();
+            preview('pickup'); // so the new volume can be heard
+          },
+          text: (v) => `${v}%`,
+        }),
+      ],
+    }),
+  ], {
+    isDefault: () => prefs.soundOn === defaultPrefs().soundOn && prefs.volume === defaultPrefs().volume,
+    reset: () => {
+      const was = { soundOn: prefs.soundOn, volume: prefs.volume };
+      prefs.soundOn = defaultPrefs().soundOn;
+      prefs.volume = defaultPrefs().volume;
       prefsChanged();
+      setUndo('Volume reset to default.', () => {
+        Object.assign(prefs, was);
+        prefsChanged();
+      });
     },
-    offText: 'All sounds are off. Switch them on to set the volume.',
-    under: [
-      slider({
-        label: 'Volume',
-        min: 0,
-        max: 100,
-        step: 10,
-        get: () => prefs.volume,
-        set: (v) => {
-          prefs.volume = v;
-          prefsChanged();
-          initAudio();
-          preview('pickup'); // so the new volume can be heard
-        },
-        text: (v) => `${v}%`,
-      }),
-    ],
   }),
   heading('Which sounds play', 'Tap ▶ to hear one'),
   // in groups, each under a small label (the owner's ask, 18 November 2026: easier to look at)
@@ -2021,6 +2061,19 @@ const soundOpts: Opt[] = [
       label,
       SOUND_ICONS[label],
       ids.map((id) => soundRow(id, SOUND_NAMES.find(([s]) => s === id)![1])),
+      {
+        // every sound in the group back on (the default)
+        isDefault: () => !ids.some((id) => prefs.muted.includes(id)),
+        reset: () => {
+          const was = [...prefs.muted];
+          prefs.muted = prefs.muted.filter((m) => !ids.includes(m));
+          prefsChanged();
+          setUndo(`${label} reset to default.`, () => {
+            prefs.muted = was;
+            prefsChanged();
+          });
+        },
+      },
     ),
   ),
   note('There is no music yet. It will come with the new sound effects, with a switch of its own.'),
@@ -2100,8 +2153,64 @@ const gfxOpts: Opt[] = [
   note('More graphic styles are planned.'),
 ];
 const refreshSound = mount($('soundOpts'), soundOpts);
-const refreshPad = mount($('padOpts'), padOpts);
-refreshSens = mount($('sensOpts'), sensOpts);
+/**
+ * Settings › Controls in groups, each with a Reset chip while it differs from its defaults (the owner's ask,
+ * 18 November 2026, as on the Match page): Steering (the thumb and movement sensitivity) and Visibility (how
+ * strongly the touch controls show). Keys and buttons are on Gamepad, with Resets of their own.
+ */
+const controlOpts: Opt[] = [
+  group('Steering', STEER_ICON, [{ el: $('steerSet'), refresh() {} }, ...sensOpts], {
+    isDefault: () => settings.hand === 'left' && settings.sens === DEFAULT_SENS,
+    reset: () => {
+      const was = { ...settings };
+      settings.hand = 'left';
+      settings.sens = DEFAULT_SENS;
+      applySettings(true);
+      setUndo('Steering reset to default.', () => {
+        Object.assign(settings, was);
+        applySettings(true);
+      });
+    },
+  }),
+  group('Visibility', EYE_ICON, padOpts, {
+    isDefault: () => prefs.padShow === defaultPrefs().padShow,
+    reset: () => {
+      const was = prefs.padShow;
+      prefs.padShow = defaultPrefs().padShow;
+      prefsChanged();
+      setUndo('Visibility reset to default.', () => {
+        prefs.padShow = was;
+        prefsChanged();
+      });
+    },
+  }),
+];
+const refreshPad = mount($('controlOpts'), controlOpts);
+refreshSens = refreshPad;
+
+// Reset all, at the foot of Controls and of Sound (the owner's ask, as on the Match page): asks first
+$('controlsReset').addEventListener('click', () =>
+  confirmFirst('Reset all control settings?', 'The steering thumb, movement sensitivity and touch controls go back to their defaults. Keys and buttons are on Gamepad and stay as they are.', 'Reset all', (yes) => {
+    if (!yes) return;
+    settings.hand = 'left';
+    settings.sens = DEFAULT_SENS;
+    applySettings(true);
+    prefs.padShow = defaultPrefs().padShow;
+    prefsChanged();
+    hideUndo();
+  }),
+);
+$('soundReset').addEventListener('click', () =>
+  confirmFirst('Reset all sound settings?', 'Sound effects go back on at the usual volume, and every sound is switched on again.', 'Reset all', (yes) => {
+    if (!yes) return;
+    const d = defaultPrefs();
+    prefs.soundOn = d.soundOn;
+    prefs.volume = d.volume;
+    prefs.muted = [];
+    prefsChanged();
+    hideUndo();
+  }),
+);
 const refreshGfx = mount($('gfxOpts'), gfxOpts);
 
 // Settings › App: putting the game on the home screen, and notifications (app.ts)
