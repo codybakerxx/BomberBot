@@ -1351,7 +1351,9 @@ function closePause(): void {
 }
 function fillPause(): void {
   const done = matchWinner >= 0;
-  $('pauseState').textContent = roundLive ? (net ? 'Playing' : 'Paused') : done ? 'Match over' : world.over ? 'Round over' : 'You are out';
+  const state = $('pauseState');
+  state.textContent = roundLive ? (net ? 'Playing' : 'Paused') : done ? 'Match over' : world.over ? 'Round over' : '';
+  state.hidden = !state.textContent; // (no "You are out": the standings say so beside your name, the owner's call)
   // online: the room's code, the round goes on behind the menu, and only the host restarts or ends the match
   modeChip($('pauseMode'), net?.code ?? null);
   const hosting = !net || net.isHost;
@@ -1364,7 +1366,11 @@ function fillPause(): void {
   const left = ticksLeft(world);
   const time = world.over || left === Infinity ? '' : left > 0 ? ` · ${clockText(Math.ceil(left / TICK_HZ))} left` : ' · Blocks falling';
   // (online: the round trip to the server, so a slow connection can be told from a fault)
-  $('pauseInfo').textContent = `${summary(setup, guests.length)}${time}${net && net.rtt ? ` · ping ${net.rtt} ms` : ''}`;
+  // each fact in a bubble of its own (the owner's ask)
+  const facts = [...summary(setup, guests.length).split(' · '), ...(time ? [time.slice(3)] : [])];
+  const info = $('pauseInfo');
+  info.replaceChildren(...facts.map((f) => Object.assign(document.createElement('span'), { textContent: f })));
+  if (net && net.rtt) info.append(Object.assign(document.createElement('span'), { className: 'ping', textContent: `Ping ${net.rtt} ms` }));
   $('pauseResume').textContent = 'Resume'; // (the owner's word, whether the round is going on or over)
   const list = $('standings');
   list.classList.toggle('many', world.players.length > 4); // (two columns, so the menu still fits)
