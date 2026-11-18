@@ -564,6 +564,9 @@
   /* the map flying away as the next one swoops in (mapFlip in lobby.ts) */
   .map-card { position: absolute; z-index: 2; border-radius: 8px; pointer-events: none; box-shadow: 0 14px 30px rgba(0, 0, 0, 0.45); }
   #arenaPic { position: relative; z-index: 1; }
+  .map-card.peek { z-index: 0; box-shadow: 0 10px 24px rgba(0, 0, 0, 0.4); } /* the next map, coming in under the one held */
+  #arenaPic.held { box-shadow: 0 16px 34px rgba(0, 0, 0, 0.5); }
+  .panel.arena { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
   .panel.arena .round-btn { width: 42px; height: 42px; flex: 0 0 42px; }
   .panel.arena .round-btn svg { width: 20px; height: 20px; }
   #arenaBlurb { font: 700 15px/1 var(--font-display); letter-spacing: 0.1em; color: var(--ink-dim); }

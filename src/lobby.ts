@@ -22,7 +22,7 @@
  */
 import { BOT_LEVELS, LEVELS } from './bot';
 import { COLORS, botName, colorById, drawRobot, drawStatic, drawDynamic, setMap, ROBOT } from './render';
-import { createWorld, MAX_BOMBS, MAX_FIRE, MAX_LIVES, MAX_SPEED_ITEMS, START_FIRE } from './sim';
+import { type World, createWorld, MAX_BOMBS, MAX_FIRE, MAX_LIVES, MAX_SPEED_ITEMS, START_FIRE } from './sim';
 import {
   CpuSlot,
   Guest,
@@ -68,6 +68,7 @@ import {
   TEAMS,
   teamsFor,
   worldConfig,
+  type MapId,
 } from './setup';
 import { DANCES, danceFrame, danceOf, stepDance, type DanceId } from './dances';
 import { Opt, choice, confirmFirst, heading, mount, note, slider, swipeable, toggle } from './ui';
@@ -254,16 +255,250 @@ export function createLobby(host: LobbyHost): {
     const row = cv.parentElement!;
     if (cv.width < 2 || !row.offsetParent) return null; // (not on screen: nothing to animate)
     flipCard?.remove();
+    const card = overlay('map-card');
+    card.getContext('2d')!.drawImage(cv, 0, 0);
+    return card;
+  }
+  /** A canvas the size of the arena picture, placed exactly over it (the picture must not be transformed). */
+  function overlay(cls: string): HTMLCanvasElement {
+    const cv = $<HTMLCanvasElement>('arenaPic');
     const card = document.createElement('canvas');
     card.width = cv.width;
     card.height = cv.height;
-    card.getContext('2d')!.drawImage(cv, 0, 0);
     const box = cv.getBoundingClientRect();
-    const at = row.getBoundingClientRect();
-    card.className = 'map-card';
+    const at = cv.parentElement!.getBoundingClientRect();
+    card.className = cls;
     Object.assign(card.style, { left: `${box.left - at.left}px`, top: `${box.top - at.top}px`, width: `${box.width}px`, height: `${box.height}px` });
     card.setAttribute('aria-hidden', 'true');
     return card;
+  }
+
+  /**
+   * Holding the map (the owner's ask, 18 November 2026: hold it, drag it, flick it, and bring it back before
+   * letting go). Pressed anywhere on the arena panel and moved sideways, the map follows the finger one to one
+   * along the same arc as the swoop: lifting as it goes, tipping, shrinking a little, fading near the end, and
+   * the next map comes in from the other side as it goes, a step behind. Moved back, all of it comes back:
+   * nothing is decided until the finger lifts. Let go past a third of the way, or with a flick that way, and
+   * it flies on at the speed it was thrown while the new map swoops in from where it had got to, overshoots a
+   * touch and settles; otherwise it springs back into place. Up and down are left to the page, so it still
+   * scrolls. A drag that starts on a button inside (a dot, a size, Start) does not press it. With Less
+   * movement on it only slides, and changes with a short fade.
+   */
+  const SLOP = 6; // page pixels sideways before the map is held (less, and a tap on a dot would wiggle it)
+  const COMMIT = 0.33; // let go past this share of the map's width and it goes
+  const FLICK = 0.45; // page pixels a millisecond: a flick this fast that way sends it whatever the distance
+  const clamp01 = (v: number): number => Math.max(0, Math.min(1, v));
+  /** the map being dragged off, `u` across its width W (signed), as on the swoop's arc */
+  function leavePose(u: number, W: number, calm: boolean): Keyframe {
+    const a = Math.abs(u);
+    if (calm) return { transform: `translateX(${u * W}px)`, opacity: 1 - clamp01((a - 0.5) / 0.6) * 0.8 };
+    return {
+      transform: `translate(${u * W}px, ${-a * W * 0.2}px) rotate(${u * 14}deg) scale(${1 - 0.26 * Math.min(1, a)})`,
+      opacity: 1 - clamp01((a - 0.6) / 0.5),
+    };
+  }
+  /** the map coming in from `side` (+1 the right), `t` of the way (0 waiting off to the side, 1 in place) */
+  function comePose(t: number, side: number, W: number): Keyframe {
+    const r = 1 - t;
+    return {
+      transform: `translate(${side * r * W * 0.85}px, ${-r * W * 0.16}px) rotate(${side * r * 12}deg) scale(${0.74 + 0.26 * t})`,
+      opacity: Math.min(1, t * 1.8),
+    };
+  }
+  function setPose(el: HTMLElement, k: Keyframe): void {
+    el.style.transform = String(k.transform);
+    el.style.opacity = String(k.opacity);
+  }
+  /** another map, drawn as the picture is, to come in while the map is dragged */
+  function paintPeek(mapId: MapId): HTMLCanvasElement | null {
+    const cv = $<HTMLCanvasElement>('arenaPic');
+    const w = previewWorld();
+    const T = cv.width / w.w;
+    if (!Number.isInteger(T) || T < 4) return null;
+    const peek = overlay('map-card peek');
+    const g = peek.getContext('2d')!;
+    setMap(mapId);
+    drawStatic(g, w, T);
+    drawDynamic(g, w, T, 0, 0);
+    setMap(s().map);
+    return peek;
+  }
+  function dragMaps(area: HTMLElement): void {
+    let id = -1;
+    let x0 = 0;
+    let y0 = 0;
+    let held = false;
+    let quietUntil = 0;
+    let W = 1;
+    let calm = false;
+    let peek: HTMLCanvasElement | null = null;
+    let peekMap: MapId | '' = '';
+    let u = 0;
+    let trail: { t: number; x: number }[] = [];
+    area.style.touchAction = 'pan-y';
+    const cv = $<HTMLCanvasElement>('arenaPic');
+    const name = $('arenaName');
+    const target = (d: number): MapId => {
+      const i = MAPS.findIndex((m) => m.id === s().map);
+      return MAPS[(i + d + MAPS.length) % MAPS.length].id;
+    };
+    area.addEventListener('pointerdown', (e) => {
+      if (e.pointerType === 'mouse' && e.button !== 0) return;
+      if (id !== -1 || !canEdit() || cv.width < 2) return;
+      id = e.pointerId;
+      x0 = e.clientX;
+      y0 = e.clientY;
+      held = false;
+      trail = [{ t: e.timeStamp, x: e.clientX }];
+    });
+    const hold = (): void => {
+      held = true;
+      quietUntil = Infinity;
+      // whatever was still moving is finished first, so the map is where it rests
+      flipCard?.remove();
+      flipCard = null;
+      cv.getAnimations().forEach((a) => a.finish());
+      name.getAnimations().forEach((a) => a.finish());
+      cv.style.transform = '';
+      W = cv.getBoundingClientRect().width;
+      calm = document.body.classList.contains('calm');
+      cv.classList.add('held');
+    };
+    const pose = (): void => {
+      const a = Math.abs(u);
+      setPose(cv, leavePose(u, W, calm));
+      name.style.transform = `translateX(${u * 36}px)`;
+      name.style.opacity = String(1 - Math.min(1, a * 1.6) * 0.75);
+      if (calm || a < 0.005) {
+        if (peek) peek.style.opacity = '0';
+        return;
+      }
+      const d = u < 0 ? 1 : -1; // thumb to the left: the next map
+      const want = target(d);
+      if (!peek || peekMap !== want) {
+        peek?.remove();
+        peek = paintPeek(want);
+        peekMap = want;
+        if (peek) cv.parentElement!.append(peek);
+      }
+      if (peek) setPose(peek, comePose(clamp01(a), -Math.sign(u), W));
+    };
+    window.addEventListener('pointermove', (e) => {
+      if (e.pointerId !== id) return;
+      const dx = e.clientX - x0;
+      const dy = e.clientY - y0;
+      trail.push({ t: e.timeStamp, x: e.clientX });
+      while (trail.length > 2 && e.timeStamp - trail[0].t > 90) trail.shift();
+      if (!held) {
+        if (Math.abs(dy) > SLOP && Math.abs(dy) >= Math.abs(dx)) {
+          id = -1; // up or down: the page's, to scroll
+          return;
+        }
+        if (Math.abs(dx) < SLOP || Math.abs(dx) <= Math.abs(dy) * 1.2) return;
+        hold();
+        x0 += Math.sign(dx) * SLOP; // (no jump as it is picked up)
+      }
+      const raw = (e.clientX - x0) / W;
+      const a = Math.abs(raw);
+      u = Math.sign(raw) * (a <= 1 ? a : 1 + (a - 1) * 0.35); // past a whole width it resists
+      pose();
+    });
+    const letGo = (e: PointerEvent, cancelled: boolean): void => {
+      if (e.pointerId !== id) return;
+      id = -1;
+      if (!held) return;
+      held = false;
+      quietUntil = performance.now() + 400; // the click a drag leaves on a button inside is not a press
+      cv.classList.remove('held');
+      const first = trail[0];
+      const dt = e.timeStamp - first.t;
+      const v = dt > 0 ? (e.clientX - first.x) / dt : 0; // page pixels a millisecond, + to the right
+      const flung = Math.abs(v) >= FLICK && Math.sign(v) === Math.sign(u) && Math.abs(u) * W > 16;
+      const flungBack = Math.abs(v) >= FLICK && Math.sign(v) === -Math.sign(u);
+      const go = !cancelled && (flung || (Math.abs(u) >= COMMIT && !flungBack)); // past a third it goes, unless thrown back
+      const from = leavePose(u, W, calm);
+      const peekFrom = peek ? comePose(clamp01(Math.abs(u)), -Math.sign(u), W) : null;
+      cv.style.transform = '';
+      cv.style.opacity = '';
+      name.style.transform = '';
+      name.style.opacity = '';
+      if (!go) {
+        // back where it was, with a little spring
+        cv.animate(
+          calm
+            ? [from, { transform: 'none', opacity: 1 }]
+            : [from, { transform: `translate(${-u * W * 0.05}px, 0) rotate(${-u * 1.2}deg) scale(1.01)`, opacity: 1, offset: 0.6 }, { transform: 'none', opacity: 1 }],
+          { duration: calm ? 160 : 380, easing: 'cubic-bezier(0.22, 0.8, 0.36, 1)' },
+        );
+        name.animate([{ transform: `translateX(${u * 36}px)`, opacity: 1 - Math.min(1, Math.abs(u) * 1.6) * 0.75 }, { transform: 'none', opacity: 1 }], {
+          duration: 300,
+          easing: 'cubic-bezier(0.22, 0.8, 0.36, 1)',
+        });
+        const p = peek;
+        if (p && peekFrom) p.animate([peekFrom, comePose(0, -Math.sign(u), W)], { duration: 240, easing: 'ease-in', fill: 'forwards' }).finished.finally(() => p.remove());
+        peek = null;
+        return;
+      }
+      // it goes: on at the speed it was thrown, while the new map comes in from where it had got to
+      const out = Math.sign(u);
+      const d = out < 0 ? 1 : -1;
+      const card = mapCard();
+      peek?.remove();
+      peek = null;
+      s().map = target(d);
+      changed();
+      if (!card) return;
+      if (calm) {
+        cv.animate([{ opacity: 0.2 }, { opacity: 1 }], { duration: 180, easing: 'ease-out' });
+        return;
+      }
+      cv.parentElement!.append(card);
+      flipCard = card;
+      const end = { ...leavePose(out * 1.35, W, false), opacity: 0 };
+      const left = Math.max(0.05, 1.35 - Math.abs(u)) * W;
+      const speed = Math.max(Math.abs(v), 0.8);
+      card
+        .animate([from, end], { duration: Math.max(150, Math.min(340, (2.2 * left) / speed)), easing: 'cubic-bezier(0.3, 0.7, 0.5, 1)', fill: 'forwards' })
+        .finished.then(
+          () => card.remove(),
+          () => card.remove(),
+        )
+        .finally(() => {
+          if (flipCard === card) flipCard = null;
+        });
+      cv.getAnimations().forEach((a) => a.cancel());
+      cv.animate(
+        [
+          peekFrom ?? comePose(0, -out, W),
+          { transform: `translate(${out * W * 0.03}px, ${-W * 0.025}px) rotate(${out * 1.6}deg) scale(1.035)`, opacity: 1, offset: 0.55 },
+          { transform: `translate(${-out * W * 0.008}px, ${W * 0.005}px) rotate(${-out * 0.4}deg) scale(0.995)`, opacity: 1, offset: 0.8 },
+          { transform: 'none', opacity: 1 },
+        ],
+        { duration: 500, easing: 'cubic-bezier(0.22, 0.8, 0.36, 1)' },
+      );
+      name.getAnimations().forEach((a) => a.cancel());
+      name.animate(
+        [
+          { transform: `translateX(${-out * 40}px)`, opacity: 0, filter: 'blur(3px)' },
+          { transform: `translateX(${out * 3}px)`, opacity: 1, filter: 'blur(0)', offset: 0.7 },
+          { transform: 'none', opacity: 1, filter: 'none' },
+        ],
+        { duration: 420, delay: 60, easing: 'cubic-bezier(0.22, 0.8, 0.36, 1)', fill: 'backwards' },
+      );
+    };
+    window.addEventListener('pointerup', (e) => letGo(e, false));
+    window.addEventListener('pointercancel', (e) => letGo(e, true));
+    area.addEventListener(
+      'click',
+      (e) => {
+        if (performance.now() < quietUntil) {
+          e.preventDefault();
+          e.stopPropagation();
+          quietUntil = 0;
+        }
+      },
+      true,
+    );
   }
   function mapFlip(card: HTMLCanvasElement | null, d: number): void {
     const cv = $<HTMLCanvasElement>('arenaPic');
@@ -1094,7 +1329,7 @@ export function createLobby(host: LobbyHost): {
   // ------------------------------------------------------------ the Match page
   $('arenaPrev').addEventListener('click', () => stepArena(-1));
   $('arenaNext').addEventListener('click', () => stepArena(1));
-  swipeable($('arenaPic').closest<HTMLElement>('.panel')!, stepArena); // the whole arena panel
+  dragMaps($('arenaPic').closest<HTMLElement>('.panel')!); // the whole arena panel: the map is held and dragged
   // a dot for each map, under its picture
   for (const m of MAPS) {
     const b = document.createElement('button');
@@ -1136,11 +1371,14 @@ export function createLobby(host: LobbyHost): {
       drawArena();
     }
   }).observe($('arenaPic').parentElement!);
+  /** The arena the picture shows: everyone where they will start: online, in the room's order (P1 first), which is the round's. */
+  function previewWorld(): World {
+    const people = [{ p: myP(), c: host.myColor }, ...guests().map((g) => ({ p: guestP(g), c: g.colorId }))].sort((x, y) => x.p - y.p).map((x) => x.c);
+    return createWorld({ ...worldConfig(s(), people[0], PREVIEW_SEED, people.slice(1)), roundTicks: 0 });
+  }
   function drawArena(): void {
     const cv = $<HTMLCanvasElement>('arenaPic');
-    // everyone where they will start: online, in the room's order (P1 first), which is the round's
-    const people = [{ p: myP(), c: host.myColor }, ...guests().map((g) => ({ p: guestP(g), c: g.colorId }))].sort((x, y) => x.p - y.p).map((x) => x.c);
-    const w = createWorld({ ...worldConfig(s(), people[0], PREVIEW_SEED, people.slice(1)), roundTicks: 0 });
+    const w = previewWorld();
     cv.style.aspectRatio = `${w.w} / ${w.h}`;
     const dpr = host.density();
     // measured at the size the row gives it, then set to exactly the size of what is drawn, so that each of
