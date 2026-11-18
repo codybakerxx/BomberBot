@@ -377,13 +377,13 @@ assert.strictEqual(back.last('room')!.host, back.last('room')!.you, 'the friend 
   assert.deepStrictEqual(teamChoices(s, four, 'blue'), [0, 1, 2, 3, 4, 5, 6, 7]);
   assert.ok(pickTeam(s, four, 'blue', 0));
   assert.deepStrictEqual(teamsFor(s, four), [0, 1, 2, 0], 'blue joins your (red) team');
-  assert.deepStrictEqual(seating(s, four), ['gold', 'blue', 'black', 'pink'], 'and sits beside you');
+  assert.deepStrictEqual(seating(s, four), four, 'and stays where it sits: only a drag moves a card');
   // a colour nobody has: a team of its own again
   assert.ok(pickTeam(s, four, 'blue', 5));
   assert.deepStrictEqual(teamsFor(s, four), [0, 1, 2, 5]);
   // dragged onto a card: it sits beside that robot and joins its team
   dropOnto(s, four, 'pink', 'gold', true);
-  assert.deepStrictEqual(seating(s, four), ['gold', 'pink', 'blue', 'black']);
+  assert.deepStrictEqual(seating(s, four), ['gold', 'pink', 'black', 'blue']);
   assert.deepStrictEqual(teamsFor(s, four), [0, 1, 0, 5], 'pink is on your team now');
   // a tap where a name is: its whole team takes the next colour nobody has
   assert.equal(recolour(s, four, 'pink'), 2);
@@ -401,13 +401,6 @@ assert.strictEqual(back.last('room')!.host, back.last('room')!.you, 'the friend 
   assert.ok(pickTeam(s, four, 'blue', 0));
   assert.deepStrictEqual(teamsFor(s, four), [0, 0, 0, 0]);
   assert.equal(lineUp(s, four), 'All one team');
-  // the card jumps to sit after the last robot of its new colour
-  s.seats = ['gold', 'black', 'pink', 'blue'];
-  s.teams = { gold: 0, black: 1, pink: 2, blue: 3 };
-  pickTeam(s, four, 'blue', 0);
-  assert.deepStrictEqual(seating(s, four), ['gold', 'blue', 'black', 'pink'], 'red like you: right after you');
-  pickTeam(s, four, 'pink', 1);
-  assert.deepStrictEqual(seating(s, four), ['gold', 'blue', 'black', 'pink'], 'blue like black: right after black');
   // a team size that stops fitting (a player more) turns into Custom for good, nobody's team changing
   const five = [...four, 'red'];
   s.teamSize = 2;

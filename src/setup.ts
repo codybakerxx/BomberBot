@@ -380,23 +380,11 @@ export function teamChoices(s: MatchSetup, colours: string[], colour: string): n
   return TEAMS.map((_, t) => t);
 }
 
-/**
- * In Custom: seat `colour` just after the last robot of team `team` (the owner's ask: the card jumps to sit
- * after its new teammates). Nobody else's team changes.
- */
-function seatBeside(s: MatchSetup, colour: string, team: number): void {
-  const rest = s.seats.filter((c) => c !== colour);
-  let at = -1;
-  rest.forEach((c, k) => {
-    if (s.teams[c] === team) at = k;
-  });
-  if (at >= 0) s.seats = [...rest.slice(0, at + 1), colour, ...rest.slice(at + 1)];
-}
 
 /**
  * Put a robot on team `team` with the Team ‹ › on its card. In Custom, it joins whoever has that colour and
- * moves to sit beside them (the owner's ask); with Teams of 2 or 4, its whole row (its team's rows) takes the
- * colour. False if not allowed (see teamChoices).
+ * stays where it sits (the owner's call: only dragging a card moves it); with Teams of 2 or 4, its whole row
+ * (its team's rows) takes the colour. False if not allowed (see teamChoices).
  */
 export function pickTeam(s: MatchSetup, colours: string[], colour: string, team: number): boolean {
   if (!teamChoices(s, colours, colour).includes(team)) return false;
@@ -406,7 +394,6 @@ export function pickTeam(s: MatchSetup, colours: string[], colour: string, team:
     return true;
   }
   s.teams[colour] = team;
-  seatBeside(s, colour, team);
   return true;
 }
 
