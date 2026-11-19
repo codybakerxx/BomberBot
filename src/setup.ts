@@ -76,7 +76,14 @@ export function mapOf(s: MatchSetup): (typeof MAPS)[number] {
   return MAPS.find((m) => m.id === s.map) ?? MAPS[0];
 }
 
-/** How many bricks fill the arena: a share of the open tiles (0.78 is the game's usual). */
+/**
+ * Brick density (the owner's ask and name, 19 November 2026): how much of the arena's open floor starts as
+ * bricks, in percent (the corners the robots start in always stay clear). It was five steps (BRICKS, kept to
+ * read a setup saved before); the usual, 78%, is Normal's.
+ */
+export const BRICK_SHARE_DEFAULT = 78;
+export const BRICK_SHARE_MAX = 100;
+/** The five steps Bricks had before (a setup saved then is read as its step's percentage). */
 export const BRICKS = [
   { name: 'Few', density: 0.5 },
   { name: 'Some', density: 0.65 },
@@ -172,8 +179,8 @@ export interface MatchSetup {
   closeIn: number;
   /** rounds to win the match */
   firstTo: number;
-  /** index into BRICKS */
-  bricks: number;
+  /** how much of the open floor starts as bricks, in percent (0 to BRICK_SHARE_MAX, 78 the usual) */
+  brickShare: number;
   /** a custom start: when off, everyone starts with 1 bomb, a blast of 1 and no speed power-ups */
   startOn: boolean;
   startBombs: number;
@@ -183,6 +190,8 @@ export interface MatchSetup {
   itemShare: number;
   /** a custom power-up mix (which kinds the power-ups are): when off, the usual mix (ITEM_WEIGHT) */
   itemsOn: boolean;
+  /** in a custom mix, each kind switched on or off (the owner's ask, 19 November 2026); `items` says how often */
+  itemOn: Record<ItemKind, boolean>;
   /** index into ITEM_AMOUNTS for each kind */
   items: Record<ItemKind, number>;
   /** lives each robot has in a round, 1 to MAX_LIVES (sim.ts) */
@@ -596,7 +605,7 @@ export function defaultSetup(myColor: string): MatchSetup {
     randLevels: false,
     v: SETUP_VERSION,
     firstTo: 1,
-    bricks: 2,
+    brickShare: BRICK_SHARE_DEFAULT,
     startOn: false,
     startBombs: 1,
     startFire: START_FIRE,
@@ -604,6 +613,7 @@ export function defaultSetup(myColor: string): MatchSetup {
     itemShare: ITEM_SHARE_DEFAULT,
     itemsOn: false,
     items: { bomb: 2, fire: 2, speed: 2, kick: 2, grab: 2, shield: 2, curse: 2, laptop: 2 },
+    itemOn: { bomb: true, fire: true, speed: true, kick: true, grab: true, shield: true, curse: true, laptop: true },
     lives: 1,
     afterlife: 'watch', // watching is the standard: Post-Mortem Behavior off (the owner's call)
     postMortem: false,
@@ -647,7 +657,7 @@ export const RULE_GROUPS = {
   time: ['timerOn', 'roundSecs', 'closeIn'],
   winning: ['firstTo'],
   lives: ['lives', 'postMortem', 'afterlife', 'angelsBack'],
-  arena: ['bricks', 'itemShare', 'itemsOn', 'items'],
+  arena: ['brickShare', 'itemShare', 'itemsOn', 'itemOn', 'items'],
   start: ['startOn', 'startBombs', 'startFire', 'startSpeed'],
 } as const satisfies Record<string, readonly (keyof MatchSetup)[]>;
 export type RuleGroup = keyof typeof RULE_GROUPS;
@@ -706,7 +716,7 @@ export function itemChances(s: MatchSetup): [ItemKind, number][] {
   const share = s.itemShare / 100;
   if (!s.itemsOn) return share === ITEM_SHARE ? ITEM_CHANCE : itemMix(ITEM_WEIGHT, share);
   return itemMix(
-    ITEM_WEIGHT.map(([k, w]): [ItemKind, number] => [k, w * ITEM_AMOUNTS[s.items[k]].times]),
+    ITEM_WEIGHT.map(([k, w]): [ItemKind, number] => [k, s.itemOn[k] === false ? 0 : w * ITEM_AMOUNTS[s.items[k]].times]),
     share,
   );
 }
@@ -721,7 +731,7 @@ export function worldConfig(s: MatchSetup, myColor: string, seed: number, guests
     cols: size.cols,
     rows: size.rows,
     players: [{ colorId: myColor }, ...guests.map((colorId) => ({ colorId })), ...s.cpus.map((c) => ({ colorId: c.colorId }))],
-    softDensity: BRICKS[s.bricks].density,
+    softDensity: s.brickShare / 100,
     roundTicks: s.timerOn ? s.roundSecs * TICK_HZ : 0,
     shrinkTicks: CLOSE_IN[s.closeIn].secs * TICK_HZ,
     itemChance: itemChances(s),
@@ -752,6 +762,7 @@ export function summary(s: MatchSetup, guests = 0): string {
   if (afterlifeOf(s) === 'angel') parts.push(s.angelsBack ? 'Angels come back' : 'Angels');
   if (afterlifeOf(s) === 'zombie') parts.push('Zombies');
   if (s.startOn) parts.push('Custom start');
+  if (s.brickShare !== BRICK_SHARE_DEFAULT) parts.push(`Brick density ${s.brickShare}%`);
   if (s.itemShare !== ITEM_SHARE_DEFAULT) parts.push(s.itemShare ? `Power-up density ${s.itemShare}%` : 'No power-ups');
   if (s.itemsOn && s.itemShare) parts.push('Custom power-ups');
   return parts.join(' · ');
@@ -794,7 +805,10 @@ export function readSetup(raw: unknown, myColor: string, colorIds: string[]): Ma
   out.closeIn = oldClose ? ([0, 2, 4][clampInt(r.closeIn, 0, 2, 1)] ?? d.closeIn) : clampInt(r.closeIn, 0, CLOSE_IN.length - 1, d.closeIn);
   // saved before Rounds to win defaulted to 1: it goes back to 1
   out.firstTo = typeof r.v === 'number' && r.v >= 2 ? clampInt(r.firstTo, 1, MAX_FIRST_TO, d.firstTo) : d.firstTo;
-  out.bricks = clampInt(r.bricks, 0, BRICKS.length - 1, d.bricks);
+  // (saved before Brick density: one of the five steps of Bricks)
+  const old = r as Partial<MatchSetup> & { bricks?: unknown };
+  if (typeof old.brickShare === 'number') out.brickShare = clampInt(old.brickShare, 0, BRICK_SHARE_MAX, d.brickShare);
+  else if (typeof old.bricks === 'number') out.brickShare = Math.round(BRICKS[clampInt(old.bricks, 0, BRICKS.length - 1, 2)].density * 100);
   if (typeof r.startOn === 'boolean') out.startOn = r.startOn;
   out.startBombs = clampInt(r.startBombs, 1, MAX_BOMBS, 1);
   out.startFire = clampInt(r.startFire, START_FIRE, MAX_FIRE, START_FIRE);
@@ -802,8 +816,19 @@ export function readSetup(raw: unknown, myColor: string, colorIds: string[]): Ma
   out.itemShare = clampInt(r.itemShare, 0, 100, d.itemShare);
   out.itemShare -= out.itemShare % ITEM_SHARE_STEP;
   if (typeof r.itemsOn === 'boolean') out.itemsOn = r.itemsOn;
+  out.itemOn = { ...d.itemOn };
   if (r.items && typeof r.items === 'object') {
     for (const [k] of ITEM_CHANCE) out.items[k] = clampInt((r.items as Record<string, unknown>)[k], 0, ITEM_AMOUNTS.length - 1, 2);
+  }
+  if (r.itemOn && typeof r.itemOn === 'object') {
+    for (const [k] of ITEM_CHANCE) if (typeof (r.itemOn as Record<string, unknown>)[k] === 'boolean') out.itemOn[k] = (r.itemOn as Record<string, boolean>)[k];
+  }
+  // (a kind saved at Off, before each had its own switch, is switched off at the usual amount)
+  for (const [k] of ITEM_CHANCE) {
+    if (out.items[k] === 0) {
+      out.itemOn[k] = false;
+      out.items[k] = 2;
+    }
   }
   out.lives = clampInt(r.lives, 1, MAX_LIVES, 1);
   // Angels were on by default in version 4, for one evening; the owner had them off by default, so a setup

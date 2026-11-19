@@ -32,7 +32,7 @@ import {
   MAPS,
   mapOf,
   type ArenaId,
-  BRICKS,
+  BRICK_SHARE_MAX,
   CLOSE_IN,
   ITEM_AMOUNTS,
   ITEM_SHARE_STEP,
@@ -1543,17 +1543,18 @@ export function createLobby(host: LobbyHost): {
     ], groupReset('lives')),
     group('Arena', '<rect x="3" y="5" width="18" height="14" rx="1.5"/><path d="M3 12h18M9.5 5v7M14.5 12v7"/>', [
       slider({
-        label: 'Bricks',
-        hint: 'How much of the arena starts filled. The picture above shows it.',
+        // the owner's ask and name, 19 November 2026: a percentage of the arena (it was Few to Packed)
+        label: 'Brick density',
+        hint: 'How much of the arena’s open floor starts as bricks (the corners stay clear). The picture above shows it.',
         min: 0,
-        max: BRICKS.length - 1,
-        normal: () => usual().bricks,
-        get: () => s().bricks,
+        max: BRICK_SHARE_MAX,
+        normal: () => usual().brickShare,
+        get: () => s().brickShare,
         set: (v) => {
-          s().bricks = v;
+          s().brickShare = v;
           changed();
         },
-        text: (v) => BRICKS[v].name,
+        text: (v) => (v ? `${v}%` : 'None'),
       }),
       slider({
         // the owner's ask, 19 November 2026: how many power-ups an arena has (his name for it)
@@ -1582,19 +1583,31 @@ export function createLobby(host: LobbyHost): {
           changed();
         },
         offText: 'The usual mix. Shields, curses and laptops are very rare.',
+        // each kind a switch (the owner's ask, 19 November 2026), and how often under it while it is on
         under: ITEM_NAMES.map(([kind, name, what]) =>
-          slider({
+          toggle({
             label: name,
             hint: what,
-            min: 0,
-            max: ITEM_AMOUNTS.length - 1,
-            normal: () => usual().items[kind],
-            get: () => s().items[kind],
+            get: () => s().itemOn[kind],
             set: (v) => {
-              s().items[kind] = v;
+              s().itemOn[kind] = v;
               changed();
             },
-            text: (v) => ITEM_AMOUNTS[v].name,
+            offText: 'Never turns up.',
+            under: [
+              slider({
+                label: 'How often',
+                min: 1,
+                max: ITEM_AMOUNTS.length - 1,
+                normal: () => usual().items[kind],
+                get: () => s().items[kind],
+                set: (v) => {
+                  s().items[kind] = v;
+                  changed();
+                },
+                text: (v) => ITEM_AMOUNTS[v].name,
+              }),
+            ],
           }),
         ),
       }),

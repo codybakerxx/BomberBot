@@ -115,6 +115,34 @@ for (const a of ARENAS) {
   assert.ok(summary({ ...defaultSetup('gold'), itemShare: 30 }).includes('Power-up density 30%'));
   assert.ok(summary({ ...defaultSetup('gold'), itemShare: 0 }).includes('No power-ups'));
   assert.ok(!summary(defaultSetup('gold')).includes('Power-up'), 'the usual is not mentioned');
+  // a kind switched off never turns up, whatever its amount; the others share its bricks
+  const noBombs = { ...defaultSetup('gold'), itemsOn: true, itemOn: { ...defaultSetup('gold').itemOn, bomb: false } };
+  const nb = itemChances(noBombs);
+  assert.equal(nb[0][1], 0);
+  assert.ok(Math.abs(sum(nb) - 0.6) < 1e-12);
+  // a kind saved at Off, before the switches, comes back switched off at Normal
+  const was = readSetup({ ...defaultSetup('gold'), itemOn: undefined, items: { ...defaultSetup('gold').items, curse: 0 } }, 'gold', colorIds);
+  assert.equal(was.itemOn.curse, false);
+  assert.equal(was.items.curse, 2);
+  assert.equal(was.itemOn.bomb, true);
+}
+
+// Brick density (the owner's ask, 19 November 2026): a percentage of the open floor, 78% by default
+{
+  const colorIds = COLORS.map((c) => c.id);
+  assert.equal(defaultSetup('gold').brickShare, 78);
+  assert.equal(worldConfig(defaultSetup('gold'), 'gold', 1).softDensity, 0.78);
+  const none = createWorld(worldConfig({ ...defaultSetup('gold'), brickShare: 0 }, 'gold', 3));
+  assert.equal(none.tiles.filter((t) => t === SOFT).length, 0, 'None: no bricks');
+  const full = createWorld(worldConfig({ ...defaultSetup('gold'), brickShare: 100 }, 'gold', 3));
+  const some = createWorld(worldConfig({ ...defaultSetup('gold'), brickShare: 50 }, 'gold', 3));
+  assert.ok(full.tiles.filter((t) => t === SOFT).length > some.tiles.filter((t) => t === SOFT).length);
+  // saved as one of the old five steps: its percentage
+  const old = { ...defaultSetup('gold'), bricks: 0 } as Partial<MatchSetup> & { bricks: number };
+  delete old.brickShare;
+  assert.equal(readSetup(old, 'gold', colorIds).brickShare, 50);
+  assert.equal(readSetup({ ...defaultSetup('gold'), brickShare: 140 }, 'gold', colorIds).brickShare, 100);
+  assert.ok(summary({ ...defaultSetup('gold'), brickShare: 40 }).includes('Brick density 40%'));
 }
 
 // the arena is a whole number of page pixels on a screen of density 3 (an iPhone), so it is never stretched
@@ -647,7 +675,7 @@ console.log('room checks passed');
   const d = defaultSetup(me);
   const s = defaultSetup(me);
   s.arena = 'compact';
-  Object.assign(s, { timerOn: false, roundSecs: 200, closeIn: 4, firstTo: 3, lives: 4, postMortem: true, afterlife: 'zombie', angelsBack: true, bricks: 0, itemShare: 25, itemsOn: true, startOn: true, startBombs: 3, startFire: 4, startSpeed: 2 });
+  Object.assign(s, { timerOn: false, roundSecs: 200, closeIn: 4, firstTo: 3, lives: 4, postMortem: true, afterlife: 'zombie', angelsBack: true, brickShare: 40, itemShare: 25, itemsOn: true, startOn: true, startBombs: 3, startFire: 4, startSpeed: 2 });
   s.items = { ...s.items, bomb: 0 };
   const all = defaultRules(s, me);
   const groups = Object.keys(RULE_GROUPS) as (keyof typeof RULE_GROUPS)[];
