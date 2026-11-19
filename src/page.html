@@ -208,6 +208,14 @@
     color: rgba(255, 255, 255, min(1, calc(0.55 * var(--pad-show, 1))));
   }
   .tbtn.on { background: rgba(255, 255, 255, 0.3); color: #fff; }
+  /* what A and B do when it is not the usual, small under the letter (the laptop's plane: touchHints in main.ts),
+     sized by the button's own height so it fits a short one (B on a 320 by 568 phone is 48 px tall) */
+  .tbtn { align-content: center; gap: 3px; container-type: size; }
+  .tbtn .tb-row { display: flex; align-items: center; gap: 5px; }
+  .tbtn .tb-key { font-size: min(34px, 50cqh); line-height: 1; }
+  .tbtn .tb-sub { font: 700 min(11px, 19cqh)/1.1 var(--font-display); letter-spacing: 0.08em; text-transform: uppercase; text-align: center; }
+  .tbtn .tb-ico { width: min(28px, 40cqh); height: min(28px, 40cqh); fill: none; stroke: currentColor; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+  .tbtn.laptop { border-color: rgba(111, 134, 255, 0.85); color: #d4dbff; box-shadow: 0 0 14px rgba(111, 134, 255, 0.35); }
 
   /* upright: swipe pad fills the left two thirds, B over A on the right.
      The controls start one block lower than they used to, to leave a free line under the top bar

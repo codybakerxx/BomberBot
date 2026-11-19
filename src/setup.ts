@@ -111,6 +111,7 @@ export const ITEM_NAMES: [ItemKind, string, string][] = [
   ['grab', 'Glove', 'Lift and throw bombs with B'],
   ['shield', 'Shield', 'Survive one blast'],
   ['curse', 'Curse', 'Slows you down for 8 seconds'],
+  ['laptop', 'Laptop', 'B flies a plane: steer it, A drops 3 bombs'],
 ];
 
 /** Round lengths the timer can be set to: 30 seconds to 5 minutes, in steps of 15 seconds. */
@@ -592,7 +593,7 @@ export function defaultSetup(myColor: string): MatchSetup {
     startFire: START_FIRE,
     startSpeed: 0,
     itemsOn: false,
-    items: { bomb: 2, fire: 2, speed: 2, kick: 2, grab: 2, shield: 2, curse: 2 },
+    items: { bomb: 2, fire: 2, speed: 2, kick: 2, grab: 2, shield: 2, curse: 2, laptop: 2 },
     lives: 1,
     afterlife: 'watch', // watching is the standard: Post-Mortem Behavior off (the owner's call)
     postMortem: false,

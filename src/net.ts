@@ -13,7 +13,7 @@
  * (predict.ts), and says of each press which tick it is for (`k`). The server keeps the press until that tick
  * (`InputQueue`, the same few lines on both sides), so the tick comes out as the page already drew it.
  */
-import { createWorld, type Dir, type ItemKind, type PlayerInput, type World, type WorldConfig } from './sim';
+import { AIM_STEPS, createWorld, type Dir, type ItemKind, type PlayerInput, type World, type WorldConfig } from './sim';
 import type { MatchSetup } from './setup';
 import type { DanceId } from './dances';
 import type { BotLevel } from './bot';
@@ -22,7 +22,7 @@ import type { BotLevel } from './bot';
  * The version of these messages. A page says it in `hello`; the server turns away a page with another (one
  * left open from before an update), telling it to reload. Raise it whenever a message changes its meaning.
  */
-export const PROTOCOL = 2;
+export const PROTOCOL = 3; // 3: the laptop's plane (steering in the inputs, planes and falling bombs in the world)
 
 /** Room codes: four letters, without the ones easily mixed up (I, O) or that spell words easily (vowels). */
 export const CODE_LETTERS = 'BCDFGHJKLMNPQRSTVWXZ';
@@ -52,23 +52,57 @@ export function readName(raw: unknown): string {
 
 // ---------------------------------------------------------------- inputs
 
-/** A player's input on one tick in five bits: the direction (0 to 4), then A (8) and B (16). */
+/**
+ * A player's input on one tick: the direction (0 to 4), then A (8) and B (16), in five bits; and only while
+ * flying a plane (the laptop), which way to steer it in the bits above (IN_AIM: the aim, 0 to 63, plus one;
+ * nothing there means no steering).
+ */
 export const IN_A = 8;
 export const IN_B = 16;
+export const IN_AIM = 32;
+/** Every bit an input can have. */
+export const IN_ALL = 31 + IN_AIM * AIM_STEPS;
 export function packInput(p: PlayerInput | undefined): number {
-  return p ? (p.dir & 7) | (p.a ? IN_A : 0) | (p.b ? IN_B : 0) : 0;
+  if (!p) return 0;
+  const aim = p.aim !== undefined && Number.isInteger(p.aim) && p.aim >= 0 && p.aim < AIM_STEPS ? (p.aim + 1) * IN_AIM : 0;
+  return (p.dir & 7) | (p.a ? IN_A : 0) | (p.b ? IN_B : 0) | aim;
 }
 export function unpackInput(v: number): PlayerInput {
   const dir = v & 7;
-  return { dir: (dir <= 4 ? dir : 0) as Dir, a: (v & IN_A) !== 0, b: (v & IN_B) !== 0 };
+  const out: PlayerInput = { dir: (dir <= 4 ? dir : 0) as Dir, a: (v & IN_A) !== 0, b: (v & IN_B) !== 0 };
+  const aim = Math.floor(v / IN_AIM) % 128;
+  if (aim >= 1 && aim <= AIM_STEPS) out.aim = aim - 1;
+  return out;
 }
-/** One tick's inputs for every player, as one character each (0-9, a-v): "0a00" for four players. */
+/**
+ * One tick's inputs for every player: one character each (0-9, a-v), "0a00" for four players; an input that
+ * steers a plane is two, a character for its five bits from another set (STEER) and one for its aim (AIMS).
+ */
 const DIGITS = '0123456789abcdefghijklmnopqrstuv';
+const STEER = 'wxyzABCDEFGHIJKLMNOPQRSTUVWXYZ-_';
+const AIMS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
 export function tickText(codes: number[]): string {
-  return codes.map((c) => DIGITS[c & 31]).join('');
+  return codes
+    .map((c) => {
+      const aim = Math.floor(c / IN_AIM) % 128;
+      return aim >= 1 && aim <= AIM_STEPS ? STEER[c & 31] + AIMS[aim - 1] : DIGITS[c & 31];
+    })
+    .join('');
 }
 export function tickCodes(text: string): number[] {
-  return [...text].map((ch) => Math.max(0, DIGITS.indexOf(ch)));
+  const out: number[] = [];
+  for (let i = 0; i < text.length; i++) {
+    const d = DIGITS.indexOf(text[i]);
+    if (d >= 0) {
+      out.push(d);
+      continue;
+    }
+    const s = STEER.indexOf(text[i]);
+    const a = AIMS.indexOf(text[i + 1] ?? '');
+    out.push(s < 0 ? 0 : s | (a < 0 ? 0 : (a + 1) * IN_AIM));
+    i++;
+  }
+  return out;
 }
 
 /** What a player pressed, and the tick it is for. `n` counts a page's presses in a round, so the server can say how far it has got. */
@@ -99,7 +133,7 @@ export function newQueue(held = 0, pending: StampedInput[] = []): InputQueue {
 export function takeInput(q: InputQueue, tick: number): number {
   while (q.pending.length && q.pending[0].k <= tick) {
     const m = q.pending.shift()!;
-    const v = m.v & 31;
+    const v = m.v & IN_ALL;
     if (v & IN_A && !(q.held & IN_A)) q.pressA = true;
     if (v & IN_B && !(q.held & IN_B)) q.pressB = true;
     q.held = v;
@@ -116,8 +150,8 @@ export function takeInput(q: InputQueue, tick: number): number {
 export const CHECK_EVERY = 30;
 
 /**
- * A checksum of everything in a world that matters to how the round goes on: the tiles, every robot, bomb,
- * blast, power-up and falling block. Two worlds with the same checksum are, for practical purposes, the same.
+ * A checksum of everything in a world that matters to how the round goes on: the tiles, every robot (and its
+ * plane), bomb, bomb falling from a plane, blast, power-up and falling block. Two worlds with the same checksum are, for practical purposes, the same.
  * Numbers are hashed by their exact bits, so the smallest drift shows.
  */
 export function worldHash(w: World): number {
@@ -146,6 +180,19 @@ export function worldHash(w: World): number {
     num(p.angel ? p.angelS : -1);
     num(p.zombie ? (p.zombieDown ? 2 : 1) : 0);
     num(p.shieldTicks + p.curseTicks * 4096);
+    num(p.laptop ? 1 : 0);
+    num(p.flying);
+    if (p.flying) {
+      num(p.planeX);
+      num(p.planeY);
+      num(p.planeDir * 8 + p.planeBombs);
+    }
+  }
+  num(w.drops.length);
+  for (const d of w.drops) {
+    num(d.x);
+    num(d.y);
+    num(d.t);
   }
   num(w.bombs.length);
   for (const b of w.bombs) {

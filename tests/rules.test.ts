@@ -862,10 +862,11 @@ for (let seed = 1; seed <= 40; seed++) {
 // 18. how rare each power-up is
 {
   const chance = Object.fromEntries(ITEM_CHANCE) as Record<string, number>;
-  assert.deepEqual(ITEM_CHANCE.map(([k]) => k), ['bomb', 'fire', 'speed', 'kick', 'grab', 'shield', 'curse']);
-  assert.ok(Math.abs(ITEM_CHANCE.reduce((s, [, c]) => s + c, 0) - 0.6) < 1e-12, '60% of bricks hide something');
+  assert.deepEqual(ITEM_CHANCE.map(([k]) => k), ['bomb', 'fire', 'speed', 'kick', 'grab', 'shield', 'curse', 'laptop']);
+  assert.ok(Math.abs(ITEM_CHANCE.reduce((s, [, c]) => s + c, 0) - 0.6125) < 1e-12, '61.25% of bricks hide something');
   assert.equal(chance.shield, 0.0125);
   assert.equal(chance.curse, 0.0125);
+  assert.equal(chance.laptop, 0.0125);
   for (const k of ['bomb', 'fire', 'speed']) assert.ok(chance[k] >= 10 * chance.shield, `${k} is far commoner than a shield or a curse`);
   assert.equal(chance.kick, 0.03125);
   assert.equal(chance.grab, 0.03125);
@@ -886,11 +887,14 @@ for (let seed = 1; seed <= 40; seed++) {
   }
   for (const [k, c] of ITEM_CHANCE) {
     const share = total[k] / bricks;
-    // boots and gloves run a touch over, because every arena is given one if the dice gave none
-    assert.ok(Math.abs(share - c) < 0.004, `${k}: ${(share * 100).toFixed(2)}% of bricks, meant to be ${c * 100}%`);
+    // boots, gloves and laptops run over, because every arena is given one if the dice gave none (the laptop,
+    // the rarest of the three, most: about four arenas in ten get theirs that way)
+    const over = k === 'laptop' ? 0.007 : 0.004;
+    assert.ok(share - c > -0.004 && share - c < over, `${k}: ${(share * 100).toFixed(2)}% of bricks, meant to be ${c * 100}%`);
   }
   assert.equal(arenasWith.kick, N, 'every arena has a boot');
   assert.equal(arenasWith.grab, N, 'every arena has a glove');
+  assert.equal(arenasWith.laptop, N, 'every arena has a laptop');
   for (const k of ['shield', 'curse']) {
     const share = arenasWith[k] / N;
     assert.ok(share > 0.52 && share < 0.72, `${k} turns up in about six arenas in ten (${(share * 100).toFixed(0)}%)`);

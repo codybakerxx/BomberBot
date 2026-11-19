@@ -23,7 +23,7 @@ import { PAD } from './bindings';
 import { createRemap } from './remap';
 import { CpuSlot, Guest, ITEM_NAMES, MatchSetup, Prefs, SHARPNESS, SOUND_GROUPS, SOUND_NAMES, TEAMS, arenaOf, clockText, defaultPrefs, defaultSetup, load, readPrefs, readSetup, rollCpus, save, wholeTile, worldConfig } from './setup';
 import { BOMB_ICON, Opt, answerConfirm, choice, confirmFirst, confirmOpen, group, heading, mount, note, slider, toggle, wireConfirm, wireFlash } from './ui';
-import { Hand, SENSITIVITY, DEFAULT_SENS, STRAIGHT, standardAims } from './swipe';
+import { Hand, DEFAULT_SENS, OLD_SENS, SENS_DEG, SENS_MAX, STRAIGHT, sensTilt, standardAims } from './swipe';
 import { Online } from './online';
 import { canInstall, howToAdd, install, isApple, myEndpoint, onWebsite, pushOff, pushOn, pushState, type PushState } from './app';
 import { decodeWorld, packInput, readCode, unpackInput, type BellAnswer, type Score, type Seat, type ServerMsg } from './net';
@@ -122,6 +122,8 @@ const CRUSHED = -2;
 let hurried = false;
 /** the angel tip has been shown this match (it says how angels play, the first time someone here is one) */
 let angelTipShown = false;
+/** the first laptop picked up here in a match gets a tip saying what it does */
+let laptopTipShown = false;
 const playTip = $('playTip');
 let tipTimer = 0;
 /** A short line over the top of the arena for a few seconds, during a round. */
@@ -152,14 +154,14 @@ let decidedAt = -1;
 /** the frame clock: seconds, as passed to render() */
 let clock = 0;
 
-// Control settings, remembered on this device under the key "controls4".
+// Control settings, remembered on this device under the key "controls5".
 // (Swipe length is not a setting: the quiet zone is always the standard size, `QUIET` in swipe.ts.)
 
 /**
  * `hand` is the thumb that steers: the swipe pad sits on that side, A and B on the other.
- * `sens` is Movement sensitivity, an index into SENSITIVITY in swipe.ts (Low, Medium, High: how far the pad
- * reads swipes as leaning, 2°, 5° or 8°). It replaced the Standard / My thumb switch and Match my thumb
- * (the owner's call, November 2026; docs/SWIPE-HISTORY.md).
+ * `sens` is Movement sensitivity, 0 to SENS_MAX percent (swipe.ts: how far the pad reads swipes as leaning,
+ * 0.45° for each 1%). It replaced the Standard / My thumb switch and Match my thumb (the owner's call,
+ * November 2026; docs/SWIPE-HISTORY.md), and was three steps, Low, Medium and High, until 18 November 2026.
  */
 const settings: { hand: Hand; sens: number } = { hand: 'left', sens: DEFAULT_SENS };
 
@@ -173,13 +175,18 @@ try {
 }
 
 try {
-  const saved = JSON.parse(localStorage.getItem('controls4') ?? 'null');
+  const saved = JSON.parse(localStorage.getItem('controls5') ?? 'null');
+  const four = saved ? null : JSON.parse(localStorage.getItem('controls4') ?? 'null');
   if (saved) {
     settings.hand = saved.hand === 'right' ? 'right' : 'left';
-    if (Number.isInteger(saved.sens) && saved.sens >= 0 && saved.sens < SENSITIVITY.length) settings.sens = saved.sens;
+    if (Number.isInteger(saved.sens) && saved.sens >= 0 && saved.sens <= SENS_MAX) settings.sens = saved.sens;
+  } else if (four) {
+    // From before (controls4): Low, Medium or High become 4%, 11% or 18%, the same lean to within a fifth of a degree
+    settings.hand = four.hand === 'right' ? 'right' : 'left';
+    if (Number.isInteger(four.sens) && four.sens >= 0 && four.sens < OLD_SENS.length) settings.sens = OLD_SENS[four.sens];
   } else {
-    // From before (controls3): the steering thumb, and a Match my thumb result in use becomes the nearest
-    // sensitivity (its average lean, which is how the owner's own 2° became Low)
+    // From before that (controls3): the steering thumb, and a Match my thumb result in use becomes the nearest
+    // sensitivity (its average lean: the owner's own 2° reads as 4%)
     const old = JSON.parse(localStorage.getItem('controls3') ?? 'null');
     if (old) {
       settings.hand = old.hand === 'right' ? 'right' : 'left';
@@ -189,11 +196,7 @@ try {
         let sum = 0;
         for (let d = 1; d <= 4; d++) sum += ((((STRAIGHT[d] - aims[d] + 180) % 360) + 360) % 360) - 180;
         const lean = Math.abs(sum / 4);
-        let best = DEFAULT_SENS;
-        SENSITIVITY.forEach((x, i) => {
-          if (Math.abs(x.tilt - lean) < Math.abs(SENSITIVITY[best].tilt - lean)) best = i;
-        });
-        settings.sens = best;
+        settings.sens = Math.max(0, Math.min(SENS_MAX, Math.round(lean / SENS_DEG)));
       }
     }
   }
@@ -647,8 +650,51 @@ function shake(time: number): void {
   shaken = true;
 }
 
+/** Your input, its steering (`aim`) kept only while you are flying the laptop's plane, when it is all it is for. */
+function flyingAim(inp: PlayerInput): PlayerInput {
+  const me = shownWorld().players[myIdx()];
+  if (inp.aim !== undefined && !(me && me.flying > 0)) delete inp.aim;
+  return inp;
+}
+
+/**
+ * What the A and B buttons do, on them, when it is not the usual: holding a laptop, B flies the plane; flying
+ * it, A drops a bomb (with how many are left) and B lands it. Only redrawn when that changes.
+ */
+let hintKey = '';
+const LAPTOP_GLYPH =
+  '<svg class="tb-ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="5" width="14" height="10" rx="1.5"/><path d="M2.5 18.5h19"/></svg>';
+function touchHints(): void {
+  const me = shownWorld().players[myIdx()];
+  const key = !me || !me.alive ? '' : me.flying > 0 ? `fly${me.planeBombs}` : me.laptop ? 'laptop' : '';
+  if (key === hintKey) return;
+  hintKey = key;
+  const a = $('btnA');
+  const b = $('btnB');
+  if (key.startsWith('fly')) {
+    const n = me.planeBombs;
+    a.innerHTML = `<span class="tb-key">A</span><small class="tb-sub">${n ? `drop · ${n} left` : 'all dropped'}</small>`;
+    b.innerHTML = '<span class="tb-key">B</span><small class="tb-sub">land</small>';
+    a.setAttribute('aria-label', `A button, drop a bomb from the plane, ${n} left`);
+    b.setAttribute('aria-label', 'B button, land the plane');
+  } else {
+    a.textContent = 'A';
+    a.setAttribute('aria-label', 'A button, drop bomb');
+    if (key === 'laptop') {
+      b.innerHTML = `<span class="tb-row"><span class="tb-key">B</span>${LAPTOP_GLYPH}</span><small class="tb-sub">fly plane</small>`;
+      b.setAttribute('aria-label', 'B button, fly the plane');
+    } else {
+      b.textContent = 'B';
+      b.setAttribute('aria-label', 'B button, lift or throw a bomb');
+    }
+  }
+  b.classList.toggle('laptop', key === 'laptop');
+}
+
 /** Draw one frame. */
 function render(time: number): void {
+  padCaption();
+  touchHints();
   shake(time);
   // (online the drawn world runs a little ahead of the server's: a block that has landed in it is drawn in now)
   const w = shownWorld();
@@ -748,6 +794,8 @@ function soundOf(e: GameEvent): void {
   else if (e.type === 'respawn' || e.type === 'revive') sfx.shield(); // back in the round
   else if (e.type === 'rise') sfx.curse(); // a zombie gets up
   else if (e.type === 'death') sfx.death();
+  else if (e.type === 'launch') sfx.lift(); // the laptop's plane goes up (Lift and land's sound)
+  else if (e.type === 'drop') sfx.kick(); // and lets a bomb go: a whoosh (Kick and throw's)
 }
 
 /** One step of the game rules on this screen: read the input, then advance (below). */
@@ -796,6 +844,13 @@ function advance(inputs: (PlayerInput | undefined)[]): void {
   if (firstZombie >= 0 && !angelTipShown) {
     angelTipShown = true;
     showTip(couch() ? `${nameOf(firstZombie)}: a zombie! Small bombs only` : 'You are a zombie! Drop small bombs in their way');
+  }
+  if (!laptopTipShown) {
+    const got = world.events.find((e) => e.type === 'pickup' && e.kind === 'laptop' && (net ? e.player === mi : human(e.player)));
+    if (got && got.type === 'pickup') {
+      laptopTipShown = true;
+      showTip(`${couch() ? `${nameOf(got.player)}: a` : 'A'} laptop! B flies a plane: steer it, A drops bombs`);
+    }
   }
   const firstAngel = world.players.findIndex((p, i) => (net ? i === mi : human(i)) && p.angel && world.tick >= p.angelFrom);
   if (firstAngel >= 0 && !angelTipShown) {
@@ -908,7 +963,7 @@ function frame(now: number): void {
     // online: the server's world moves on as its ticks come in (onRound's hooks), whatever screen is showing:
     // nobody can pause it. Here, what you press goes to the server (nothing while a menu is open) and the
     // picture that is drawn moves on to now, your robot with it (predict.ts).
-    net.frame(now, mode === 'playing' ? packInput(input.state()) : 0);
+    net.frame(now, mode === 'playing' ? packInput(flyingAim(input.state())) : 0);
   } else if (mode === 'playing' || mode === 'over') {
     // The round moves on in ticks of a sixtieth of a second, as many as the time that has passed holds. A
     // screen's frames are a sixtieth apart too, but never exactly (16.6 ms, then 16.8), and counted strictly
@@ -1118,10 +1173,24 @@ function checkSharp(now: number): void {
   }
 }
 
+/**
+ * The swipe pad's caption while playing: the Movement sensitivity, or while you fly a plane (the laptop
+ * power-up), what the pad and buttons do then. Called every frame; it only touches the page when it changes.
+ */
+let padText = '';
+function padCaption(): void {
+  const me = world?.players[myIdx()];
+  // (flying, the A and B buttons say the rest: touchHints)
+  const text = me && me.alive && me.flying > 0 ? 'Steer the plane' : `${settings.sens}% sensitivity`;
+  if (text === padText) return;
+  padText = text;
+  $('padTag').textContent = text;
+}
+
 /** Push the control settings into the swipe pad, the screen layout, the menu and the pad's caption, and optionally save them. */
 function applySettings(save: boolean): void {
   const right = settings.hand === 'right';
-  input.pad.aims = standardAims(settings.hand, SENSITIVITY[settings.sens].tilt);
+  input.pad.aims = standardAims(settings.hand, sensTilt(settings.sens));
 
   // which side the pad is on (page.html lays the controls out mirrored under body.righty)
   document.body.classList.toggle('righty', right);
@@ -1130,33 +1199,36 @@ function applySettings(save: boolean): void {
   $('saveNote').hidden = canSave;
   refreshSens();
 
-  // the caption on the swipe pad itself, visible while playing
-  $('padTag').textContent = `${SENSITIVITY[settings.sens].name} sensitivity`;
+  // the caption on the swipe pad itself, visible while playing (it says otherwise while flying a plane: padCaption)
+  padCaption();
 
   if (!save) return;
   try {
-    localStorage.setItem('controls4', JSON.stringify({ hand: settings.hand, sens: settings.sens }));
+    localStorage.setItem('controls5', JSON.stringify({ hand: settings.hand, sens: settings.sens }));
   } catch {
     /* storage is optional */
   }
 }
 
-/** Movement sensitivity: Low, Medium or High (SENSITIVITY in swipe.ts). */
+/**
+ * Movement sensitivity: 0% to 25% (swipe.ts), the percentage over the slider's circle (the owner's ask,
+ * 18 November 2026: more steps than Low, Medium and High, as a percentage).
+ */
 const sensOpts: Opt[] = [
   slider({
     label: 'Movement sensitivity',
     hint: () =>
-      `How far a swipe can curve and still go the way you meant. ${
-        ['Low suits thumbs that swipe dead straight.', 'Medium suits most thumbs.', 'High suits thumbs whose quick swipes curve a lot.'][settings.sens]
-      } (The swipes are read leaning ${SENSITIVITY[settings.sens].tilt}° ${settings.hand === 'right' ? 'anticlockwise' : 'clockwise'}.)`,
+      `How far a swipe can curve and still go the way you meant. 0% reads swipes dead straight; ${DEFAULT_SENS}% is the default. (Swipes are read leaning ${
+        +sensTilt(settings.sens).toFixed(1)
+      }° ${settings.hand === 'right' ? 'anticlockwise' : 'clockwise'}.)`,
     min: 0,
-    max: SENSITIVITY.length - 1,
+    max: SENS_MAX,
     get: () => settings.sens,
     set: (v) => {
       settings.sens = v;
       applySettings(true);
     },
-    text: (v) => SENSITIVITY[v].name,
+    text: (v) => `${v}%`,
     onThumb: true,
   }),
 ];
@@ -1292,6 +1364,7 @@ function newMatch(): void {
   roundNo = 0;
   matchWinner = -1;
   angelTipShown = false;
+  laptopTipShown = false;
   start();
 }
 /** Start the next round of the match in a fresh arena. */
@@ -1476,6 +1549,10 @@ function fillHero(): void {
   ];
   if (me.canKick) list.push(item('kick', '', 'Boot: kick bombs'));
   if (me.canGrab) list.push(item('grab', '', 'Glove: lift and throw bombs'));
+  if (me.laptop) {
+    const left = me.planeBombs;
+    list.push(me.flying ? item('laptop', String(left), `Flying the plane: ${left} ${left === 1 ? 'bomb' : 'bombs'} left`) : item('laptop', '', 'Laptop: B flies a plane'));
+  }
   if (me.shieldTicks > 0) list.push(item('shield', `${Math.ceil(me.shieldTicks / TICK_HZ)}s`, 'Shield: seconds left'));
   if (me.curseTicks > 0) list.push(item('curse', `${Math.ceil(me.curseTicks / TICK_HZ)}s`, 'Cursed: seconds left', true));
   if (list.length > 6) list.shift(); // (a full kit: the label gives up its room, so the kit stays on one line)
@@ -1849,7 +1926,7 @@ function onRound(w: World, s: Seat[], score: Score, fresh: boolean): void {
     redrawStatic();
     return;
   }
-  if (fresh && roundNo <= 1) angelTipShown = false; // a new match
+  if (fresh && roundNo <= 1) angelTipShown = laptopTipShown = false; // a new match
   blastedBy = -1;
   hurried = false;
   overShown = false;

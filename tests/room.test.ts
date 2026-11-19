@@ -73,7 +73,7 @@ for (const a of ARENAS) {
 
 // a custom power-up mix with Lots of everything asks for more than every brick: scaled down to fit
 {
-  const lots = { ...defaultSetup('gold'), itemsOn: true, items: { bomb: 3, fire: 3, speed: 3, kick: 3, grab: 3, shield: 3, curse: 3 } };
+  const lots = { ...defaultSetup('gold'), itemsOn: true, items: { bomb: 3, fire: 3, speed: 3, kick: 3, grab: 3, shield: 3, curse: 3, laptop: 3 } };
   const c = itemChances(lots);
   const sum = c.reduce((n, [, x]) => n + x, 0);
   assert.ok(Math.abs(sum - 1) < 1e-9, `at most every brick (${sum})`);

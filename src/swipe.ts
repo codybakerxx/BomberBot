@@ -44,19 +44,25 @@ const SETTLE_MS = 120; // ... for this long has come to rest
 
 /**
  * Movement sensitivity, the one setting for how swipes are read (Settings › Controls): how far the four aims
- * lean, clockwise for a left thumb (a right thumb leans the same amount the other way). The owner's design
- * (November 2026), in place of a standard lean and Match my thumb: Low 2° (his own measured thumb), Medium 5°,
- * High 8°. docs/SWIPE-HISTORY.md has every version before it and why.
+ * lean, clockwise for a left thumb (a right thumb leans the same amount the other way), as a percentage of
+ * the way to the diagonal (100% would be 45°). 0% to 25% in steps of 1% (the owner's ask, 18 November 2026:
+ * more steps, the percentage over the slider's circle). Before that it was three steps, the owner's design in
+ * place of a standard lean and Match my thumb: Low 2° (his own measured thumb), Medium 5° and High 8°, which
+ * are now 4%, 11% and 18%. docs/SWIPE-HISTORY.md has every version before it and why.
  */
-export const SENSITIVITY = [
-  { name: 'Low', tilt: 2 },
-  { name: 'Medium', tilt: 5 },
-  { name: 'High', tilt: 8 },
-] as const;
-/** Medium. */
-export const DEFAULT_SENS = 1;
-/** The lean everyone starts with: Medium's. */
-export const DEFAULT_TILT = SENSITIVITY[DEFAULT_SENS].tilt;
+export const SENS_MAX = 25;
+/** Degrees of lean for each 1% of Movement sensitivity: a hundredth of the 45° between a straight swipe and a diagonal. */
+export const SENS_DEG = 0.45;
+/** The lean of all four aims, in degrees, at a Movement sensitivity of `pct` percent. */
+export function sensTilt(pct: number): number {
+  return pct * SENS_DEG;
+}
+/** 11%: the old Medium (5°, now 4.95°). */
+export const DEFAULT_SENS = 11;
+/** The old three steps (Low, Medium, High) as percentages, for a setting saved before them (controls4). */
+export const OLD_SENS = [4, 11, 18];
+/** The lean everyone starts with. */
+export const DEFAULT_TILT = sensTilt(DEFAULT_SENS);
 /** The first standard lean (until November 2026), kept for the tests and experiments that were built on it. */
 export const FIRST_TILT = 15;
 
@@ -162,6 +168,18 @@ export class SwipePad {
     if (!this.unread) return;
     this.unread = false;
     this.onStroke?.(this.ux * this.ext - this.uy * this.pref, this.uy * this.ext + this.ux * this.pref);
+  }
+
+  /**
+   * Which way the thumb points, at any angle, for steering the laptop's plane (input.ts): from where the swipe
+   * being followed began to where the thumb is now, so a stroke that curves steers round with it, and a thumb
+   * resting at the end of a stroke keeps pointing the way it swiped. Null while no direction is held.
+   */
+  pointing(): [number, number] | null {
+    if (!this.down || this.dir === 0) return null;
+    const vx = this.x - this.ox;
+    const vy = this.y - this.oy;
+    return Math.hypot(vx, vy) >= START ? [vx, vy] : [this.ux, this.uy];
   }
 
   /** Call regularly (every game tick) so a thumb that has stopped is noticed. */

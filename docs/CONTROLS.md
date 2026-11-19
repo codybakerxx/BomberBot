@@ -19,7 +19,7 @@ How the game is controlled, how the swipe pad turns a moving thumb into a direct
 On a phone held upright the top bar comes first (the scoreboard and the timer are in it), then a blank line one block high, then the arena, and the controls fill everything below it:
 
 - **Swipe pad:** two thirds of the width. The cross in the middle only shows which direction is being read. It is not a button and you do not need to touch it.
-- **B:** on the other side, at the top. Lifts a bomb, then throws it (needs the glove).
+- **B:** on the other side, at the top. Lifts a bomb, then throws it (needs the glove). Holding a laptop, B flies its plane instead (see Flying the plane, below).
 - **A:** below B, the larger of the two. Drops a bomb.
 
 Which side the pad is on is a setting, **Steering thumb**. With *Left thumb* (the default) the pad is on the left and B and A on the right. With *Right thumb* the same layout is mirrored.
@@ -34,7 +34,7 @@ The **timer** is in the middle of the top bar, counting down the round. It turns
 
 There used to be a strip at the top left showing your bombs, blast length, speed, boot and glove. It was removed to make room for the timer. The shield and the curse are still shown on the robot itself.
 
-The caption on the swipe pad ("Medium sensitivity") is centred along its bottom edge.
+The caption on the swipe pad ("11% sensitivity", or "Steer the plane" while flying) is centred along its bottom edge.
 
 ## The lobby, Settings and the menu
 
@@ -66,6 +66,19 @@ The **menu during a match** (the three bars at the top right, or Escape) pauses 
 When a round ends, the result panel offers **Next round** and **Menu**. When someone has won the match it offers **Rematch** (same players and rules, the score back to 0) and **Lobby**.
 
 Keys in the menus: Tab moves between buttons, ← and → change the setting in focus, Q and E turn the pages, and Escape goes back one step (closes a question or a panel, leaves Settings, resumes from the menu, goes from the lobby to the title).
+
+## Flying the plane
+
+Holding a **laptop** (a power-up: see [GAME-RULES.md](GAME-RULES.md), Laptop), **B** is the laptop. The B button glows blue and says so: a laptop picture beside the B and **Fly plane** under it.
+
+- **B** takes off. Your robot stands still while you fly.
+- **Steering:** the plane goes the way you point and never stops, turning smoothly. On the swipe pad it follows your thumb: the way it points from where your stroke began, so a stroke that curves steers the plane round with it, and a thumb kept still at the end of a stroke keeps pointing that way. Lifting the thumb lets the plane fly straight on. With keys or a D-pad it goes eight ways (two arrows together for a diagonal); with a stick, any way it leans. The robot's own swipe reading (the four aims and Movement sensitivity) plays no part.
+- **A** drops a bomb, three in all. The A button says how many are left ("Drop · 2 left").
+- **B** again lands the plane ("Land" on the B button). It also lands by itself after 8 seconds, or half a second after its last bomb.
+- Nothing shows where a bomb will land: you judge it by eye. A bomb carries on about a tile and a half the way the plane was flying as it falls.
+- While flying, the caption on the swipe pad says **Steer the plane**, and a one-line tip over the arena explains it the first time you pick a laptop up in a match.
+
+Online, your steering is sent with your presses, in 64 ways (`IN_AIM` in net.ts: see [ONLINE.md](ONLINE.md)).
 
 ## As an angel or a zombie
 
@@ -150,7 +163,7 @@ Whichever of up, down, left and right the leg points nearest to. Three details m
 
 - **The whole leg is judged**, not a few pixels of it. A first stroke that registered at 14 px is still being read until it is 36 px long. If the longer look clearly disagrees with the first read, the direction is corrected.
 - **The robot's current direction plays no part.** The same swipe always gives the same answer. (An earlier version favoured the axis the robot was already moving along, which made sideways swipes read as up or down.)
-- **"Nearest" is measured against aims that lean.** A thumb pivots at its base, so quick swipes lean: with a left thumb, left drifts up and right drifts down. Each direction has an *aim*, the screen angle its swipes are expected to point at, and a stroke counts as the direction it is aimed nearest to. All four aims lean the same few degrees, set by Movement sensitivity (Low 2°, Medium 5°, High 8°; see [SWIPE-HISTORY.md](SWIPE-HISTORY.md)): clockwise when the left thumb steers, anticlockwise when the right thumb does. The aims change only which direction a stroke counts as. They never change how far the thumb has to travel.
+- **"Nearest" is measured against aims that lean.** A thumb pivots at its base, so quick swipes lean: with a left thumb, left drifts up and right drifts down. Each direction has an *aim*, the screen angle its swipes are expected to point at, and a stroke counts as the direction it is aimed nearest to. All four aims lean the same few degrees, set by Movement sensitivity (0% to 25%, 0.45° a percent: 11%, the default, is 4.95°; see [SWIPE-HISTORY.md](SWIPE-HISTORY.md)): clockwise when the left thumb steers, anticlockwise when the right thumb does. The aims change only which direction a stroke counts as. They never change how far the thumb has to travel.
 
 ### Nothing is lost between frames
 
@@ -159,7 +172,7 @@ The game reads the controls 60 times a second. A quick flick or a tap on A or B 
 ## The settings on Settings › Controls
 
 <p align="center">
-  <img src="screenshots/menu-settings.png" alt="Settings › Controls: Left thumb on, and Movement sensitivity at Medium" width="300">
+  <img src="screenshots/menu-settings.png" alt="Settings › Controls: Left thumb on, and Movement sensitivity at 11%, the percentage over the slider's circle" width="300">
 </p>
 
 ### Steering thumb
@@ -175,15 +188,17 @@ The two thumbs are mirror images. Each pivots at its own bottom corner of the ph
 
 ### Movement sensitivity
 
-How far a swipe can curve and still count as the direction you meant: a slider with three steps (the owner's design, November 2026, in place of the Standard / My thumb switch and Match my thumb).
+How far a swipe can curve and still count as the direction you meant: a slider from **0%** to **25%** in steps of 1%, with − and + beside it and the percentage in small type over its circle, following it (the owner's design, November 2026, in place of the Standard / My thumb switch and Match my thumb; first three steps, then percentages at his ask, 18 November 2026). Each percent leans the four aims 0.45° (left thumb clockwise, right thumb anticlockwise), so 25% is 11.25°.
 
-| Step | Lean (left thumb clockwise, right thumb anticlockwise) | Suits |
+| Setting | Lean | |
 |---|---|---|
-| **Low** | 2° (the owner's own measured thumb) | Thumbs that swipe dead straight |
-| **Medium** (default) | 5° | Most thumbs |
-| **High** | 8° | Thumbs whose quick swipes curve a lot |
+| **0%** | 0° | Swipes read dead straight |
+| 4% | 1.8° | Where the old Low (2°, the owner's own measured thumb) went |
+| **11%** (default) | 4.95° | Where the old Medium (5°) went |
+| 18% | 8.1° | Where the old High (8°) went |
+| **25%** | 11.25° | Thumbs whose quick swipes curve a lot |
 
-While you play, the caption along the bottom of the swipe pad says which is on ("Medium sensitivity"). A setting saved by Match my thumb before it was taken out became the nearest step (a 2° match reads as Low).
+While you play, the caption along the bottom of the swipe pad says what it is set to ("11% sensitivity"). A Low, Medium or High saved before became 4%, 11% or 18% (`OLD_SENS`), and a setting saved by Match my thumb before it was taken out became the nearest percentage (`controls3` is read once).
 
 The settings are saved in the browser on that device and load by themselves next time. They do not travel with the game to another phone. If a browser refuses to save anything, the tab says so.
 
@@ -220,7 +235,7 @@ Every distance is a named constant at the top of `src/swipe.ts`.
 | `REVISE_UNTIL` | 36 px | How long a stroke is still being read | Higher: more early mistakes get corrected, but corrections come later. |
 | `REVISE_MARGIN` | 0.2 | How clearly the longer look must disagree to overrule the first read | Lower: more corrections. Higher: fewer. |
 | `SETTLE_PX`, `SETTLE_MS` | 6 px, 120 ms | When a thumb counts as resting | Together they set the slowest movement that still counts as a stroke: about 50 px a second. |
-| `SENSITIVITY` | Low 2°, Medium 5°, High 8° | The lean of all four aims at each step of Movement sensitivity (`DEFAULT_SENS`: Medium) | 15° at first (`FIRST_TILT`); see [SWIPE-HISTORY.md](SWIPE-HISTORY.md). |
+| `SENS_MAX`, `SENS_DEG`, `sensTilt` | 25, 0.45° | Movement sensitivity runs 0% to `SENS_MAX`%, each percent leaning all four aims `SENS_DEG` (`DEFAULT_SENS`: 11%, 4.95°) | 15° at first (`FIRST_TILT`); then Low 2°, Medium 5°, High 8° (`SENSITIVITY`); see [SWIPE-HISTORY.md](SWIPE-HISTORY.md). |
 
 There is no menu setting for these distances any more. To change them for everyone, edit the constants above.
 
@@ -242,4 +257,4 @@ The controls went through several rounds of play-testing on a phone. Each round 
 10. **Looking where you swipe.** The robot used to look the way it was walking. Between two blocks, a swipe at a block made it walk toward the nearest opening and look that way instead, so it could not be turned to face the block. It now looks the way it was asked to go, at once, and between two blocks a quick swipe only turns it: it sets off for the opening if the swipe is held for 0.15 seconds.
 
 The simulations used to compare the old and new behaviour are in [`experiments/`](../experiments/README.md).
-10. **Movement sensitivity** (November 2026). The standard lean went 15°, 2°, 8°, 5° in an afternoon; then the owner replaced the Standard / My thumb switch and Match my thumb with one slider: Low 2°, Medium 5°, High 8°. [SWIPE-HISTORY.md](SWIPE-HISTORY.md).
+10. **Movement sensitivity** (November 2026). The standard lean went 15°, 2°, 8°, 5° in an afternoon; then the owner replaced the Standard / My thumb switch and Match my thumb with one slider: Low 2°, Medium 5°, High 8°. On 18 November 2026 he asked for more steps, as a percentage from 0% to 25% shown over the slider's circle. [SWIPE-HISTORY.md](SWIPE-HISTORY.md).

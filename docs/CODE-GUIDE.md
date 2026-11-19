@@ -60,6 +60,8 @@ The whole game as pure logic. No drawing, no sound, no browser calls, no `Math.r
 | `knockOut`, `bringBack`, `comeBackTile` | Losing a life: coming back at the start, or out of the round (an angel, with angels on) |
 | `angelStep`, `perimeterAt`, `angelAim`, `angelReach` | Angels: gliding round the outer wall, winding up and throwing a bomb in |
 | `inRound`, `Player.zombie` | Who is still in the round; zombies (risen in `step`, knocked down in `knockOut`) are not |
+| `launch`, `flyPlane`, `planeTurn`, `endFlight` | The laptop's plane: B takes off, `PlayerInput.aim` steers (`PLANE_STEP`: a table of moves per heading made with sums only, so every engine agrees), A drops, B lands. Its state is flat fields on `Player` (`laptop`, `flying`, `planeX`, `planeY`, `planeDir`, `planeBombs`, `planeCool`), so copies and the online picture carry it as they are |
+| `moveDrops`, `dropLanding`, `blast` | Bombs falling from planes (`World.drops`): where one lands (CPU players use the same sums) and its blast, which `explode` shares |
 | Constants | Every number of the game, named, near the top of the file |
 
 Positions are in tiles, and tile centres are whole numbers. A robot at `x = 3` is exactly in the middle of column 3, and `Math.round(x)` is the tile it counts as standing on.
@@ -76,7 +78,8 @@ Plain-words version: [GAME-RULES.md](GAME-RULES.md).
 | `poll(t)` | Call regularly so it notices a thumb that has stopped moving |
 | `dir` | The direction it currently reads: 0 none, 1 up, 2 down, 3 left, 4 right |
 | `scale` | Scales the quiet zone and turn distances. Always 1 in the game: there is no menu setting for it. |
-| `aims` | The screen angle each direction is read around (index 1 to 4). Setting `tilt` instead leans all four the same number of degrees clockwise. |
+| `aims` | The screen angle each direction is read around (index 1 to 4). Setting `tilt` instead leans all four the same number of degrees clockwise. Movement sensitivity sets them: `sensTilt(percent)`, 0.45° a percent |
+| `pointing()` | The way the thumb points, from where its stroke began, at any angle: it steers the laptop's plane |
 | `onStroke` | Callback with each stroke's movement, for measuring swipes (Match my thumb used it) |
 
 Plain-words version: [CONTROLS.md](CONTROLS.md).
@@ -95,12 +98,13 @@ Pure logic like the rules. Given the world, `botInput(world, bot)` returns one `
 | `decide`, `chooseGoal` | Bomb a player, or pick a power-up, bricks or a player to walk to |
 | `placeBomb` | The three checks before pressing A: a way out, nobody able to shut it, and the move played forward on a copy |
 | `tryOut`, `wayOut` | Kicks and throws, each tried on a copy of the world first |
+| `pilot` | Flying the laptop's plane: at the nearest rival, off by its level's `slop`, `lead` and `carry`, and never letting a bomb go that would reach its own robot or a teammate (`dropLanding` and `dangerMap` with the bomb added) |
 
 It uses `cloneWorld` and `step` from `sim.ts` to play moves forward. Plain-words version: [CPU-PLAYERS.md](CPU-PLAYERS.md).
 
 ### `src/input.ts`: keyboard, touch and controller wiring
 
-The `Input` class listens to the keyboard, the swipe pad area and the two buttons, reads every game controller once a frame (`pollGamepad`, one `PadReader` each), and merges yours (P1's, `mineIndex`) with the rest. A controller nobody has yet asks `claim` on its first press: yours, or a new player joining in the lobby (couch play); `reader(i)` gives a joined player's controller, whose `state()` drives their robot. `state()` returns `{ dir, a, b }` once per tick. Keys and buttons go through the player's bindings (`setBindings`). `onDevice` reports whether a key, a controller or a touch was used last (for the hints). While Settings waits for a new key or button, `capture` gets the next press and nothing else does. `rumble` shakes the controller.
+The `Input` class listens to the keyboard, the swipe pad area and the two buttons, reads every game controller once a frame (`pollGamepad`, one `PadReader` each), and merges yours (P1's, `mineIndex`) with the rest. A controller nobody has yet asks `claim` on its first press: yours, or a new player joining in the lobby (couch play); `reader(i)` gives a joined player's controller, whose `state()` drives their robot. `state()` returns `{ dir, a, b, aim }` once per tick (`aim`: the way to steer a plane, in 64ths of a turn, from the swipe pad's `pointing`, held keys or the controller; main.ts sends it online only while you fly: `flyingAim`). Keys and buttons go through the player's bindings (`setBindings`). `onDevice` reports whether a key, a controller or a touch was used last (for the hints). While Settings waits for a new key or button, `capture` gets the next press and nothing else does. `rumble` shakes the controller.
 
 ### `src/bindings.ts`: which keys and buttons do what
 
@@ -160,11 +164,12 @@ Everything on the canvas is drawn with shapes in code. There are no image files.
 | `drawStatic` | Floor and solid blocks. Drawn once onto a hidden canvas and reused every frame. |
 | `setMap`, `drawFloor`, `drawHard`, `drawSoft` | The map being drawn (`MAPS` in setup.ts): each map has its own floor, solid block and breakable block. Midnight: `drawSteel`, `drawBricks`. Wild West: `drawSand`, `drawRock` (a front face unless a block is right below; a cactus on some), `drawCrate` (stamped from a picture made once per size), with its colours in `WEST`. main.ts (`redrawStatic`) and the lobby's arena picture call `setMap` before drawing. A new map is a new id in `MAPS` and a branch in these three. |
 | `drawDynamic` | Everything else, every frame: shadows, power-ups, bricks, the ring under your robot, bombs, blasts, robots, carried and flying bombs |
-| `drawItemIcon` | The seven power-up icons |
+| `drawItemIcon` | The eight power-up icons |
 | `danceFrame` (in `dances.ts`) | The winner's victory dance at a moment: facing, steps, slide and `Pose` |
 | `warmSprites` | Gets the robots' pictures ready ahead of need: everyone's walk, the burnt robot, the ghosts, the winner's dance |
 | `drawGhosts` | The ghosts of knocked-out robots, with wings and a halo, floating up to the top of the screen. Drawn on a layer of its own, because they leave the arena |
 | `drawStatus` | What is drawn over a robot: the shield ring, the ring flying off when a shield is used up, the skull over a cursed robot |
+| `drawLaptopHeld`, `drawSkies`, `drawPlane`, `drawFallingBomb` | The laptop in a robot's hands (with signal waves while it flies), and over everything the planes (in their pilot's colours, with a shadow) and the bombs falling from them, shrinking as they fall. No mark shows where a bomb will land (the owner's ask) |
 | `drawBombArt`, `drawHard`, `drawSoft` | A bomb with a lit fuse, a solid block and a brick, on their own: for the title screen (always Midnight's) and the lobby's map buttons |
 | `COLORS` | The nine bot colours. Only the coloured parts change (the armour, the helmet's rim and chin piece, the lit soles); the black parts are shared. |
 
@@ -199,7 +204,7 @@ It holds no game rules.
 
 ### Online play: `src/net.ts`, `src/room.ts`, `src/worker.ts`, `src/online.ts`, `src/predict.ts`
 
-- `net.ts` (pure, shared by page and server): the messages each way, a player's input in five bits and a tick's inputs as one character each, presses waiting for their tick (`InputQueue`, `takeInput`: the server and the page take presses in with the same lines), the world checksum (`worldHash`), the whole world as plain data (`encodeWorld`, `decodeWorld`), room codes and names.
+- `net.ts` (pure, shared by page and server): the messages each way, a player's input in five bits (and the plane's steering, `IN_AIM`) and a tick's inputs as one character each (two for a player steering a plane), presses waiting for their tick (`InputQueue`, `takeInput`: the server and the page take presses in with the same lines), the world checksum (`worldHash`), the whole world as plain data (`encodeWorld`, `decodeWorld`), room codes and names.
 - `room.ts` (the server's decisions, with no network or clock of its own, so `tests/room.test.ts` plays rooms through): joining by code, robots staying different, the host's setup and buttons, starting a match (people in joining order, then CPU players: `seats`), stepping the round to the time (`advance`), counting wins, dropped connections and a host handing on (`housekeep`).
 - `worker.ts`: the Cloudflare side. Requests for `/api/room/CODE` go to that code's Durable Object (`RoomDO`), which holds a `Room`, turns WebSocket messages into calls on it, and runs two clocks: the round's (every 16 ms while one is played) and a tidying one (every 4 s). Everything else is the game page (`env.ASSETS`).
 - `worker.ts` also holds `Friends`, notifications: one Durable Object for the whole game that keeps the phones that turned them on (`/api/push/key`, `/subscribe`, `/unsubscribe`), and sends "Cody wants to play" when a host taps the bell in the lobby (the `invite` message, through the room), answering with how it went (`BellAnswer`, shown in a bubble under the bell by `bellSay` in `main.ts`). Sign-ups only for real push services (`PUSH_HOSTS`); a room once a minute, 30 an hour, the newest 45 phones; a phone that is gone is dropped. Its signing key is made on its first use and kept on its own disk, so no secret has to be set up anywhere. `tests/friends.test.ts` plays it through with made-up phones.
@@ -231,10 +236,11 @@ Bundles `src/main.ts` with esbuild, pastes it into `src/page.html`, and writes `
 | `hidden` | Power-ups still under bricks |
 | `players` | Position, facing, what they can do, whether they are still in |
 | `bombs` | Position, owner, fuse, blast length, and whether on the floor, carried or flying |
+| `drops` | Bombs falling from planes: where, how fast, how long until they land, and whose |
 | `flames` | The tiles of blasts still burning |
 | `burning` | Bricks a blast has reached, about to become floor |
 | `items` | Power-ups lying in the open |
-| `events` | What happened this tick: place, kick, lift, throw, land, explode, pickup, shield, block (one landed), death (with what caused it and whose bomb) |
+| `events` | What happened this tick: place, kick, lift, throw, land, explode, pickup, shield, block (one landed), death (with what caused it and whose bomb), launch, drop and home (a plane) |
 | `roundTicks`, `shrinkTicks` | The length of the round and of the part of it in which blocks fall |
 | `shrinkOrder`, `shrinkNext`, `falling` | The tiles blocks will fall on, in order; how many have started; and the ones in the air now |
 | `over` | Null until the round is decided, then the winner or a draw |

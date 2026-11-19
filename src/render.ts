@@ -4,14 +4,15 @@
  * All the art is drawn with canvas shapes in code: there are no image files.
  * - the robots themselves are in robot.ts (drawRobot, drawHead)
  * - drawStatic: the floor and solid blocks (drawn once, then reused)
- * - drawDynamic: bricks, power-ups, bombs, blasts and robots (drawn every frame)
- * - drawItemIcon: the seven power-up icons, also used by the top bar
+ * - drawDynamic: bricks, power-ups, bombs, blasts and robots (drawn every frame), and over everything the
+ *   laptops' planes and the bombs falling from them
+ * - drawItemIcon: the eight power-up icons, also used by the top bar
  */
 import { drawRobot, warmRobots, CRACK, GHOST_ARMS, ROBOT, type Pose, type Wanted } from './robot';
 import { danceFrame, danceSamples, type DanceId } from './dances';
 import { TEAMS, type MapId } from './setup';
 export { warmRobots } from './robot';
-import { World, FLOOR, HARD, SOFT, FLAME_TICKS, DEATH_TICKS, GHOST_TICKS, SHIELD_GRACE_TICKS, FALL_TICKS, TICK_HZ, ItemKind, Player, Bomb, FLY_TICKS_PER_TILE, THROW_TILES, FUSE_TICKS, CARRY_FUSE_TICKS, DX, DY, allies, angelAim, angelReach, perimeterAt } from './sim';
+import { World, FLOOR, HARD, SOFT, FLAME_TICKS, DEATH_TICKS, GHOST_TICKS, SHIELD_GRACE_TICKS, FALL_TICKS, TICK_HZ, ItemKind, Player, Bomb, FLY_TICKS_PER_TILE, THROW_TILES, FUSE_TICKS, CARRY_FUSE_TICKS, DX, DY, DROP_TICKS, TURN_STEPS, allies, angelAim, angelReach, perimeterAt } from './sim';
 
 export interface BotColor {
   /** saved with the player's choice and sent to the rules as Player.colorId */
@@ -555,6 +556,7 @@ export const ITEM_COLOR: Record<ItemKind, string> = {
   grab: '#d08cff',
   shield: '#f1f5ff',
   curse: '#ff4063',
+  laptop: '#6f86ff',
 };
 /** A power-up lying on the floor is this share of a tile across (it was 0.92; made 10% smaller). */
 const ITEM_SIZE = 0.83;
@@ -656,6 +658,42 @@ export function drawItemIcon(ctx: Ctx, kind: ItemKind, cx: number, cy: number, r
     ctx.lineCap = 'butt';
     line(ctx, -r * 0.12, r * 0.44, -r * 0.12, r * 0.74);
     line(ctx, r * 0.12, r * 0.44, r * 0.12, r * 0.74);
+  } else if (kind === 'laptop') {
+    // an open laptop, with a little plane on its screen (it flies one)
+    rr(ctx, -r * 0.66, -r * 0.78, r * 1.32, r * 0.98, r * 0.12);
+    ctx.fill();
+    ctx.fillStyle = hole;
+    rr(ctx, -r * 0.52, -r * 0.64, r * 1.04, r * 0.7, r * 0.06);
+    ctx.fill();
+    ctx.fillStyle = col;
+    ctx.beginPath();
+    ctx.moveTo(-r * 0.84, r * 0.3);
+    ctx.lineTo(r * 0.84, r * 0.3);
+    ctx.lineTo(r * 0.98, r * 0.62);
+    ctx.lineTo(-r * 0.98, r * 0.62);
+    ctx.closePath();
+    ctx.fill();
+    // the plane on the screen: a body, swept wings and a tail, flying up and right
+    ctx.save();
+    ctx.translate(0, -r * 0.29);
+    ctx.rotate(-Math.PI / 4);
+    ctx.fillStyle = col;
+    ctx.beginPath();
+    ctx.ellipse(0, 0, r * 0.3, r * 0.065, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(r * 0.06, 0);
+    ctx.lineTo(-r * 0.1, -r * 0.27);
+    ctx.lineTo(-r * 0.04, 0);
+    ctx.lineTo(-r * 0.1, r * 0.27);
+    ctx.closePath();
+    ctx.moveTo(-r * 0.2, 0);
+    ctx.lineTo(-r * 0.29, -r * 0.11);
+    ctx.lineTo(-r * 0.25, 0);
+    ctx.lineTo(-r * 0.29, r * 0.11);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
   } else {
     // a glove
     rr(ctx, -r * 0.5, -r * 0.72, r * 0.78, r * 1.1, r * 0.32);
@@ -1314,6 +1352,273 @@ export function drawDynamic(ctx: Ctx, world: World, T: number, time: number, foc
     drawHard(ctx, px, py, size);
     ctx.restore();
   }
+
+  // the laptops' planes, and the bombs falling from them, highest of all
+  drawSkies(ctx, world, T, time);
+}
+
+/**
+ * Planes (the laptop power-up) and the bombs falling from them. Seen from above: a plane is drawn over the
+ * point it flies over, in its pilot's colours, with its shadow on the floor a little way off (the light is from
+ * the top left). A bomb let go is drawn over the point it is falling to, shrinking as it falls away, with no
+ * shadow and nothing to say where it will land (the owner's design: it should not be easy to hit with). Near an
+ * edge of the map, where the plane wraps round, it is drawn at both sides.
+ */
+function drawSkies(ctx: Ctx, world: World, T: number, time: number): void {
+  const W = world.w * T;
+  const H = world.h * T;
+  // the place and its copies across the edges it is close to
+  const spots = (x: number, y: number, reach: number): [number, number][] => {
+    const xs = [x, ...(x < reach ? [x + W] : []), ...(x > W - reach ? [x - W] : [])];
+    const ys = [y, ...(y < reach ? [y + H] : []), ...(y > H - reach ? [y - H] : [])];
+    return xs.flatMap((a) => ys.map((b): [number, number] => [a, b]));
+  };
+  for (const d of world.drops) {
+    const e = 1 - d.t / DROP_TICKS; // 0 as it leaves the plane, 1 as it lands
+    const spin = Math.atan2(d.vy, d.vx);
+    const owner = world.players[d.owner];
+    const glow = owner ? colorById(owner.colorId).glow : '#ffffff';
+    for (const [x, y] of spots((d.x + 0.5) * T, (d.y + 0.5) * T, T)) drawFallingBomb(ctx, x, y, T * (0.3 - 0.11 * e), spin, glow, time);
+  }
+  for (const p of world.players) {
+    if (!p.alive || p.flying <= 0) continue;
+    const col = colorById(p.colorId);
+    const heading = (p.planeDir / TURN_STEPS) * Math.PI * 2;
+    for (const [x, y] of spots((p.planeX + 0.5) * T, (p.planeY + 0.5) * T, T * 1.2)) drawPlane(ctx, x, y, T, heading, col, time, p.flying);
+  }
+}
+
+/** A bomb falling from a plane, seen from above, `r` across its body: an iron body, four tail fins behind it, its owner's colour round it. */
+function drawFallingBomb(ctx: Ctx, x: number, y: number, r: number, spin: number, glow: string, time: number): void {
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(spin + Math.sin(time * 18) * 0.12);
+  // the fins: a cross behind the body
+  ctx.fillStyle = '#2b2f3a';
+  ctx.strokeStyle = '#0b0d12';
+  ctx.lineWidth = Math.max(1, r * 0.12);
+  for (const s of [-1, 1]) {
+    ctx.beginPath();
+    ctx.moveTo(-r * 0.55, s * r * 0.18);
+    ctx.lineTo(-r * 1.35, s * r * 0.78);
+    ctx.lineTo(-r * 1.5, s * r * 0.5);
+    ctx.lineTo(-r * 1.2, s * r * 0.08);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+  }
+  // the body: a fat iron teardrop, nose first
+  const g = ctx.createRadialGradient(r * 0.25, -r * 0.3, r * 0.1, 0, 0, r * 1.1);
+  g.addColorStop(0, '#6c7280');
+  g.addColorStop(0.45, '#262a33');
+  g.addColorStop(1, '#0b0d12');
+  ctx.fillStyle = g;
+  ctx.beginPath();
+  ctx.ellipse(0, 0, r * 1.05, r * 0.82, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.lineWidth = Math.max(1, r * 0.1);
+  ctx.stroke();
+  // a band of its owner's colour
+  ctx.strokeStyle = glow;
+  ctx.lineWidth = Math.max(1, r * 0.2);
+  ctx.beginPath();
+  ctx.ellipse(-r * 0.32, 0, r * 0.14, r * 0.74, 0, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.restore();
+}
+
+/**
+ * A plane seen from above at (x, y), flying `heading` (radians, clockwise from right), about a tile across
+ * the wings: the body and wings in its pilot's armour colour, dark glass, a spinning propeller, the pilot's glow
+ * on the wing tips, and its shadow on the floor. It blinks as its flight runs out.
+ */
+function drawPlane(ctx: Ctx, x: number, y: number, T: number, heading: number, c: BotColor, time: number, left: number): void {
+  if (left < 90 && Math.floor(left / 6) % 2 === 0) return; // (the last second and a half: going home)
+  const s = T;
+  const shape = (): void => {
+    // body
+    ctx.beginPath();
+    ctx.moveTo(s * 0.5, 0);
+    ctx.bezierCurveTo(s * 0.46, -s * 0.09, s * 0.2, -s * 0.1, -s * 0.1, -s * 0.07);
+    ctx.lineTo(-s * 0.44, -s * 0.035);
+    ctx.lineTo(-s * 0.44, s * 0.035);
+    ctx.lineTo(-s * 0.1, s * 0.07);
+    ctx.bezierCurveTo(s * 0.2, s * 0.1, s * 0.46, s * 0.09, s * 0.5, 0);
+    ctx.closePath();
+    // wings, swept back a little
+    ctx.moveTo(s * 0.16, -s * 0.06);
+    ctx.lineTo(-s * 0.04, -s * 0.52);
+    ctx.lineTo(-s * 0.16, -s * 0.52);
+    ctx.lineTo(-s * 0.12, -s * 0.06);
+    ctx.closePath();
+    ctx.moveTo(s * 0.16, s * 0.06);
+    ctx.lineTo(-s * 0.04, s * 0.52);
+    ctx.lineTo(-s * 0.16, s * 0.52);
+    ctx.lineTo(-s * 0.12, s * 0.06);
+    ctx.closePath();
+    // tail
+    ctx.moveTo(-s * 0.3, -s * 0.03);
+    ctx.lineTo(-s * 0.42, -s * 0.2);
+    ctx.lineTo(-s * 0.48, -s * 0.2);
+    ctx.lineTo(-s * 0.44, -s * 0.03);
+    ctx.closePath();
+    ctx.moveTo(-s * 0.3, s * 0.03);
+    ctx.lineTo(-s * 0.42, s * 0.2);
+    ctx.lineTo(-s * 0.48, s * 0.2);
+    ctx.lineTo(-s * 0.44, s * 0.03);
+    ctx.closePath();
+  };
+  // its shadow on the floor, down and to the right
+  ctx.save();
+  ctx.translate(x + s * 0.32, y + s * 0.46);
+  ctx.rotate(heading);
+  ctx.scale(0.86, 0.86);
+  ctx.fillStyle = 'rgba(0,0,0,0.3)';
+  shape();
+  ctx.fill();
+  ctx.restore();
+
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(heading);
+  // a faint trail of air behind it
+  const trail = ctx.createLinearGradient(-s * 1.4, 0, -s * 0.4, 0);
+  trail.addColorStop(0, 'rgba(255,255,255,0)');
+  trail.addColorStop(1, 'rgba(255,255,255,0.22)');
+  ctx.fillStyle = trail;
+  for (const side of [-1, 1]) {
+    ctx.beginPath();
+    ctx.moveTo(-s * 0.1, side * s * 0.49);
+    ctx.lineTo(-s * 1.2, side * s * 0.5);
+    ctx.lineTo(-s * 1.2, side * s * 0.47);
+    ctx.lineTo(-s * 0.1, side * s * 0.47);
+    ctx.closePath();
+    ctx.fill();
+  }
+  // the plane, in the pilot's colours, with a dark edge so it reads over anything
+  const g = ctx.createLinearGradient(0, -s * 0.5, 0, s * 0.5);
+  g.addColorStop(0, c.light);
+  g.addColorStop(0.5, c.body);
+  g.addColorStop(1, c.dark);
+  ctx.fillStyle = g;
+  ctx.strokeStyle = '#0b0d14';
+  ctx.lineWidth = Math.max(1, s * 0.035);
+  ctx.lineJoin = 'round';
+  shape();
+  ctx.fill();
+  ctx.stroke();
+  // the cockpit's dark glass, with a glint
+  ctx.fillStyle = '#10131c';
+  ctx.beginPath();
+  ctx.ellipse(s * 0.24, 0, s * 0.1, s * 0.045, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = 'rgba(255,255,255,0.55)';
+  ctx.beginPath();
+  ctx.ellipse(s * 0.27, -s * 0.015, s * 0.035, s * 0.012, 0, 0, Math.PI * 2);
+  ctx.fill();
+  // the pilot's glow on the wing tips
+  ctx.fillStyle = c.glow;
+  for (const side of [-1, 1]) {
+    ctx.beginPath();
+    ctx.arc(-s * 0.1, side * s * 0.5, s * 0.035, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  // a spinning propeller at the nose: a blur, with one blade showing
+  ctx.fillStyle = 'rgba(230,236,255,0.28)';
+  ctx.beginPath();
+  ctx.ellipse(s * 0.52, 0, s * 0.03, s * 0.2, 0, 0, Math.PI * 2);
+  ctx.fill();
+  const a = time * 40;
+  ctx.strokeStyle = 'rgba(20,22,30,0.8)';
+  ctx.lineWidth = Math.max(1, s * 0.03);
+  ctx.beginPath();
+  ctx.moveTo(s * 0.52, Math.sin(a) * s * 0.2);
+  ctx.lineTo(s * 0.52, -Math.sin(a) * s * 0.2);
+  ctx.stroke();
+  ctx.restore();
+}
+
+/**
+ * A robot holding a laptop (the power-up), drawn over it: in front of it facing you or to either side, out of
+ * sight facing away. While its plane is up the screen glows brighter and signal waves rise over its helmet, so
+ * it is plain that it is busy flying (and standing still). (x, y) is the robot's feet.
+ */
+function drawLaptopHeld(ctx: Ctx, p: Player, x: number, y: number, T: number, time: number): void {
+  const col = colorById(p.colorId);
+  const flying = p.flying > 0;
+  const hy = y - T * 0.36; // about where its hands are
+  const screen = flying ? 0.75 + 0.25 * Math.sin(time * 9) : 0.55;
+  ctx.save();
+  ctx.lineJoin = 'round';
+  if (p.facing === 2) {
+    // facing you: the back of the lid, the screen towards the robot, the keyboard's edge under it
+    ctx.fillStyle = `rgba(150,180,255,${0.25 * screen})`; // the screen's light round the lid's edges
+    rr(ctx, x - T * 0.24, hy - T * 0.25, T * 0.48, T * 0.3, T * 0.05);
+    ctx.fill();
+    ctx.fillStyle = '#3a4152';
+    ctx.strokeStyle = '#0b0d14';
+    ctx.lineWidth = Math.max(1, T * 0.025);
+    rr(ctx, x - T * 0.2, hy - T * 0.22, T * 0.4, T * 0.25, T * 0.035);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = '#c9cfdc';
+    rr(ctx, x - T * 0.23, hy + T * 0.02, T * 0.46, T * 0.055, T * 0.02);
+    ctx.fill();
+    ctx.stroke();
+    // a glowing mark on the lid in the robot's colour
+    ctx.fillStyle = col.glow;
+    ctx.globalAlpha = 0.6 + 0.4 * screen;
+    ctx.beginPath();
+    ctx.arc(x, hy - T * 0.095, T * 0.035, 0, Math.PI * 2);
+    ctx.fill();
+  } else if (p.facing === 3 || p.facing === 4) {
+    // to the side: the keyboard held out in front, the lid open towards the robot, its screen lit
+    const d = p.facing === 4 ? 1 : -1;
+    const fx = x + d * T * 0.3; // the far edge, where the lid is hinged
+    ctx.strokeStyle = '#0b0d14';
+    ctx.lineWidth = Math.max(1, T * 0.025);
+    ctx.fillStyle = '#c9cfdc';
+    rr(ctx, Math.min(fx, x + d * T * 0.02), hy, T * 0.28, T * 0.05, T * 0.02);
+    ctx.fill();
+    ctx.stroke();
+    // the screen's face, lit, with its light spilling towards the robot (a soft shadow: iPhones have no blur filter)
+    ctx.fillStyle = `rgba(175,208,255,${0.55 + 0.45 * screen})`;
+    ctx.shadowColor = `rgba(140,180,255,${0.8 * screen})`;
+    ctx.shadowBlur = T * 0.16;
+    ctx.beginPath();
+    ctx.moveTo(fx, hy);
+    ctx.lineTo(fx - d * T * 0.08, hy - T * 0.26);
+    ctx.lineTo(fx - d * T * 0.02, hy - T * 0.26);
+    ctx.lineTo(fx + d * T * 0.04, hy);
+    ctx.closePath();
+    ctx.fill();
+    ctx.shadowBlur = 0;
+    ctx.shadowColor = 'transparent';
+    ctx.fillStyle = '#3a4152';
+    ctx.beginPath();
+    ctx.moveTo(fx + d * T * 0.04, hy);
+    ctx.lineTo(fx - d * T * 0.02, hy - T * 0.26);
+    ctx.lineTo(fx + d * T * 0.01, hy - T * 0.27);
+    ctx.lineTo(fx + d * T * 0.07, hy);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+  }
+  if (flying) {
+    // signal waves over the helmet: it is flying its plane
+    const top = y + (ROBOT.top - 0.12) * T;
+    ctx.strokeStyle = col.glow;
+    ctx.lineCap = 'round';
+    ctx.lineWidth = Math.max(1.5, T * 0.04);
+    for (let i = 0; i < 3; i++) {
+      const k = (time * 1.6 + i / 3) % 1;
+      ctx.globalAlpha = (1 - k) * 0.9;
+      ctx.beginPath();
+      ctx.arc(x, top + T * 0.1, T * (0.06 + 0.16 * k), -Math.PI * 0.8, -Math.PI * 0.2);
+      ctx.stroke();
+    }
+  }
+  ctx.restore();
 }
 
 const BOMB_R = 0.3; // the ball's radius, in tiles (0.34 when the ball was the whole bomb: it gave up room for the fuse)
@@ -1671,6 +1976,7 @@ function drawPlayer(ctx: Ctx, world: World, p: Player, T: number, time: number, 
         drawSparks(ctx, p, x, y, T, time);
       }
       else drawRobot(ctx, x, y, T, col, p.facing, p.walk, p.moving, crowned === p.id ? { crown: true } : undefined);
+      if (p.laptop) drawLaptopHeld(ctx, p, x, y, T, time);
       if (blink) ctx.restore();
     }
     drawStatus(ctx, p, x, (p.y + 0.5) * T, T);

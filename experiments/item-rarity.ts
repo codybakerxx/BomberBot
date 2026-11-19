@@ -11,7 +11,7 @@
 import { createWorld, ITEM_CHANCE, SOFT } from '../src/sim';
 
 const N = 20000;
-const names: Record<string, string> = { bomb: 'Bomb', fire: 'Flame', speed: 'Speed', kick: 'Boot', grab: 'Glove', shield: 'Shield', curse: 'Curse' };
+const names: Record<string, string> = { bomb: 'Bomb', fire: 'Flame', speed: 'Speed', kick: 'Boot', grab: 'Glove', shield: 'Shield', curse: 'Curse', laptop: 'Laptop' };
 const total: Record<string, number> = {};
 const withOne: Record<string, number> = {};
 const withTwo: Record<string, number> = {};

@@ -35,9 +35,10 @@ export const SOFT = 2;
 
 /**
  * Power-ups: one more bomb at a time, a longer blast, faster walking,
- * the boot (kick bombs) and the glove (lift and throw bombs).
+ * the boot (kick bombs), the glove (lift and throw bombs), the shield, the
+ * curse, and the laptop (B flies a plane that drops bombs: see `launch`).
  */
-export type ItemKind = 'bomb' | 'fire' | 'speed' | 'kick' | 'grab' | 'shield' | 'curse';
+export type ItemKind = 'bomb' | 'fire' | 'speed' | 'kick' | 'grab' | 'shield' | 'curse' | 'laptop';
 
 /**
  * What one player is asking for on one tick. Buttons are sent as "held or
@@ -45,10 +46,15 @@ export type ItemKind = 'bomb' | 'fire' | 'speed' | 'kick' | 'grab' | 'shield' | 
  */
 export interface PlayerInput {
   dir: Dir;
-  /** A button: drop a bomb */
+  /** A button: drop a bomb (flying a plane: drop one of its bombs) */
   a: boolean;
-  /** B button: lift a bomb, or throw the one being carried (needs the glove) */
+  /** B button: lift a bomb, or throw the one being carried (needs the glove); holding a laptop, fly the plane; flying, bring it home */
   b: boolean;
+  /**
+   * Only while flying a plane: the way to steer it, in AIM_STEPS steps of a turn clockwise from right (screen
+   * down is a quarter turn), from the swipe pad, keys or stick at any angle. Left out, the plane flies on as it is.
+   */
+  aim?: number;
 }
 
 export interface Player {
@@ -123,6 +129,24 @@ export interface Player {
   zombieDown: boolean;
   /** the side it plays on in a teams match (WorldConfig.teams): 0, 1... ; -1 when every robot plays for itself */
   team: number;
+  /**
+   * The laptop power-up: holding one. B then flies a plane in place of lifting a bomb (the owner's design,
+   * 18 November 2026), once: the laptop is used up when the plane comes home.
+   */
+  laptop: boolean;
+  /**
+   * Ticks of the plane's flight left; 0 when not flying. While flying the robot stands still at its laptop
+   * (and can be knocked out): the direction steers the plane, A drops its bombs, B brings it home.
+   */
+  flying: number;
+  /** where the plane is, in tiles like a robot (any point: it wraps round the edges of the map) */
+  planeX: number;
+  planeY: number;
+  /** which way it flies, in TURN_STEPS steps of a turn clockwise from right */
+  planeDir: number;
+  /** bombs it still has to drop, and ticks before the next one can go */
+  planeBombs: number;
+  planeCool: number;
 }
 
 export interface Bomb {
@@ -176,6 +200,23 @@ export interface Burning {
   ttl: number;
 }
 
+/**
+ * A bomb dropped from a plane, falling. It keeps the plane's speed as it falls, losing a little each tick
+ * (DROP_DRAG), so it lands some way on from where it was let go, and goes off the moment it lands.
+ */
+export interface Drop {
+  /** where it is over the floor, in tiles (wrapping round the map's edges like the plane) */
+  x: number;
+  y: number;
+  /** its speed over the floor, tiles a tick */
+  vx: number;
+  vy: number;
+  /** ticks until it lands */
+  t: number;
+  /** the player whose plane dropped it: the blast is theirs */
+  owner: number;
+}
+
 /** A power-up lying on the floor. */
 export interface Item {
   cx: number;
@@ -212,7 +253,13 @@ export type GameEvent =
   /** an angel's bomb knocked a robot out and, with Angels come back on, the angel took its place */
   | { type: 'revive'; player: number; victim: number }
   /** a zombie is on its feet: just risen from a knockout, or back up after being knocked down */
-  | { type: 'rise'; player: number };
+  | { type: 'rise'; player: number }
+  /** a player opened the laptop: their plane is up */
+  | { type: 'launch'; player: number }
+  /** a plane let one of its bombs go */
+  | { type: 'drop'; player: number }
+  /** a plane's flight is over (it came home, or its pilot was knocked out) */
+  | { type: 'home'; player: number };
 
 /** A block on its way down. It lands, and turns its tile solid, when `world.tick` reaches `landAt`. */
 export interface FallingBlock {
@@ -247,6 +294,8 @@ export interface World {
   shrinkNext: number;
   /** blocks in the air right now */
   falling: FallingBlock[];
+  /** bombs falling from planes */
+  drops: Drop[];
   nextBombId: number;
   /** what happened on the latest tick (cleared at the start of each one) */
   events: GameEvent[];
@@ -341,7 +390,7 @@ export const MAX_BOMBS = 8;
 
 /**
  * The chance that a brick hides each power-up. A brick hides at most one, so
- * these add up to the share of bricks that hide anything (48%). The order
+ * these add up to the share of bricks that hide anything (61.25%). The order
  * matters only for which random numbers give which power-up; keep new ones at
  * the end so arenas made from old seeds keep their first five kinds in place.
  * What these chances come to per arena is measured in docs/GAME-RULES.md.
@@ -355,6 +404,7 @@ export const ITEM_CHANCE: [ItemKind, number][] = [
   ['grab', 0.03125], // likewise
   ['shield', 0.0125], // very rare: in about six arenas in ten
   ['curse', 0.0125], // very rare: in about six arenas in ten
+  ['laptop', 0.0125], // very rare, but every arena gets at least one (the owner's ask, 18 November 2026): see createWorld
 ];
 export const SHIELD_TICKS = 30 * TICK_HZ; // a shield that is not used wears off after 30 s
 export const SHIELD_GRACE_TICKS = 30; // after a shield takes a blast, blasts do no harm for 0.5 s: long enough for that blast to clear
@@ -400,6 +450,67 @@ export const ZOMBIE_SPEED = 0.5; // it walks at half the starting speed, whateve
 export const ZOMBIE_FIRE = 1; // its bombs reach one tile each way
 export const ZOMBIE_BOMBS = 1; // one at a time
 export const ZOMBIE_SAFE_TICKS = 60; // blasts leave it be for 1 s after it gets up
+
+// the laptop: B flies a plane over the arena that drops bombs (the owner's design, 18 November 2026). The robot
+// stands at its laptop while the plane is up. The plane is steered smoothly at any angle; its bombs fall, keep
+// some of its speed as they go, and go off where they land, with nothing on screen saying where that will be.
+export const PLANE_TICKS = 8 * TICK_HZ; // a flight lasts up to 8 s
+export const PLANE_SPEED = 0.08; // tiles a tick (4.8 tiles a second: quicker than a robot with every speed power-up)
+export const TURN_STEPS = 256; // the plane's heading is kept in 256ths of a turn ...
+export const PLANE_TURN = 2; // ... and turns at most this many a tick (169° a second): it sweeps round, never on the spot
+export const AIM_STEPS = 64; // the way it is steered (PlayerInput.aim) comes in 64ths of a turn
+export const PLANE_BOMBS = 3; // bombs a plane can drop
+export const PLANE_FIRST_GAP = 30; // none in its first half second, so the first cannot land on the robot it took off from
+export const PLANE_DROP_GAP = 20; // and at least a third of a second between two
+export const PLANE_AFTER = 30; // once its last bomb is away it flies on half a second, then home
+export const DROP_TICKS = 48; // a dropped bomb falls for 0.8 s: long enough to see it coming and get out of the way
+export const DROP_DRAG = 0.95; // keeping 95% of its speed each tick: it lands about 1.5 tiles on from where it was let go
+export const DROP_FIRE = 1; // its blast reaches one tile each way
+
+/**
+ * The way a plane flies for each of its TURN_STEPS headings: [x, y] per tick of PLANE_SPEED, clockwise from
+ * right (y is down). Worked out with + - * / only, from the series for sine and cosine, never Math.sin or
+ * Math.cos: engines may round those differently, and every copy of a round (the server's, each page's) must
+ * move its planes exactly alike. Basic arithmetic is rounded the same everywhere.
+ */
+export const PLANE_STEP: [number, number][] = (() => {
+  const PI = 3.141592653589793;
+  // for 0 to an eighth of a turn, where 14 terms of each series are far more than enough
+  const sinS = (a: number): number => {
+    let term = a;
+    let sum = a;
+    for (let n = 1; n < 14; n++) {
+      term *= -(a * a) / (2 * n * (2 * n + 1));
+      sum += term;
+    }
+    return sum;
+  };
+  const cosS = (a: number): number => {
+    let term = 1;
+    let sum = 1;
+    for (let n = 1; n < 14; n++) {
+      term *= -(a * a) / ((2 * n - 1) * (2 * n));
+      sum += term;
+    }
+    return sum;
+  };
+  const q = TURN_STEPS / 4;
+  const out: [number, number][] = [];
+  for (let h = 0; h < TURN_STEPS; h++) {
+    const k = h % q; // the angle into its quarter turn, in steps
+    // within a quarter: up to an eighth by the series, past it by the series for what is left of the quarter
+    const c = k <= q / 2 ? cosS((k * 2 * PI) / TURN_STEPS) : sinS(((q - k) * 2 * PI) / TURN_STEPS);
+    const s = k <= q / 2 ? sinS((k * 2 * PI) / TURN_STEPS) : cosS(((q - k) * 2 * PI) / TURN_STEPS);
+    // then a whole number of quarter turns, clockwise: (x, y) -> (-y, x)
+    const turns = Math.floor(h / q);
+    const v: [number, number] = turns === 0 ? [c, s] : turns === 1 ? [-s, c] : turns === 2 ? [-c, -s] : [s, -c];
+    out.push([v[0] * PLANE_SPEED, v[1] * PLANE_SPEED]);
+  }
+  return out;
+})();
+
+/** The heading (TURN_STEPS) a robot facing `d` launches its plane in. */
+export const FACING_HEADING = [0, (TURN_STEPS * 3) / 4, TURN_STEPS / 4, TURN_STEPS / 2, 0];
 
 // ---------------------------------------------------------------- world creation
 
@@ -484,8 +595,9 @@ export function createWorld(cfg: WorldConfig): World {
       }
     }
   }
-  // every arena has at least one kick and one grab power-up somewhere (unless the lobby has switched them off)
-  for (const kind of ['kick', 'grab'] as const) {
+  // every arena has at least one kick, one grab and one laptop power-up somewhere (unless the lobby has switched
+  // them off; the laptop since 18 November 2026, the owner's ask)
+  for (const kind of ['kick', 'grab', 'laptop'] as const) {
     if (!chances.some(([k, c]) => k === kind && c > 0)) continue;
     if ([...hidden.values()].includes(kind)) continue;
     const empty: number[] = [];
@@ -538,6 +650,13 @@ export function createWorld(cfg: WorldConfig): World {
     zombie: false,
     zombieDown: false,
     team: teamsOn ? cfg.teams![id] : -1,
+    laptop: false,
+    flying: 0,
+    planeX: 0,
+    planeY: 0,
+    planeDir: 0,
+    planeBombs: 0,
+    planeCool: 0,
   }));
 
   return {
@@ -556,6 +675,7 @@ export function createWorld(cfg: WorldConfig): World {
     shrinkOrder: roundTicks > 0 ? spiral(w, h).filter((i) => tiles[i] !== HARD && !keptOpen(w, h, i)) : [],
     shrinkNext: 0,
     falling: [],
+    drops: [],
     nextBombId: 1,
     events: [],
     over: null,
@@ -697,6 +817,7 @@ export function cloneWorld(w: World): World {
     burning: w.burning.map((b) => ({ ...b })),
     items: w.items.map((i) => ({ ...i })),
     falling: w.falling.map((f) => ({ ...f })),
+    drops: w.drops.map((d) => ({ ...d })),
     events: [],
     over: w.over ? { ...w.over } : null,
   };
@@ -985,9 +1106,10 @@ function placeBomb(world: World, p: Player): void {
 }
 
 /**
- * B button. Carrying a bomb: throw it the way you are facing. Otherwise, with
- * the glove: lift a bomb from your own tile, else the tile you face, else any
- * tile next to you. The first lift of a bomb sets its fuse to 3 seconds.
+ * B button. Carrying a bomb: throw it the way you are facing. Holding a laptop:
+ * fly its plane (`launch`). Otherwise, with the glove: lift a bomb from your
+ * own tile, else the tile you face, else any tile next to you. The first lift
+ * of a bomb sets its fuse to 3 seconds.
  */
 function useAction(world: World, p: Player): void {
   const cx = Math.round(p.x);
@@ -1004,6 +1126,11 @@ function useAction(world: World, p: Player): void {
     b.flyDist = THROW_TILES;
     b.flyT = 0;
     world.events.push({ type: 'throw' });
+    return;
+  }
+  // holding a laptop, B flies the plane: the glove waits until the laptop is used (the owner's design)
+  if (p.laptop) {
+    launch(world, p);
     return;
   }
   if (!p.canGrab) return;
@@ -1121,11 +1248,16 @@ function explode(world: World, bomb: Bomb): void {
   bomb.slide = 0;
   const carrier = world.players[bomb.heldBy];
   if (carrier) carrier.carrying = 0;
-  addFlame(world, { cx: bomb.cx, cy: bomb.cy, ttl: FLAME_TICKS, owner: bomb.owner, kind: 'c', tip: 0 });
+  blast(world, bomb.cx, bomb.cy, bomb.range, bomb.owner);
+}
+
+/** The blast itself, from (cx, cy), `range` tiles each way, in `owner`'s name (a bomb's, or a plane's: moveDrops). */
+function blast(world: World, x0: number, y0: number, range: number, owner: number): void {
+  addFlame(world, { cx: x0, cy: y0, ttl: FLAME_TICKS, owner, kind: 'c', tip: 0 });
   for (let d = 1 as Dir; d <= 4; d++) {
-    for (let i = 1; i <= bomb.range; i++) {
-      const cx = bomb.cx + DX[d] * i;
-      const cy = bomb.cy + DY[d] * i;
+    for (let i = 1; i <= range; i++) {
+      const cx = x0 + DX[d] * i;
+      const cy = y0 + DY[d] * i;
       const t = tileAt(world, cx, cy);
       if (t === HARD) break;
       if (t === SOFT) {
@@ -1142,9 +1274,9 @@ function explode(world: World, bomb: Bomb): void {
         cx,
         cy,
         ttl: FLAME_TICKS,
-        owner: bomb.owner,
+        owner,
         kind: d <= 2 ? 'v' : 'h',
-        tip: i === bomb.range ? (d as Dir) : 0,
+        tip: i === range ? (d as Dir) : 0,
       });
     }
   }
@@ -1157,7 +1289,121 @@ function applyItem(p: Player, kind: ItemKind): void {
   else if (kind === 'grab') p.canGrab = true;
   else if (kind === 'shield') p.shieldTicks = SHIELD_TICKS; // a second one only starts the 30 s again
   else if (kind === 'curse') p.curseTicks = CURSE_TICKS; // likewise
+  else if (kind === 'laptop') p.laptop = true; // (one at a time: a second one is just picked up)
   else p.speed = Math.min(MAX_SPEED_ITEMS, p.speed + 1);
+}
+
+// ---------------------------------------------------------------- the laptop's plane
+
+/** B with a laptop: the plane takes off from the robot, the way it faces, with PLANE_BOMBS bombs. */
+function launch(world: World, p: Player): void {
+  p.flying = PLANE_TICKS;
+  p.planeX = p.x;
+  p.planeY = p.y;
+  p.planeDir = FACING_HEADING[p.facing];
+  p.planeBombs = PLANE_BOMBS;
+  p.planeCool = PLANE_FIRST_GAP;
+  p.moving = false;
+  p.askDir = 0;
+  p.askTicks = 0;
+  world.events.push({ type: 'launch', player: p.id });
+}
+
+/** The flight is over: the plane is gone, and the laptop is used up (B lifts bombs again, with the glove). */
+function endFlight(world: World, p: Player): void {
+  p.flying = 0;
+  p.laptop = false;
+  p.planeBombs = 0;
+  p.planeCool = 0;
+  world.events.push({ type: 'home', player: p.id });
+}
+
+/**
+ * A robot flying its plane, for one tick. The robot stands still at its laptop. The plane turns towards
+ * `aim` by at most PLANE_TURN (so it sweeps round in a curve), flies on PLANE_SPEED, and wraps round the
+ * edges of the map as a thrown bomb does. A drops one of its bombs, B brings it home; it comes home by
+ * itself when its time is up, half a second after its last bomb, or once the round is decided.
+ */
+function flyPlane(world: World, p: Player, inp: PlayerInput | undefined): void {
+  p.moving = false;
+  const a = !!inp?.a;
+  const b = !!inp?.b;
+  const freshA = a && !p.prevA;
+  const home = world.over !== null || (b && !p.prevB);
+  p.prevA = a;
+  p.prevB = b;
+  if (home) {
+    endFlight(world, p);
+    return;
+  }
+  p.planeDir = planeTurn(p.planeDir, inp?.aim);
+  const [vx, vy] = PLANE_STEP[p.planeDir];
+  p.planeX = wrap(p.planeX + vx + 0.5, world.w) - 0.5;
+  p.planeY = wrap(p.planeY + vy + 0.5, world.h) - 0.5;
+  if (p.planeCool > 0) p.planeCool--;
+  if (freshA && p.planeBombs > 0 && p.planeCool === 0) {
+    world.drops.push({ x: p.planeX, y: p.planeY, vx, vy, t: DROP_TICKS, owner: p.id });
+    p.planeBombs--;
+    p.planeCool = PLANE_DROP_GAP;
+    if (!p.planeBombs) p.flying = Math.min(p.flying, PLANE_AFTER);
+    world.events.push({ type: 'drop', player: p.id });
+  }
+  if (--p.flying <= 0) endFlight(world, p);
+}
+
+/** A plane's heading (TURN_STEPS) after one tick of steering towards `aim` (AIM_STEPS): PLANE_TURN at most, the short way round. */
+export function planeTurn(dir: number, aim: number | undefined): number {
+  if (aim === undefined || !Number.isInteger(aim) || aim < 0 || aim >= AIM_STEPS) return dir;
+  const target = aim * (TURN_STEPS / AIM_STEPS);
+  const diff = ((target - dir + TURN_STEPS * 1.5) % TURN_STEPS) - TURN_STEPS / 2;
+  return Math.abs(diff) <= PLANE_TURN ? target : (dir + Math.sign(diff) * PLANE_TURN + TURN_STEPS) % TURN_STEPS;
+}
+
+/**
+ * The tile a bomb falling from a plane lands on, `t` ticks of falling from now: moved exactly as moveDrops
+ * moves it, the same sums in the same order, so a CPU player's sums agree with the rules to the last bit.
+ */
+export function dropLanding(world: World, x: number, y: number, vx: number, vy: number, t: number): { cx: number; cy: number; x: number; y: number } {
+  for (let k = 0; k < t; k++) {
+    x = wrap(x + vx + 0.5, world.w) - 0.5;
+    y = wrap(y + vy + 0.5, world.h) - 0.5;
+    vx *= DROP_DRAG;
+    vy *= DROP_DRAG;
+  }
+  return { cx: Math.min(world.w - 1, Math.max(0, Math.round(x))), cy: Math.min(world.h - 1, Math.max(0, Math.round(y))), x, y };
+}
+
+/**
+ * Bombs falling from planes, for one tick: each drifts on the way its plane flew, slowing, and goes off where
+ * it lands. Onto a brick it is the brick that takes the blast (it burns); anywhere else, the floor or the top
+ * of a solid block, it blasts DROP_FIRE tiles each way, and a power-up or bomb right where it lands is hit too.
+ */
+function moveDrops(world: World): void {
+  if (!world.drops.length) return;
+  const landed: Drop[] = [];
+  for (const d of world.drops) {
+    d.x = wrap(d.x + d.vx + 0.5, world.w) - 0.5;
+    d.y = wrap(d.y + d.vy + 0.5, world.h) - 0.5;
+    d.vx *= DROP_DRAG;
+    d.vy *= DROP_DRAG;
+    if (--d.t <= 0) landed.push(d);
+  }
+  if (!landed.length) return;
+  world.drops = world.drops.filter((d) => d.t > 0);
+  for (const d of landed) {
+    const cx = Math.min(world.w - 1, Math.max(0, Math.round(d.x)));
+    const cy = Math.min(world.h - 1, Math.max(0, Math.round(d.y)));
+    world.events.push({ type: 'explode', cx, cy });
+    if (tileAt(world, cx, cy) === SOFT) {
+      if (!world.burning.some((b) => b.cx === cx && b.cy === cy)) world.burning.push({ cx, cy, ttl: FLAME_TICKS });
+      continue;
+    }
+    const item = world.items.findIndex((it) => it.cx === cx && it.cy === cy);
+    if (item >= 0) world.items.splice(item, 1);
+    const under = bombAt(world, cx, cy);
+    if (under) under.fuse = Math.min(under.fuse, CHAIN_TICKS);
+    blast(world, cx, cy, DROP_FIRE, d.owner);
+  }
 }
 
 
@@ -1169,6 +1415,8 @@ function applyItem(p: Player, kind: ItemKind): void {
  * wall once its knocked-out animation has played, at the point of the wall nearest where it fell.
  */
 function knockOut(world: World, p: Player, cause: 'blast' | 'block', by: number): void {
+  if (p.flying) endFlight(world, p); // (its plane goes too; bombs already falling still land)
+  p.laptop = false;
   p.alive = false;
   p.moving = false;
   p.deadTicks = 0;
@@ -1198,7 +1446,7 @@ function knockOut(world: World, p: Player, cause: 'blast' | 'block', by: number)
 
 /**
  * Put a robot back in the round at (x, y), as at the start of a round: starting bombs, blast and speed, no
- * kick, glove, shield or curse; blasts cannot hurt it for SAFE_TICKS. Buttons held now count once let go.
+ * kick, glove, shield, curse or laptop; blasts cannot hurt it for SAFE_TICKS. Buttons held now count once let go.
  */
 function bringBack(world: World, p: Player, x: number, y: number): void {
   Object.assign(p, {
@@ -1230,6 +1478,10 @@ function bringBack(world: World, p: Player, x: number, y: number): void {
     angel: false,
     angelFrom: -1,
     angelHeld: 0,
+    laptop: false,
+    flying: 0,
+    planeBombs: 0,
+    planeCool: 0,
   } satisfies Partial<Player>);
 }
 
@@ -1434,10 +1686,11 @@ function angelStep(world: World, p: Player, inp: PlayerInput | undefined): void 
 
 /**
  * Advance the world by one tick. `inputs[id]` may be missing: that player
- * stands still. Order within a tick: players move and press buttons, bombs
- * move and count down, due bombs go off, blasts and burning bricks fade,
- * falling blocks land, players are checked against blasts and power-ups,
- * then the match result.
+ * stands still. Order within a tick: players move and press buttons (or fly
+ * their planes), bombs move and count down, due bombs go off, bombs falling
+ * from planes land and go off, blasts and burning bricks fade, falling blocks
+ * land, players are checked against blasts and power-ups, then the match
+ * result.
  */
 export function step(world: World, inputs: (PlayerInput | undefined)[]): void {
   world.events.length = 0;
@@ -1467,6 +1720,11 @@ export function step(world: World, inputs: (PlayerInput | undefined)[]): void {
     if (p.graceTicks > 0) p.graceTicks--;
     if (p.curseTicks > 0) p.curseTicks--;
     const inp = inputs[p.id];
+    if (p.flying > 0) {
+      // at its laptop: the direction and buttons fly the plane, and the robot stays where it is
+      flyPlane(world, p, inp);
+      continue;
+    }
     const asked: Dir = inp ? inp.dir : 0;
     if (asked !== p.askDir) {
       p.askDir = asked;
@@ -1496,6 +1754,8 @@ export function step(world: World, inputs: (PlayerInput | undefined)[]): void {
     if (!due) break;
     explode(world, due);
   }
+  // bombs falling from planes: those that land now go off (a bomb they reach goes off moments later)
+  moveDrops(world);
 
   // flames and burning blocks
   for (const f of world.flames) f.ttl--;

@@ -23,6 +23,7 @@ import {
   encodeWorld,
   newQueue,
   packInput,
+  IN_ALL,
   readName,
   roundWorld,
   takeInput,
@@ -285,7 +286,7 @@ export class Room {
         // for the tick it names: not before the press ahead of it, and not far in the future. One for a tick
         // that has gone by is taken in on the next (takeInput).
         const k = Math.max(last ? last.k : 0, Math.min(Math.floor(msg.k), w.tick + MAX_STAMP_AHEAD));
-        q.pending.push({ k, v: msg.v & 31, n: Math.floor(msg.n) });
+        q.pending.push({ k, v: msg.v & IN_ALL, n: Math.floor(msg.n) });
         return;
       }
       case 'me': {

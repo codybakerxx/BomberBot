@@ -8,7 +8,7 @@
  */
 import assert from 'node:assert';
 import type { Dir } from '../src/sim';
-import { SwipePad, DEFAULT_TILT, FIRST_TILT, SENSITIVITY, DEFAULT_SENS, standardAims, uniformAims } from '../src/swipe';
+import { SwipePad, DEFAULT_TILT, FIRST_TILT, DEFAULT_SENS, OLD_SENS, SENS_MAX, nearestDir, sensTilt, standardAims, uniformAims } from '../src/swipe';
 
 {
   // moves the thumb in a straight line in 8 ms steps and returns every direction seen
@@ -208,11 +208,17 @@ import { SwipePad, DEFAULT_TILT, FIRST_TILT, SENSITIVITY, DEFAULT_SENS, standard
   assert.equal(pad.dir, 0);
 }
 
-// Movement sensitivity: Low 2°, Medium 5° (the default), High 8°; a right thumb leans the other way
-assert.deepEqual(SENSITIVITY.map((x) => [x.name, x.tilt]), [['Low', 2], ['Medium', 5], ['High', 8]]);
-assert.equal(SENSITIVITY[DEFAULT_SENS].name, 'Medium');
-assert.equal(DEFAULT_TILT, 5);
-for (const x of SENSITIVITY) {
-  assert.deepEqual(standardAims('left', x.tilt), uniformAims(x.tilt));
-  assert.deepEqual(standardAims('right', x.tilt), uniformAims(-x.tilt));
+// Movement sensitivity: 0% to 25% of the way to the diagonal (0.45° each), 11% by default; a right thumb leans
+// the other way. The old Low, Medium and High (2°, 5°, 8°) are 4%, 11% and 18%: the same lean to within 0.2°.
+assert.equal(SENS_MAX, 25);
+assert.equal(DEFAULT_SENS, 11);
+assert.ok(Math.abs(DEFAULT_TILT - 4.95) < 1e-9);
+assert.deepEqual(OLD_SENS.map((p) => Math.round(sensTilt(p))), [2, 5, 8]);
+for (const p of OLD_SENS) assert.ok(Math.abs(sensTilt(p) - [2, 5, 8][OLD_SENS.indexOf(p)]) <= 0.2);
+for (let p = 0; p <= SENS_MAX; p++) {
+  assert.deepEqual(standardAims('left', sensTilt(p)), uniformAims(sensTilt(p)));
+  assert.deepEqual(standardAims('right', sensTilt(p)), uniformAims(-sensTilt(p)));
 }
+// at 0% a straight swipe and one a hair either side of a diagonal read as you would expect
+assert.equal(nearestDir(standardAims('left', 0), 0.99, 1), 2);
+assert.equal(nearestDir(standardAims('left', 0), 0.99, -1), 1);

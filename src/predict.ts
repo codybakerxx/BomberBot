@@ -28,7 +28,7 @@
  * back follows the connection: as far as the ticks have lately been late, easing forward again.
  */
 import { TICK_HZ, cloneWorld, step, type GameEvent, type Player, type PlayerInput, type World } from './sim';
-import { IN_A, IN_B, newQueue, takeInput, tickCodes, unpackInput, worldHash, type ClientMsg, type InputQueue, type ServerMsg, type StampedInput } from './net';
+import { IN_A, IN_ALL, IN_B, newQueue, takeInput, tickCodes, unpackInput, worldHash, type ClientMsg, type InputQueue, type ServerMsg, type StampedInput } from './net';
 
 export const TICK_MS = 1000 / TICK_HZ;
 /** A press should reach the server this many ticks before its tick, by the slowest recent ping. */
@@ -154,7 +154,7 @@ export class Predictor {
 
   /** The server has taken in your presses up to number `n`. */
   private ack(n: number): void {
-    while (this.sent.length && this.sent[0].n <= n) this.ackedV = this.sent.shift()!.v & 31;
+    while (this.sent.length && this.sent[0].n <= n) this.ackedV = this.sent.shift()!.v & IN_ALL;
   }
 
   /** Keep where everyone is after this tick, for drawing the others a few ticks back. */
@@ -262,7 +262,11 @@ export class Predictor {
     const t = w.tick + 1;
     const code = takeInput(this.q, t);
     const mine = w.over ? 0 : code; // (once the round is decided nobody is asked for anything)
-    const inputs: PlayerInput[] = w.players.map((_, i) => (i === this.me ? unpackInput(mine) : unpackInput((this.lastCodes[i] ?? 0) & (IN_A | IN_B))));
+    // (another player flying a plane presses nothing in the picture: its bombs come when the server says so, as
+    // its plane is drawn where the server last had it)
+    const inputs: PlayerInput[] = w.players.map((p, i) =>
+      i === this.me ? unpackInput(mine) : p.flying ? unpackInput(0) : unpackInput((this.lastCodes[i] ?? 0) & (IN_A | IN_B)),
+    );
     step(w, inputs);
     const g = t % RING;
     this.guess[g] = mine;

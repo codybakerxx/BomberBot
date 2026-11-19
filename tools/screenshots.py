@@ -190,7 +190,7 @@ async def main():
         await page.screenshot(path=str(OUT / "sideways.png"))
         await context.close()
 
-        # --- the seven power-ups in a row, and what a shield and a curse look like on a robot
+        # --- the eight power-ups in a row, and what a shield and a curse look like on a robot
         context, page = await phone(browser, 393, 740)
         await start_round(page)
         await page.wait_for_timeout(200)
@@ -199,7 +199,7 @@ async def main():
               const w = __game.world;
               for (let i = 0; i < w.tiles.length; i++) if (w.tiles[i] === 2) w.tiles[i] = 0;
               __game.bots.length = 0;  // the CPU players stand still for the picture
-              ['bomb', 'fire', 'speed', 'kick', 'grab', 'shield', 'curse'].forEach((kind, i) => w.items.push({ cx: 3 + i, cy: 1, kind, age: 20 }));
+              ['bomb', 'fire', 'speed', 'kick', 'grab', 'shield', 'curse', 'laptop'].forEach((kind, i) => w.items.push({ cx: 3 + i, cy: 1, kind, age: 20 }));
               const [a, b, c, d] = w.players;
               Object.assign(a, { x: 3, y: 3, facing: 2, shieldTicks: 1500 });            // shield up
               Object.assign(b, { x: 5, y: 3, facing: 2, curseTicks: 400 });              // cursed

@@ -12,7 +12,7 @@
  * or a new player joining in the lobby (couch play), whose robot then reads its own `PadReader`. While
  * Settings is waiting for a new key or button (`capture`), presses go there and nowhere else.
  */
-import type { Dir, PlayerInput } from './sim';
+import { AIM_STEPS, type Dir, type PlayerInput } from './sim';
 import { SwipePad } from './swipe';
 import { KeyMap, PadMap, PAD, defaultKeys, defaultPad, keyAction, normKey } from './bindings';
 
@@ -28,6 +28,21 @@ export type Caught = { kind: 'key'; code: string } | { kind: 'pad'; button: numb
 export type Device = 'touch' | 'keys' | 'pad';
 
 const ACTION_DIR: Record<string, Dir> = { up: 1, down: 2, left: 3, right: 4 };
+
+/**
+ * Which way (vx right, vy down) points, as a PlayerInput aim: AIM_STEPS steps of a turn clockwise from right.
+ * For steering the laptop's plane, at any angle. (Math.atan2 is fine here: the aim is worked out once, on the
+ * player's own device, and sent as a whole number; the rules never use it.)
+ */
+export function aimOf(vx: number, vy: number): number | undefined {
+  if (!vx && !vy) return undefined;
+  const turns = Math.atan2(vy, vx) / (2 * Math.PI);
+  return ((Math.round(turns * AIM_STEPS) % AIM_STEPS) + AIM_STEPS) % AIM_STEPS;
+}
+/** The aim of the directions held together (keys, a controller's D-pad): eight ways. */
+function aimOfDirs(held: (d: Dir) => boolean): number | undefined {
+  return aimOf((held(4) ? 1 : 0) - (held(3) ? 1 : 0), (held(2) ? 1 : 0) - (held(1) ? 1 : 0));
+}
 
 /** True when a key press is going into a text box (the lobby's name field), so the game leaves it alone. */
 export function typing(e: KeyboardEvent): boolean {
@@ -49,6 +64,8 @@ export class PadReader {
   private latchDir: Dir = 0;
   a = false;
   b = false;
+  /** the stick or D-pad at any angle, for steering a plane (aimOf), or undefined */
+  aim: number | undefined = undefined;
   private latchA = false;
   private latchB = false;
   /** the controller's name, as the browser gives it */
@@ -74,6 +91,9 @@ export class PadReader {
     const dir = dpad || this.stickDir;
     if (dir && dir !== this.heldDir) this.latchDir = dir;
     this.heldDir = dir;
+    // for a plane: the D-pad's eight ways, or the stick at any angle once it leans far enough
+    const pads: Record<number, number> = { 1: PAD.UP, 2: PAD.DOWN, 3: PAD.LEFT, 4: PAD.RIGHT };
+    this.aim = dpad ? aimOfDirs((d) => on(pads[d])) : Math.hypot(x, y) > STICK_ON ? aimOf(x, y) : undefined;
     const live = (b: number): boolean => on(b) && !this.ignore.has(b);
     const fresh = (b: number): boolean => live(b) && !this.was[b];
     this.a = keys.bomb.some(live);
@@ -96,10 +116,12 @@ export class PadReader {
     this.was = [];
     this.heldDir = this.stickDir = 0;
     this.a = this.b = false;
+    this.aim = undefined;
   }
   /** For a robot this controller drives: once per tick. */
   state(): PlayerInput {
     const out: PlayerInput = { dir: (this.heldDir || this.latchDir) as Dir, a: this.a || this.latchA, b: this.b || this.latchB };
+    if (this.aim !== undefined) out.aim = this.aim;
     this.latchDir = 0;
     this.latchA = this.latchB = false;
     return out;
@@ -249,7 +271,10 @@ export class Input {
     this.mine()?.rumble(strong, weak, ms);
   }
 
-  /** Read once per game tick. */
+  /**
+   * Read once per game tick. The aim (for steering a plane: the laptop) is the swipe pad's at any angle while a
+   * thumb is on it, else the keys held together (eight ways), else your controller's stick or D-pad.
+   */
   state(): PlayerInput {
     this.pad.poll(performance.now());
     const p = this.mine()?.state() ?? { dir: 0 as Dir, a: false, b: false };
@@ -259,6 +284,9 @@ export class Input {
       a: this.keyA || this.touchA || this.latchA || p.a,
       b: this.keyB || this.touchB || this.latchB || p.b,
     };
+    const thumb = this.pad.pointing();
+    const aim = thumb ? aimOf(thumb[0], thumb[1]) : this.keyDirs.length ? aimOfDirs((d) => this.keyDirs.includes(d)) : p.aim;
+    if (aim !== undefined) out.aim = aim;
     this.latchDir = 0;
     this.latchA = this.latchB = false;
     return out;

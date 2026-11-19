@@ -80,12 +80,13 @@ Each brick hides at most one power-up. You pick one up by standing on its tile. 
 | Glove | Lets you lift and throw bombs | |
 | Shield | The next blast does not knock you out. Wears off after 30 seconds if not used. | One at a time |
 | Curse (skull) | A penalty: you walk at 85% of the starting speed for 8 seconds | |
+| Laptop | Held in your robot's hands. **B** flies a plane: steer it anywhere, and **A** drops up to 3 bombs that go off where they land. See Laptop below | One flight |
 
-<img src="screenshots/power-ups.png" width="560" alt="The seven power-ups in a row: bomb, flame, speed, boot, glove, shield and curse. Below them, a robot inside a shield ring, a cursed robot with a small skull over its head, a robot with both, and a ring flying outward from a robot whose shield has just taken a blast">
+<img src="screenshots/power-ups.png" width="560" alt="The eight power-ups in a row: bomb, flame, speed, boot, glove, shield, curse and laptop. Below them, a robot inside a shield ring, a cursed robot with a small skull over its head, a robot with both, and a ring flying outward from a robot whose shield has just taken a blast">
 
 ### How rare each one is
 
-The chance under each brick is set in `ITEM_CHANCE`. The other columns are what that comes to in play, counted over 20,000 arenas by `experiments/item-rarity.ts`. An arena starts with about 79 bricks, and about 47 of them hide something (every chance was raised by a quarter in November 2026, the owner's ask: 38 before).
+The chance under each brick is set in `ITEM_CHANCE`. The other columns are what that comes to in play, counted over 20,000 arenas by `experiments/item-rarity.ts`. An arena starts with about 79 bricks, and about 48 of them hide something (every chance was raised by a quarter in November 2026, the owner's ask: 38 before; then the laptop came).
 
 | Power-up | Chance under each brick | Average in an arena | Arenas with at least one | Arenas with two or more |
 |---|---|---|---|---|
@@ -96,13 +97,14 @@ The chance under each brick is set in `ITEM_CHANCE`. The other columns are what 
 | Glove | 3.125% | 2.5 | 100% | 71% |
 | Shield | 1.25% | 1.0 | 62% | 26% |
 | Curse | 1.25% | 1.0 | 63% | 26% |
-| Nothing | 40% | | | |
+| Laptop | 1.25% | 1.4 | 100% | 26% |
+| Nothing | 38.75% | | | |
 
 - The **shield** and the **curse** are very rare on purpose. Each is missing from nearly four arenas in ten, and when one is there it is usually the only one.
-- Every arena has at least one **boot** and one **glove**. If the dice give none, one is placed under a brick that would otherwise be empty. Nothing else is guaranteed.
+- Every arena has at least one **boot**, one **glove** and one **laptop**. If the dice give none, one is placed under a brick that would otherwise be empty. Nothing else is guaranteed. (The laptop is as rare under a brick as the shield; the one made sure of is why an arena averages more.)
 - These are what an arena *hides*. Fewer are picked up: a power-up lying in the open is destroyed by a blast, and some bricks are never broken.
 - The **boot** and the **glove** are the next rarest: two or three of each in an arena, and in three arenas in ten there is only the one.
-- The first five began at 40% of bricks between them and were raised to 46% in the same mix. The shield and the curse added 1% each. Then the boot and the glove went from 6% to 4% each and later to 2.5% each, and what they gave up went to the bomb, the flame and speed (now 15%, 15% and 11%). The total stayed at 48%, until every chance was raised by a quarter (60% in all) at the owner's ask in November 2026.
+- The first five began at 40% of bricks between them and were raised to 46% in the same mix. The shield and the curse added 1% each. Then the boot and the glove went from 6% to 4% each and later to 2.5% each, and what they gave up went to the bomb, the flame and speed (now 15%, 15% and 11%). The total stayed at 48%, until every chance was raised by a quarter (60% in all) at the owner's ask in November 2026. The laptop added 1.25% (61.25%) on 18 November 2026.
 
 ### Shield
 
@@ -125,6 +127,21 @@ The chance under each brick is set in `ITEM_CHANCE`. The other columns are what 
 - Afterwards the robot is back to its usual speed, with every speed power-up it had.
 - A second curse starts the 8 seconds again.
 - A blast destroys a curse lying in the open, like any power-up.
+
+### Laptop
+
+*`useAction`, `launch`, `flyPlane` and `moveDrops` in sim.ts (the owner's design, 18 November 2026)*
+
+- Picked up like any power-up. The robot holds it in its hands. While it does, **B** is the laptop, so it cannot lift bombs, glove or not (a bomb it was already carrying is still thrown first).
+- **B** flies a plane, in the robot's colours, from the robot, the way it faces. The robot **stands still** until the plane lands, and can be blasted where it stands. Signal waves over its helmet say it is flying.
+- The plane never stops. It flies at 4.8 tiles a second, faster than any robot, and turns smoothly towards the way it is steered, at most 169° a second (a full circle takes about 2 seconds), so it sweeps round in a curve rather than turning on the spot. It can be steered any way at all (in 64ths of a turn), not just the four ways a robot walks: with the swipe pad the way the thumb points from where its stroke began (a stroke that curves steers round with it), with a stick the way it leans, with the D-pad or the keys in eight ways. Off one edge of the arena it comes back in on the other.
+- **A** drops a bomb, **3** in all: none in the first half second (so the first cannot come down on the robot it took off from), and at least a third of a second between two.
+- A dropped bomb falls for **0.8 s**, carried on the way the plane was flying and slowing as it falls: it lands about a tile and a half on from where it was let go. It is drawn shrinking as it falls. **Nothing shows where it will land** (the owner's ask: hitting someone should not be easy).
+- It goes off **the moment it lands**, a blast **one tile each way**, in the pilot's name. On a brick, only the brick burns and breaks. On a solid block it blasts from the top of it. A power-up where it lands is destroyed, and a bomb there is set off, like any blast.
+- **B** again lands the plane at once. Otherwise it lands by itself 8 seconds after take-off, or half a second after its last bomb. Bombs still falling still land. Once it lands the laptop is used up.
+- Knocked out while flying, the plane is gone (bombs already falling still land). When the round is decided every plane lands. A robot coming back with a new life has no laptop.
+- Teammates: a plane's blast hurts them only with Friendly fire on, like any blast.
+- CPU players fly it too (see `docs/CPU-PLAYERS.md`).
 
 ## Kicking
 
@@ -313,6 +330,17 @@ All of these are named constants near the top of `src/sim.ts`. Changing one chan
 | `SHIELD_GRACE_TICKS` | 30 | After a shield takes a blast, how long blasts do no harm (0.5 s) |
 | `CURSE_TICKS` | 480 | How long a curse lasts (8 s) |
 | `CURSE_SPEED` | 0.85 | Walking speed while cursed, as a share of the starting speed |
+| `PLANE_TICKS` | 480 | Longest flight (8 s) |
+| `PLANE_SPEED` | 0.08 | The plane's speed in tiles per tick (4.8 a second) |
+| `TURN_STEPS`, `PLANE_TURN` | 256, 2 | The plane's heading is kept in 256ths of a turn, and turns at most 2 of them a tick (169° a second) |
+| `AIM_STEPS` | 64 | The way it is steered comes in 64ths of a turn |
+| `PLANE_STEP` | | How far it moves each tick at each heading: worked out once with sums only (no `Math.sin`), so every engine agrees |
+| `PLANE_BOMBS` | 3 | Bombs a plane drops |
+| `PLANE_FIRST_GAP`, `PLANE_DROP_GAP` | 30, 20 | No bomb in the first half second, and a third of a second between two |
+| `PLANE_AFTER` | 30 | Once its last bomb is away it flies on half a second, then lands |
+| `DROP_TICKS` | 48 | How long a dropped bomb falls (0.8 s) |
+| `DROP_DRAG` | 0.95 | A falling bomb keeps this share of its speed each tick (it lands about 1.5 tiles on) |
+| `DROP_FIRE` | 1 | A plane's bomb's blast, tiles each way |
 | `ITEM_CHANCE` | see Power-ups | The chance that a brick hides each power-up |
 | `ROUND_TICKS` | 5400 | What the timer counts down from (1 minute 30). The blocks start when it reaches 0 |
 | `SHRINK_TICKS` | 3000 | How long the blocks take to fall, from the moment the timer reaches 0 (50 seconds) |
@@ -320,7 +348,7 @@ All of these are named constants near the top of `src/sim.ts`. Changing one chan
 | `DEATH_TICKS` | 90 | Length of the knocked-out animation (1.5 s). If it is you, the panel appears when it ends |
 | `GHOST_TICKS` | 300 | How long the count after a knock-out goes on (5 s), so the ghost has time to float off the top of the screen |
 
-Starting values for every player are set in `createWorld`: 1 bomb, a blast 1 tile long, no speed power-ups, no boot, no glove, no shield, no curse. The arena size (13 by 11) and the brick chance (78%) are defaults there too.
+Starting values for every player are set in `createWorld`: 1 bomb, a blast 1 tile long, no speed power-ups, no boot, no glove, no shield, no curse, no laptop. The arena size (13 by 11) and the brick chance (78%) are defaults there too.
 
 ## Set in the lobby
 
@@ -336,7 +364,7 @@ The host can change these before a match. Left alone, every one is the usual rul
 | Rounds to win | 1 to 9 | The match ends when someone reaches it |
 | Bricks | Few, Some, Normal, Lots, Packed | `softDensity` (see The arena) |
 | Custom start | Bombs 1 to 8, blast 1 to 8 tiles, speed +0 to +6 | What everyone starts each round with (`startBombs`, `startFire`, `startSpeed`) |
-| Custom power-ups | For each kind: Off, Rare (half), Normal, Lots (double) | Its chance under a brick (`itemChance`). A boot and a glove are only made sure of when they are not Off |
+| Custom power-ups | For each kind: Off, Rare (half), Normal, Lots (double) | Its chance under a brick (`itemChance`). A boot, a glove and a laptop are only made sure of when they are not Off |
 | Lives | 1 to 5 | Lives each robot has in a round (`lives`); see Lives and angels |
 | Post-Mortem Behavior | Off (the default: watch) or on: Angel (with Angels come back) or Zombie | What a robot out of lives does: watches, haunts the wall throwing bombs in (`angels`: 'on'; 'revive' with Angels come back), or gets up as a zombie (`zombies`) |
 | Teams (Players page) | Off, or on: Custom (everyone on their own until colours are matched) or Teams of 2 or 4 (the row is the team); team colours; who sits where (drag a card); Friendly fire off or on | The last team standing wins (`teams`, `friendlyFire`); see Teams |

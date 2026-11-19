@@ -17,6 +17,7 @@ npx tsx experiments/cpu-matches.ts          # about fifteen minutes
 npx tsx experiments/cpu-matches.ts solo
 npx tsx experiments/cpu-matches.ts versus
 npx tsx experiments/cpu-matches.ts alone
+npx tsx experiments/pilot.ts
 npx tsx experiments/item-rarity.ts
 ```
 
@@ -125,7 +126,7 @@ The second part adds a test round of 8 swipes that chooses between the setting b
 
 ## `cpu-matches.ts`: do the CPU players blast themselves, and are the levels in order?
 
-Unlike the scripts above this is a measurement, not a model: it plays whole rounds with the real CPU players (`src/bot.ts`) under the real rules, timer and falling blocks included, with no screen, and counts how each one went out. Recorded on 11 November 2026.
+Unlike the scripts above this is a measurement, not a model: it plays whole rounds with the real CPU players (`src/bot.ts`) under the real rules, timer and falling blocks included, with no screen, and counts how each one went out. Recorded on 11 November 2026, and again on 18 November 2026 with the laptop (the table below).
 
 | Run | What it plays |
 |---|---|
@@ -140,9 +141,9 @@ Four of the same level:
 
 | Level | Blasted itself | Shut in by a rival | Caught in a rival's blast | Under a block, early | Under a block, in the last 15 s of them | Won | Rounds drawn | Not decided |
 |---|---|---|---|---|---|---|---|---|
-| Beginner | 0.0% | 0.8% | 57.9% | 2.5% | 5.0% | 16.7% | 0 of 60 | 20 of 60 |
-| Normal | 0.0% | 22.1% | 43.8% | 1.7% | 8.3% | 24.2% | 2 of 60 | 0 of 60 |
-| Hard | 0.0% | 34.2% | 41.3% | 0.4% | 2.1% | 20.4% | 9 of 60 | 2 of 60 |
+| Beginner | 0.0% | 0.8% | 60.4% | 1.3% | 6.3% | 19.2% | 0 of 60 | 14 of 60 |
+| Normal | 0.0% | 23.3% | 39.6% | 0.8% | 11.7% | 24.6% | 1 of 60 | 0 of 60 |
+| Hard | 0.0% | 29.2% | 43.3% | 0.4% | 2.1% | 21.7% | 4 of 60 | 4 of 60 |
 
 The other tables are in [docs/CPU-PLAYERS.md](../docs/CPU-PLAYERS.md).
 
@@ -151,27 +152,40 @@ The other tables are in [docs/CPU-PLAYERS.md](../docs/CPU-PLAYERS.md).
 - The first version checked only that a bomb left a way out. Alone, no bot ever blasted itself. Four together, about one in five went out to its own bomb (Normal 23%, Hard 20%, Extreme 25%). Replaying those matches showed every one of them standing trapped after another player's bomb had cut the route it planned. Checking, before pressing A, that no nearby player could shut the route brought "blasted itself" to zero.
 - The same replays found two plain bugs: Beginner never moved at all (its pause before setting off cancelled its own plan), and a bot could park on a spot too far away to attack from and stay there. Both showed up as numbers that looked too good: a Beginner that never blasted itself because it never dropped a bomb.
 - With one of each level in a round, the levels come out in order and well apart: Hard won 63% of those rounds, Normal 31%, Beginner 2%.
-- "Shut in by a rival" and "blasted itself" are both a bot caught by its own blast. What separates them is in `shutIn` in the script, and it was drawn up from replays. Each time a case has landed under "blasted itself" it has been replayed. Some were the test being too narrow (most lately: a rival's bomb dropped on the same tick, one thrown onto the way out, and a rival's kicked bomb setting the bot's own off early). Two were real faults in the CPU players (standing still after a shield was used up; refusing a safe tile because a block was due on it later) and were fixed. Replay any case that lands there before believing either column.
+- "Shut in by a rival" and "blasted itself" are both a bot caught by its own blast. What separates them is in `shutIn` in the script, and it was drawn up from replays. Each time a case has landed under "blasted itself" it has been replayed. Some were the test being too narrow (a rival's bomb dropped on the same tick, one thrown onto the way out, a rival's kicked bomb setting the bot's own off early; most lately, with the laptop, a rival's bomb falling from a plane, a rival's bomb a falling block took away, and a bot whose shield kept it alive half a second into its own blast: see docs/CPU-PLAYERS.md). Two were real faults in the CPU players (standing still after a shield was used up; refusing a safe tile because a block was due on it later) and were fixed. Replay any case that lands there before believing either column.
 - Before the timer, CPU players seldom finished each other off. The first timer closed the whole arena by 0:00, and about half of rounds were draws: the bots left all reached the last tile and went under the same block. Now a 5 by 5 square is left open and the round goes on in it. The blocks now start when the timer reaches 0:00 rather than a minute before. Draws are rare and most rounds are settled in the square, but at first between a sixth and a half were still going 2 minutes after the blocks stopped (Normal 32 of 60).
 - Normal and Hard now press once they are in the square after 0:00 (`squareBold`). Not decided fell to 0 of 60 for Normal and 2 of 60 for Hard, and "shut in by a rival" rose (Normal 3.8% to about 20%), which is the risk they now take. Beginner does not press and still leaves about a third of rounds undecided.
 
 What it cannot show is how they feel to play against. That needs a phone.
 
+## `pilot.ts`: how often does a CPU player's plane get someone?
+
+One CPU pilot of each level, handed a laptop, against one target: a robot that never looks up and walks to the next wall, one that also turns at random every half second (both in an arena with no bricks), and a Normal CPU player that dodges what it notices. It counts the share of flights that knocked the target out. Recorded on 18 November 2026, 60 arenas each:
+
+| Pilot | Never looks up | Turns at random too | Normal CPU player |
+|---|---|---|---|
+| Beginner | 46% | 30% | 16% |
+| Normal | 62% | 50% | 22% |
+| Hard | 83% | 58% | 24% |
+
+The first tuning had the pilots let go whenever the rules' own sums put the rival anywhere in the blast; even Beginner then got a wandering robot in more than half its flights, and making its aim worse barely helped: three bombs with a blast a tile each way forgive a lot. They now let go only when they judge, by eye, that the bomb lands right on the rival, their feel for how far it carries off by their level's `carry`. What it cannot show is how hard the plane is for a person to fly, or how fair it feels to be bombed by one.
+
 ## `item-rarity.ts`: how many of each power-up is in an arena?
 
-Builds 20,000 arenas with the real `createWorld` and counts what the bricks hide. It turns the chances in `ITEM_CHANCE` into what a player meets. Recorded on 10 November 2026:
+Builds 20,000 arenas with the real `createWorld` and counts what the bricks hide. It turns the chances in `ITEM_CHANCE` into what a player meets. Recorded on 18 November 2026, with the laptop (10 November 2026 before every chance was raised by a quarter: an arena then hid about 38):
 
 | Power-up | Chance under each brick | Average in an arena | Arenas with at least one | Arenas with two or more |
 |---|---|---|---|---|
-| Bomb | 15% | 11.8 | 100% | 100% |
-| Flame | 15% | 11.8 | 100% | 100% |
-| Speed | 11% | 8.7 | 100% | 100% |
-| Boot | 2.5% | 2.1 | 100% | 59% |
-| Glove | 2.5% | 2.1 | 100% | 59% |
-| Shield | 1% | 0.8 | 54% | 19% |
-| Curse | 1% | 0.8 | 54% | 19% |
+| Bomb | 18.75% | 14.8 | 100% | 100% |
+| Flame | 18.75% | 14.8 | 100% | 100% |
+| Speed | 13.75% | 10.8 | 100% | 100% |
+| Boot | 3.125% | 2.6 | 100% | 71% |
+| Glove | 3.125% | 2.5 | 100% | 71% |
+| Shield | 1.25% | 1.0 | 62% | 26% |
+| Curse | 1.25% | 1.0 | 63% | 26% |
+| Laptop | 1.25% | 1.4 | 100% | 26% |
 
-An arena has about 79 bricks, and about 38 hide something. This counts what is hidden, not what gets picked up: blasts destroy power-ups lying in the open, and some bricks are never broken.
+An arena has about 79 bricks, and about 48 hide something. This counts what is hidden, not what gets picked up: blasts destroy power-ups lying in the open, and some bricks are never broken.
 
 ## `previous-build.ts`
 

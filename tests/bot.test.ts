@@ -280,12 +280,20 @@ for (const level of BOT_LEVELS) {
   }
 }
 
-// 18. four CPU players of each level: whoever is still in when the blocks stop is inside the square
+// 18. four CPU players of each level: whoever is still in when the blocks stop is inside the square. (A round
+// won while blocks are still falling ends there, wherever the winner stands: it is not counted. Seed 4 alone
+// stopped being enough when the laptop came, November 2026: the round played differently and was won early.)
 for (const level of BOT_LEVELS) {
-  const w = createWorld({ seed: 4, players: [0, 1, 2, 3].map((i) => ({ colorId: String(i) })) });
-  const bots = [0, 1, 2, 3].map((i) => createBot(i, level, 4));
-  for (let t = 0; t < ROUND_TICKS + SHRINK_TICKS && !w.over; t++) step(w, bots.map((b) => botInput(w, b)));
-  for (const p of w.players) if (p.alive) assert.ok(keptOpen(w.w, w.h, Math.round(p.y) * w.w + Math.round(p.x)), `${level}: player ${p.id} is in the square`);
+  let full = 0;
+  for (let seed = 1; seed <= 4; seed++) {
+    const w = createWorld({ seed, players: [0, 1, 2, 3].map((i) => ({ colorId: String(i) })) });
+    const bots = [0, 1, 2, 3].map((i) => createBot(i, level, seed));
+    for (let t = 0; t < ROUND_TICKS + SHRINK_TICKS && !w.over; t++) step(w, bots.map((b) => botInput(w, b)));
+    if (w.over) continue;
+    full++;
+    for (const p of w.players) if (p.alive) assert.ok(keptOpen(w.w, w.h, Math.round(p.y) * w.w + Math.round(p.x)), `${level}, seed ${seed}: player ${p.id} is in the square`);
+  }
+  assert.ok(full >= 1, `${level}: a round lasted until the blocks stopped`);
 }
 
 // 19. a blast comes before a block that is still seconds away: just before the blocks start, a bot that

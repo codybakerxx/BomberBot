@@ -55,7 +55,7 @@ anyone is in it. Rooms are not saved anywhere; when everyone has gone, the room 
 
 **The server runs the round.** It steps `sim.ts` 60 times a second and asks `bot.ts` for the CPU players' moves,
 exactly as a phone does. Each tick it sends every page what every player pressed on that tick, one character each
-(`tickText` in `src/net.ts`). Each page steps its own copy of the server's world with those inputs the moment
+(`tickText` in `src/net.ts`), or two for a player steering a plane (a laptop's: the second says which of 64 ways). Each page steps its own copy of the server's world with those inputs the moment
 they arrive, and because the rules give the same match for the same seed and inputs, every copy stays the same.
 Pages never run the CPU players. This is why the pure modules must stay pure.
 
@@ -120,8 +120,10 @@ The menu during an online match shows the ping, to tell a slow connection from a
 | `me` | your robot, Ready, dance and name in the lobby |
 | `setup` | the host's setup |
 | `start`, `next`, `restart`, `lobby` | the host's buttons |
-| `in` | what you are pressing (five bits), the tick it is for (`k`), its number (`n`) and the round's (`e`) |
+| `in` | what you are pressing (five bits, and the way you steer, `IN_AIM`, while you fly a laptop's plane), the tick it is for (`k`), its number (`n`) and the round's (`e`) |
 | `ping` | every 15 s to keep the connection open; twice a second in a round, for the clock |
+
+`PROTOCOL` is 3 since the laptop (18 November 2026): a tick's text is one character a player (`DIGITS`), or two for one steering a plane (one from `STEER`, which holds its five bits, then one from `AIMS`, the way: 64 of them). A page only sends its steering while its plane is up (`flyingAim` in main.ts), so the usual tick text is as short as ever. Another player's plane is drawn where the server last said, like their robot (`predict.ts` does not guess their steering).
 | `sync`, `bye` | out of step; leaving |
 
 | From the server | |

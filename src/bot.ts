@@ -62,6 +62,13 @@ import {
   makeRng,
   cloneWorld,
   step,
+  DROP_TICKS,
+  DROP_FIRE,
+  PLANE_STEP,
+  TURN_STEPS,
+  AIM_STEPS,
+  planeTurn,
+  dropLanding,
 } from './sim';
 
 // ---------------------------------------------------------------- levels
@@ -128,6 +135,18 @@ export interface LevelSpec {
   blockSight: number;
   /** randomness in its choice of goal, 0 to 1 */
   wobble: number;
+  /** holding a laptop: the chance, each time it thinks with nothing coming for it, of flying the plane */
+  fly: number;
+  /** flying: how far it aims ahead of a rival on the move, as a share of the way it will have gone by the time a bomb lands (0 to 1) */
+  lead: number;
+  /** flying: how far off its aim can be, in tiles either way, picked afresh for each flight */
+  slop: number;
+  /**
+   * flying: how far off its feel for where a bomb lands can be, as a share of how far bombs carry on as they
+   * fall (about a tile and a half), either way, picked afresh for each flight: it judges by eye, as a person
+   * has to (there is nothing on screen saying where a bomb will land)
+   */
+  carry: number;
 }
 
 export const LEVELS: Record<BotLevel, LevelSpec> = {
@@ -153,6 +172,10 @@ export const LEVELS: Record<BotLevel, LevelSpec> = {
     squareBold: false,
     blockSight: 55,
     wobble: 0.6,
+    fly: 0.15,
+    lead: 0,
+    slop: 3,
+    carry: 0.9,
   },
   normal: {
     label: 'Normal',
@@ -176,6 +199,10 @@ export const LEVELS: Record<BotLevel, LevelSpec> = {
     squareBold: true,
     blockSight: 150,
     wobble: 0.3,
+    fly: 0.45,
+    lead: 0.4,
+    slop: 2,
+    carry: 0.85,
   },
   hard: {
     label: 'Hard',
@@ -199,6 +226,10 @@ export const LEVELS: Record<BotLevel, LevelSpec> = {
     squareBold: true,
     blockSight: 480,
     wobble: 0.05,
+    fly: 0.9,
+    lead: 1,
+    slop: 0.8,
+    carry: 0.6,
   },
 };
 
@@ -230,9 +261,13 @@ export interface Bot {
   /** its current plan knowingly walks through a curse, because nothing was worth doing on this side of it */
   throughCurse: boolean;
   /** what it was doing on its last tick, for tests and debugging */
-  doing: 'idle' | 'flee' | 'travel' | 'bomb' | 'script' | 'trapped' | 'angel';
+  doing: 'idle' | 'flee' | 'travel' | 'bomb' | 'script' | 'trapped' | 'angel' | 'pilot';
   /** as an angel: the world tick it may next throw from (it rests between throws, longer at easy levels) */
   angelRest: number;
+  /** flying a plane: how far off its aim is (tiles) and its feel for how far a bomb carries on, the same for the whole flight, and at which rival */
+  aimOff: [number, number];
+  aimCarry: number;
+  aimFor: number;
 }
 
 export function createBot(id: number, level: BotLevel, seed: number): Bot {
@@ -253,6 +288,9 @@ export function createBot(id: number, level: BotLevel, seed: number): Bot {
     throughCurse: false,
     doing: 'idle',
     angelRest: 0,
+    aimOff: [0, 0],
+    aimCarry: 0,
+    aimFor: -1,
   };
 }
 
@@ -462,6 +500,19 @@ export function dangerMap(world: World, viewer: Player | null, notice: number, e
     pending.push({ ...foresee(world, b), range: b.range, done: false });
   }
   for (const e of extra) pending.push({ cx: e.cx, cy: e.cy, t: e.fuse, landT: 0, range: e.range, done: false });
+  // bombs falling from planes: they go off where they land, the moment they land (nothing sets them off sooner).
+  // Onto a brick, only the brick burns. Another player's is only known once it has been falling a while: as
+  // long, for the time it takes to fall, as `notice` is for a bomb's fuse (so a Beginner does see one coming)
+  for (const d of world.drops) {
+    if (viewer && d.owner !== viewer.id && (DROP_TICKS - d.t) * FUSE_TICKS < notice * DROP_TICKS) continue;
+    const at = dropLanding(world, d.x, d.y, d.vx, d.vy, d.t);
+    if (tile(world, at.cx, at.cy) === SOFT) {
+      const idx = at.cy * world.w + at.cx;
+      if (!gone.has(idx)) gone.set(idx, d.t + FLAME_TICKS);
+      continue;
+    }
+    pending.push({ cx: at.cx, cy: at.cy, t: Math.max(1, d.t), landT: d.t, range: DROP_FIRE, done: false });
+  }
 
   // earliest first, so each blast can set off the bombs it reaches
   for (let n = 0; n < pending.length; n++) {
@@ -771,6 +822,7 @@ function itemWorth(p: Player, kind: ItemKind): number {
   if (kind === 'shield') return p.shieldTicks > 10 * TICK_HZ ? 0.5 : 3.4;
   if (kind === 'kick') return p.canKick ? 0.2 : 2;
   if (kind === 'grab') return p.canGrab ? 0.2 : 1.6;
+  if (kind === 'laptop') return p.laptop ? 0.1 : 2.2;
   if (kind === 'speed') return 2.6;
   return 3;
 }
@@ -835,6 +887,7 @@ export function botInput(world: World, bot: Bot): PlayerInput {
     bot.script = [];
     return me.angel ? angelInput(world, bot, me) : NONE;
   }
+  if (me.flying > 0) bot.script = []; // (flying its plane: nothing planned on foot applies)
   if (bot.script.length) {
     bot.doing = 'script';
     bot.path = [];
@@ -867,6 +920,7 @@ export function botInput(world: World, bot: Bot): PlayerInput {
   bot.lastX = me.x;
   bot.lastY = me.y;
 
+  if (me.flying > 0) return pilot(c);
   const out = me.carrying ? carrying(c) : urgent(c.D, c.S, Math.min(spec.blockSight, BLOCK_URGENT)) ? flee(c) : calm(c);
   return out;
 }
@@ -966,6 +1020,97 @@ function carrying(c: Ctx): PlayerInput {
   return { dir: 0, a: false, b: true };
 }
 
+// ---------------------------------------------------------------- flying the laptop's plane
+
+/** The ways a plane can be steered (PlayerInput.aim), each as the plane's step per tick that way. */
+const AIM_WAYS: [number, number][] = Array.from({ length: AIM_STEPS }, (_, a) => PLANE_STEP[a * (TURN_STEPS / AIM_STEPS)]);
+
+/** The shortest way from a to b on a map `n` tiles across that wraps round its edges (a plane does). */
+function across(a: number, b: number, n: number): number {
+  let d = (b - a) % n;
+  if (d > n / 2) d -= n;
+  if (d < -n / 2) d += n;
+  return d;
+}
+
+/**
+ * Flying its plane (sim.ts `flyPlane`). It goes for the rival nearest the plane, steering for where that
+ * rival will be when a bomb lands (as far ahead as its level leads), give or take its level's slop. It lets a
+ * bomb go when it judges the bomb would land right on that point, by eye, its feel for how far a falling
+ * bomb carries on off by its level's `carry`, as a person's would be (nothing on the screen shows where a
+ * bomb will land). Both errors are picked afresh for each flight, so it misses, more at the easier levels,
+ * and a flight that misjudges keeps missing. Its own safety is never judged by eye: the rules' own sums
+ * must say its robot and any teammate are clear of the blast and of anything it sets off. Its robot stands
+ * still meanwhile: if a blast heads its way it lands the plane at once (and runs on the next tick).
+ */
+function pilot(c: Ctx): PlayerInput {
+  const { world, me, bot, spec, D, S } = c;
+  bot.doing = 'pilot';
+  bot.path = [];
+  bot.goal = 'none';
+  // (a press must be fresh: B is let go for a tick first if it was held)
+  if (urgent(D, S, Math.min(spec.blockSight, BLOCK_URGENT))) return { dir: 0, a: false, b: !me.prevB };
+  const rivals = world.players.filter((p) => p.alive && p.id !== me.id && !p.zombie && !allies(me, p));
+  if (!rivals.length || me.planeBombs <= 0) return NONE; // (it comes home by itself)
+  let target = rivals[0];
+  let best = Infinity;
+  for (const r of rivals) {
+    const dx = across(me.planeX, r.x, world.w);
+    const dy = across(me.planeY, r.y, world.h);
+    if (dx * dx + dy * dy < best) {
+      best = dx * dx + dy * dy;
+      target = r;
+    }
+  }
+  if (bot.aimFor !== target.id) {
+    // (its aim is off the same way for the whole flight, as a person misjudging where bombs land would be,
+    // until it changes target: a fresh error for each bomb only let it keep trying until one hit)
+    bot.aimFor = target.id;
+    bot.aimOff = [(bot.rng() * 2 - 1) * spec.slop, (bot.rng() * 2 - 1) * spec.slop];
+    bot.aimCarry = (bot.rng() * 2 - 1) * spec.carry;
+  }
+  const ahead = target.moving ? spec.lead * playerSpeed(target) * DROP_TICKS : 0;
+  const tx = Math.min(world.w - 2, Math.max(1, target.x + DX[target.heading] * ahead + bot.aimOff[0]));
+  const ty = Math.min(world.h - 2, Math.max(1, target.y + DY[target.heading] * ahead + bot.aimOff[1]));
+  // steer straight for it: the way, of the ones it can be steered, that points closest
+  const dx = across(me.planeX, tx, world.w);
+  const dy = across(me.planeY, ty, world.h);
+  let aim = 0;
+  let score = -Infinity;
+  for (let a = 0; a < AIM_STEPS; a++) {
+    const v = AIM_WAYS[a][0] * dx + AIM_WAYS[a][1] * dy;
+    if (v > score) {
+      score = v;
+      aim = a;
+    }
+  }
+  // a bomb let go this tick: the plane turns and moves first, then the bomb falls from there
+  let drop = false;
+  if (me.planeCool <= 1 && !me.prevA) {
+    const h = planeTurn(me.planeDir, aim);
+    const [vx, vy] = PLANE_STEP[h];
+    const nx = wrap(me.planeX + vx + 0.5, world.w) - 0.5;
+    const ny = wrap(me.planeY + vy + 0.5, world.h) - 0.5;
+    const at = dropLanding(world, nx, ny, vx, vy, DROP_TICKS);
+    const tiles = tile(world, at.cx, at.cy) === SOFT ? [] : blastTiles(world, new Map(), at.cx, at.cy, DROP_FIRE, DROP_TICKS, false);
+    // where it judges the bomb would land, by eye: its feel for how far bombs carry on is off by its level's
+    // `carry` for this flight. It lets go when that is right on the rival, not just near enough for the blast
+    const feel = 1 + bot.aimCarry;
+    const gx = Math.round(Math.min(world.w - 2, Math.max(1, nx + across(nx, at.x, world.w) * feel)));
+    const gy = Math.round(Math.min(world.h - 2, Math.max(1, ny + across(ny, at.y, world.h) * feel)));
+    if (gx === Math.round(tx) && gy === Math.round(ty)) {
+      const teammate = world.friendlyFire && world.players.some((p) => p.alive && allies(me, p) && tiles.includes(tileOf(world, p)));
+      // its own robot, standing still, clear of the blast and of anything the blast sets off: nothing about
+      // its tile's danger changes with the bomb (every bomb counted, noticed or not)
+      const before = dangerMap(world, me, 0, [], c.sight).iv[S] ?? [];
+      const after = dangerMap(world, me, 0, [{ cx: at.cx, cy: at.cy, range: DROP_FIRE, fuse: DROP_TICKS }], c.sight).iv[S] ?? [];
+      const same = before.length === after.length && before.every((v, i) => v === after[i]);
+      drop = !teammate && !tiles.includes(S) && same;
+    }
+  }
+  return { dir: 0, a: drop, b: false, aim };
+}
+
 function shuffled(rng: () => number): Dir[] {
   const out: Dir[] = [1, 2, 3, 4];
   for (let i = 3; i > 0; i--) {
@@ -984,6 +1129,19 @@ function decide(c: Ctx): PlayerInput | null {
   // (a zombie goes after the robots still in the round, not other zombies; nobody goes after a teammate)
   const enemies = world.players.filter((p) => p.alive && p.id !== me.id && !(me.zombie && p.zombie) && !allies(me, p));
   const wasIdle = bot.path.length === 0;
+
+  // holding a laptop: fly the plane now and then, when nothing is coming for it and no rival is near enough to
+  // walk up and box it in while it stands at the laptop (it lands again if a blast heads its way: pilot)
+  if (me.laptop && !me.carrying && enemies.length && !hasDanger(D, S)) {
+    const near = enemies.some((e) => Math.abs(Math.round(e.x) - sx) + Math.abs(Math.round(e.y) - sy) <= 3);
+    if (!near && bot.rng() < spec.fly) {
+      bot.path = [];
+      bot.doing = 'pilot';
+      bot.aimFor = -1; // (a new flight: its aim is worked out afresh)
+      return { dir: 0, a: false, b: true };
+    }
+  }
+
   const canBomb =
     !me.carrying &&
     me.activeBombs < Math.min(me.bombsMax, spec.maxBombs) &&
@@ -1359,7 +1517,7 @@ function wayOut(c: Ctx): PlayerInput[] | null {
       if (prefix) return prefix;
     }
   }
-  if (spec.throwEscape && me.canGrab) {
+  if (spec.throwEscape && me.canGrab && !me.laptop) {
     const near = groundBombAt(world, sx, sy) || [1, 2, 3, 4].some((d) => groundBombAt(world, sx + DX[d], sy + DY[d]));
     if (near) {
       for (const d of shuffled(bot.rng)) {
