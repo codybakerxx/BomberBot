@@ -95,8 +95,8 @@ export const CLOSE_IN = [
 ];
 
 /**
- * Power-ups (the owner's ask, 19 November 2026): how many of the bricks hide one, in percent, from none to
- * every brick in steps of ITEM_SHARE_STEP. 60% is the usual (ITEM_SHARE).
+ * Power-up density (the owner's ask and his name for it, 19 November 2026): how many of the bricks hide one,
+ * in percent, from none to every brick in steps of ITEM_SHARE_STEP. 60% is the usual (ITEM_SHARE).
  */
 export const ITEM_SHARE_STEP = 5;
 export const ITEM_SHARE_DEFAULT = Math.round(ITEM_SHARE * 100);
@@ -752,7 +752,7 @@ export function summary(s: MatchSetup, guests = 0): string {
   if (afterlifeOf(s) === 'angel') parts.push(s.angelsBack ? 'Angels come back' : 'Angels');
   if (afterlifeOf(s) === 'zombie') parts.push('Zombies');
   if (s.startOn) parts.push('Custom start');
-  if (s.itemShare !== ITEM_SHARE_DEFAULT) parts.push(s.itemShare ? `Power-ups ${s.itemShare}%` : 'No power-ups');
+  if (s.itemShare !== ITEM_SHARE_DEFAULT) parts.push(s.itemShare ? `Power-up density ${s.itemShare}%` : 'No power-ups');
   if (s.itemsOn && s.itemShare) parts.push('Custom power-ups');
   return parts.join(' · ');
 }

@@ -794,8 +794,14 @@
   .opt-slider.on-thumb .opt-range { margin-top: 12px; }
   .thumb-value { position: absolute; bottom: calc(50% + 14px); left: calc(13px + (100% - 26px) * var(--at, 0)); transform: translateX(-50%); white-space: nowrap; pointer-events: none; font: 700 11px/1 var(--font-display); letter-spacing: 0.04em; color: var(--accent); }
   .opt-range input { flex: 1 1 auto; min-width: 0; height: 36px; margin: 0; background: transparent; -webkit-appearance: none; appearance: none; cursor: pointer; }
-  .opt-range input::-webkit-slider-runnable-track { height: 8px; border-radius: 4px; background: linear-gradient(to right, var(--accent) var(--fill, 0%), var(--line) var(--fill, 0%)); }
-  .opt-range input::-moz-range-track { height: 8px; border-radius: 4px; background: linear-gradient(to right, var(--accent) var(--fill, 0%), var(--line) var(--fill, 0%)); }
+  /* the usual setting: a line across the bar where it is (the owner's ask, 19 November 2026; `normal` on
+     `slider` in ui.ts), at the middle of where the circle would be: above and below the bar .range-mark, on the
+     bar a stripe in the bar's picture, dark across its gold part and light across the rest (--mark-ink) */
+  .range-wrap { --mark-x: calc(13px + (100% - 26px) * var(--mark-at, -1)); }
+  .range-mark { position: absolute; top: 50%; left: var(--mark-x); width: 2px; height: 18px; margin: -9px 0 0 -1px; border-radius: 1px; background: rgba(255, 255, 255, 0.5); pointer-events: none; }
+  .opt-range input { position: relative; z-index: 1; }
+  .opt-range input::-webkit-slider-runnable-track { height: 8px; border-radius: 4px; background: linear-gradient(to right, transparent calc(var(--mark-x) - 1px), var(--mark-ink, transparent) calc(var(--mark-x) - 1px), var(--mark-ink, transparent) calc(var(--mark-x) + 1px), transparent calc(var(--mark-x) + 1px)), linear-gradient(to right, var(--accent) var(--fill, 0%), var(--line) var(--fill, 0%)); }
+  .opt-range input::-moz-range-track { height: 8px; border-radius: 4px; background: linear-gradient(to right, transparent calc(var(--mark-x) - 1px), var(--mark-ink, transparent) calc(var(--mark-x) - 1px), var(--mark-ink, transparent) calc(var(--mark-x) + 1px), transparent calc(var(--mark-x) + 1px)), linear-gradient(to right, var(--accent) var(--fill, 0%), var(--line) var(--fill, 0%)); }
   .opt-range input::-webkit-slider-thumb { -webkit-appearance: none; width: 26px; height: 26px; margin-top: -9px; border-radius: 50%; background: #fff; border: 3px solid var(--accent); }
   .opt-range input::-moz-range-thumb { width: 20px; height: 20px; border-radius: 50%; background: #fff; border: 3px solid var(--accent); }
   .opt-under { border-top: 1px solid #1d2338; }

@@ -1223,6 +1223,7 @@ const sensOpts: Opt[] = [
       }° ${settings.hand === 'right' ? 'anticlockwise' : 'clockwise'}.)`,
     min: 0,
     max: SENS_MAX,
+    normal: DEFAULT_SENS,
     get: () => settings.sens,
     set: (v) => {
       settings.sens = v;
@@ -2228,6 +2229,7 @@ const soundOpts: Opt[] = [
           min: 0,
           max: 100,
           step: 10,
+          normal: defaultPrefs().volume,
           get: () => prefs.volume,
           set: (v) => {
             prefs.volume = v;
@@ -2273,6 +2275,7 @@ const padOpts: Opt[] = [
     min: 40,
     max: 200,
     step: 20,
+    normal: defaultPrefs().padShow,
     get: () => prefs.padShow,
     set: (v) => {
       prefs.padShow = v;
@@ -2304,6 +2307,7 @@ const gfxOpts: Opt[] = [
     },
     min: 0,
     max: SHARPNESS.length - 1,
+    normal: defaultPrefs().sharpness,
     get: () => prefs.sharpness,
     set: (v) => {
       prefs.sharpness = v;

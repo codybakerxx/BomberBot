@@ -1457,6 +1457,8 @@ export function createLobby(host: LobbyHost): {
   // the match is won, lives and what comes after, the arena, and what the robots start with. Each label ends
   // in its own Reset, which puts back only that group's rules (RULE_GROUPS in setup.ts) at once, with no
   // question and no note at the foot (the owner's call: the group's cards glow once, which is enough).
+  /** the rules as they are by default for the arena shown: each slider marks where its own is */
+  const usual = (): MatchSetup => defaultRules(s(), host.myColor);
   function groupReset(key: RuleGroup): GroupReset {
     return {
       isDefault: () => groupIsDefault(s(), key, host.myColor),
@@ -1484,6 +1486,7 @@ export function createLobby(host: LobbyHost): {
             min: ROUND_MIN,
             max: ROUND_MAX,
             step: ROUND_STEP,
+            normal: () => usual().roundSecs,
             get: () => s().roundSecs,
             set: (v) => {
               s().roundSecs = v;
@@ -1496,6 +1499,7 @@ export function createLobby(host: LobbyHost): {
             hint: () => `The blocks take ${CLOSE_IN[s().closeIn].secs} seconds to fall. A 7 by 5 area in the middle stays open.`,
             min: 0,
             max: CLOSE_IN.length - 1,
+            normal: () => usual().closeIn,
             get: () => s().closeIn,
             set: (v) => {
               s().closeIn = v;
@@ -1512,6 +1516,7 @@ export function createLobby(host: LobbyHost): {
         hint: 'The first to win this many rounds wins the match',
         min: 1,
         max: MAX_FIRST_TO,
+        normal: () => usual().firstTo,
         get: () => s().firstTo,
         set: (v) => {
           s().firstTo = v;
@@ -1526,6 +1531,7 @@ export function createLobby(host: LobbyHost): {
         hint: 'Each round. Lose one and you are back in your corner, starting from scratch',
         min: 1,
         max: MAX_LIVES,
+        normal: () => usual().lives,
         get: () => s().lives,
         set: (v) => {
           s().lives = v;
@@ -1541,6 +1547,7 @@ export function createLobby(host: LobbyHost): {
         hint: 'How much of the arena starts filled. The picture above shows it.',
         min: 0,
         max: BRICKS.length - 1,
+        normal: () => usual().bricks,
         get: () => s().bricks,
         set: (v) => {
           s().bricks = v;
@@ -1549,8 +1556,8 @@ export function createLobby(host: LobbyHost): {
         text: (v) => BRICKS[v].name,
       }),
       slider({
-        // the owner's ask, 19 November 2026: how many power-ups an arena has
-        label: 'Power-ups',
+        // the owner's ask, 19 November 2026: how many power-ups an arena has (his name for it)
+        label: 'Power-up density',
         hint: () => {
           const n = previewWorld().hidden.size; // (the arena in the picture: its own bricks, as Bricks sets them)
           return `How many of the bricks hide a power-up. The arena above has ${n === 0 ? 'none' : n}.`;
@@ -1558,6 +1565,7 @@ export function createLobby(host: LobbyHost): {
         min: 0,
         max: 100,
         step: ITEM_SHARE_STEP,
+        normal: () => usual().itemShare,
         get: () => s().itemShare,
         set: (v) => {
           s().itemShare = v;
@@ -1580,6 +1588,7 @@ export function createLobby(host: LobbyHost): {
             hint: what,
             min: 0,
             max: ITEM_AMOUNTS.length - 1,
+            normal: () => usual().items[kind],
             get: () => s().items[kind],
             set: (v) => {
               s().items[kind] = v;
@@ -1601,9 +1610,9 @@ export function createLobby(host: LobbyHost): {
         },
         offText: 'Everyone starts with 1 bomb, a 1-tile blast and normal speed.',
         under: [
-          slider({ label: 'Bombs', min: 1, max: MAX_BOMBS, get: () => s().startBombs, set: (v) => ((s().startBombs = v), changed()), text: (v) => `${v} at a time` }),
-          slider({ label: 'Blast', min: START_FIRE, max: MAX_FIRE, get: () => s().startFire, set: (v) => ((s().startFire = v), changed()), text: (v) => (v === 1 ? '1 tile' : `${v} tiles`) }),
-          slider({ label: 'Speed', min: 0, max: MAX_SPEED_ITEMS, get: () => s().startSpeed, set: (v) => ((s().startSpeed = v), changed()), text: (v) => (v === 0 ? 'Normal' : `+${v}`) }),
+          slider({ label: 'Bombs', min: 1, max: MAX_BOMBS, normal: () => usual().startBombs, get: () => s().startBombs, set: (v) => ((s().startBombs = v), changed()), text: (v) => `${v} at a time` }),
+          slider({ label: 'Blast', min: START_FIRE, max: MAX_FIRE, normal: () => usual().startFire, get: () => s().startFire, set: (v) => ((s().startFire = v), changed()), text: (v) => (v === 1 ? '1 tile' : `${v} tiles`) }),
+          slider({ label: 'Speed', min: 0, max: MAX_SPEED_ITEMS, normal: () => usual().startSpeed, get: () => s().startSpeed, set: (v) => ((s().startSpeed = v), changed()), text: (v) => (v === 0 ? 'Normal' : `+${v}`) }),
         ],
       }),
     ], groupReset('start')),

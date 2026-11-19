@@ -124,6 +124,11 @@ export function slider(o: {
   text: (v: number) => string;
   /** the value in small type over the slider's circle, following it, in place of beside the name (the owner's ask for Settings › Controls) */
   onThumb?: boolean;
+  /**
+   * The usual setting, marked by a line across the bar (the owner's ask, 19 November 2026: every slider shows
+   * where its default is). A function when it depends on something else, such as the arena picked.
+   */
+  normal?: number | (() => number);
 }): Opt {
   const row = el('div', 'opt opt-slider');
   if (o.onThumb) row.classList.add('on-thumb');
@@ -145,6 +150,11 @@ export function slider(o: {
   const track = el('div', 'range-wrap');
   const tip = el('span', 'thumb-value');
   tip.setAttribute('aria-hidden', 'true');
+  // the usual setting's line: above and below the bar this element (the bar is drawn over it), and on the bar
+  // a stripe in the bar's own picture (`--mark-ink`), so that the circle covers it as it does the bar
+  const mark = el('span', 'range-mark');
+  mark.setAttribute('aria-hidden', 'true');
+  if (o.normal !== undefined) track.append(mark);
   track.append(range);
   if (o.onThumb) track.append(tip);
   line.append(minus, track, plus);
@@ -162,7 +172,16 @@ export function slider(o: {
       const v = o.get();
       range.value = String(v);
       range.setAttribute('aria-valuetext', o.text(v));
-      range.style.setProperty('--fill', `${((v - o.min) / (o.max - o.min || 1)) * 100}%`);
+      const at = (x: number): number => (x - o.min) / (o.max - o.min || 1);
+      // (filled up to the middle of the circle, which runs from half its width in at one end to the other)
+      range.style.setProperty('--fill', `calc(13px + (100% - 26px) * ${at(v)})`);
+      if (o.normal !== undefined) {
+        const n = typeof o.normal === 'function' ? o.normal() : o.normal;
+        track.style.setProperty('--mark-at', String(Math.max(0, Math.min(1, at(n)))));
+        // dark across the gold part of the bar (the setting is above the usual), light across the rest
+        track.style.setProperty('--mark-ink', n < v ? 'rgba(10, 12, 20, 0.6)' : 'rgba(255, 255, 255, 0.6)');
+        range.setAttribute('aria-description', `Usual: ${o.text(n)}`);
+      }
       val.textContent = o.text(v);
       tip.textContent = o.text(v);
       track.style.setProperty('--at', String((v - o.min) / (o.max - o.min || 1)));

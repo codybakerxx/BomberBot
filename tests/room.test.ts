@@ -112,9 +112,9 @@ for (const a of ARENAS) {
   const old = { ...defaultSetup('gold') } as Partial<MatchSetup>;
   delete old.itemShare;
   assert.equal(readSetup(old, 'gold', colorIds).itemShare, 60);
-  assert.ok(summary({ ...defaultSetup('gold'), itemShare: 30 }).includes('Power-ups 30%'));
+  assert.ok(summary({ ...defaultSetup('gold'), itemShare: 30 }).includes('Power-up density 30%'));
   assert.ok(summary({ ...defaultSetup('gold'), itemShare: 0 }).includes('No power-ups'));
-  assert.ok(!summary(defaultSetup('gold')).includes('Power-ups'), 'the usual is not mentioned');
+  assert.ok(!summary(defaultSetup('gold')).includes('Power-up'), 'the usual is not mentioned');
 }
 
 // the arena is a whole number of page pixels on a screen of density 3 (an iPhone), so it is never stretched
