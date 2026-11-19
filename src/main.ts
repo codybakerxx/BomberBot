@@ -10,7 +10,7 @@
  *
  * It holds no game rules. Those are all in sim.ts.
  */
-import { createWorld, step, ticksLeft, World, PlayerInput, Dir, TICK_HZ, DEATH_TICKS, KEEP_OPEN_W, KEEP_OPEN_H, type GameEvent, type ItemKind } from './sim';
+import { createWorld, step, ticksLeft, World, PlayerInput, Dir, TICK_HZ, DEATH_TICKS, type GameEvent, type ItemKind } from './sim';
 import { Bot, BotLevel, BOT_LEVELS, LEVELS, createBot, botInput } from './bot';
 import { COLORS, NOBODY, botName, colorById, drawAngels, drawGround, drawHead, drawItemTile, drawStatic, drawDynamic, drawGhosts, groundKey, setMap, setOrangeFire, warmSprites } from './render';
 import { Input, PadReader, typing } from './input';
@@ -21,7 +21,7 @@ import { readDance, type DanceId } from './dances';
 import { createPadNav } from './padnav';
 import { PAD } from './bindings';
 import { createRemap } from './remap';
-import { CpuSlot, Guest, ITEM_NAMES, MatchSetup, Prefs, SHARPNESS, SOUND_GROUPS, SOUND_NAMES, TEAMS, afterlifeOf, arenaOf, clockText, defaultPrefs, defaultSetup, load, readPrefs, readSetup, rollCpus, save, wholeTile, worldConfig } from './setup';
+import { CpuSlot, Guest, ITEM_NAMES, MatchSetup, Prefs, SHARPNESS, SOUND_GROUPS, SOUND_NAMES, TEAMS, arenaOf, clockText, defaultPrefs, defaultSetup, load, readPrefs, readSetup, rollCpus, save, wholeTile, worldConfig } from './setup';
 import { BOMB_ICON, Opt, answerConfirm, choice, confirmFirst, confirmOpen, group, heading, mount, note, slider, toggle, wireConfirm, wireFlash } from './ui';
 import { Hand, SENSITIVITY, DEFAULT_SENS, STRAIGHT, standardAims } from './swipe';
 import { Online } from './online';
@@ -1366,7 +1366,9 @@ function fillPause(): void {
   $('pauseLobby').hidden = !hosting;
   $('pauseLobby').textContent = net ? 'End match' : 'Leave to the lobby';
   $('pauseLeave').hidden = !net;
-  $('pauseTitle').textContent = done ? `${sideName(matchWinner)} won the match` : `Round ${roundNo}`;
+  const title = $('pauseTitle');
+  title.textContent = done ? `${sideName(matchWinner)} won the match` : world.over ? `Round ${roundNo} · over` : `Round ${roundNo}`;
+  title.classList.toggle('won', done);
   fillHero();
   $('pauseResume').textContent = 'Resume'; // (the owner's word, whether the round is going on or over)
   const list = $('standings');
@@ -1420,27 +1422,20 @@ function bit(text: string, cls = ''): HTMLSpanElement {
   return Object.assign(document.createElement('span'), { textContent: text, className: cls });
 }
 /**
- * The top of the menu during a match (the owner's ask, 18 November 2026: information worth having in the middle
- * of a round, not filler): the round and what wins the match, the clock and what it counts down to, a bar for
- * how far the round has come (the timer, the falling blocks, the last stand in the middle), and your own kit,
- * each power-up drawn as in the arena. Online the round goes on behind the menu, so this is filled again a few
- * times a second (`heroTimer`); the standings only when something happens.
+ * The top of the menu during a match, under its chips: the round, small, and your own kit, each power-up drawn as
+ * in the arena (the owner's design, 18 November 2026; a big round box with the rules under the name, a clock for
+ * the falling blocks and a bar for the round were tried that day and turned down). Online: the ping, in its chip
+ * beside the room's code (or at the end of the round's line on the narrowest phones). Online the round goes on
+ * behind the menu, so this is filled again a few times a second (`keepHero`); the standings only when something
+ * happens.
  */
 function fillHero(): void {
   const done = matchWinner >= 0;
-  const hero = $('pauseHero');
-  // what decides the match, and the rules that change how a round plays
-  const goal: HTMLSpanElement[] = [];
-  if (!done) goal.push(bit(setup.firstTo > 1 ? `First to ${setup.firstTo}` : 'One round wins it'));
-  if (setup.lives > 1) goal.push(bit(`${setup.lives} lives each`));
-  if (setup.teamsOn) goal.push(bit(setup.friendlyFire ? 'Teams · friendly fire' : 'Teams'));
-  const after = afterlifeOf(setup);
-  if (after === 'angel') goal.push(bit(setup.angelsBack ? 'Angels come back' : 'Angels'));
-  else if (after === 'zombie') goal.push(bit('Zombies'));
-  $('pauseGoal').replaceChildren(...goal);
-  // online: the ping beside the room's chip (the round trip to the server, so a slow connection can be told
-  // from a fault): signal bars lit by how good it is, and the milliseconds; until the first one, a dash
-  // (on a narrow phone a copy under the round's name is shown in its place: page.html)
+  // online: the round trip to the server, so a slow connection can be told from a fault: signal bars lit by how
+  // good it is, and the milliseconds; until the first one, a dash. (On a narrow phone a copy at the end of the
+  // round's line is shown in its place: page.html.)
+  const slot = $('pauseGoal');
+  slot.replaceChildren();
   const ping = $('pauseNet');
   ping.hidden = !net;
   if (net) {
@@ -1453,61 +1448,7 @@ function fillHero(): void {
     copy.removeAttribute('role');
     copy.querySelector('#pausePing')?.removeAttribute('id');
     copy.setAttribute('aria-hidden', 'true');
-    $('pauseGoal').append(copy);
-  }
-  // the clock: what it is counting down to, in the colours of the one over the arena
-  const clock = $('pauseClock');
-  const bar = $('pauseBar');
-  const t = world.tick;
-  const R = world.roundTicks;
-  const S = world.shrinkTicks;
-  let big = '';
-  let small = '';
-  let tone = '';
-  let word = false;
-  if (done) {
-    // (the title says who won)
-  } else if (world.over) {
-    const w = world.over.winner;
-    big = 'Over';
-    small = w >= 0 ? `${onSide(myIdx(), w) ? 'you won' : `${sideName(w)} won`}` : 'a draw';
-    word = true;
-  } else if (R <= 0) {
-    big = 'No timer';
-    small = 'last robot standing';
-    word = true;
-  } else if (t < R) {
-    const secs = Math.ceil((R - t) / TICK_HZ);
-    big = clockText(secs);
-    small = 'until blocks fall';
-    tone = secs <= 10 ? 'red' : secs <= 30 ? 'amber' : '';
-  } else if (t < R + S) {
-    big = clockText(Math.ceil((R + S - t) / TICK_HZ));
-    small = 'blocks falling';
-    tone = 'red';
-  } else {
-    big = 'Last stand';
-    small = `the ${KEEP_OPEN_W} × ${KEEP_OPEN_H} in the middle`;
-    tone = 'red';
-    word = true;
-  }
-  clock.hidden = !big;
-  hero.classList.toggle('solo', !big);
-  clock.className = `hero-clock${tone ? ' ' + tone : ''}${word ? ' word' : ''}`;
-  $('pauseTime').textContent = big;
-  $('pauseTimeLabel').textContent = small;
-  // the round's progress: the timer, then the blocks, then the last stand (shown a fifth as long as the two)
-  bar.hidden = done || R <= 0;
-  if (!bar.hidden) {
-    const fin = Math.round((R + S) / 5);
-    const segs = bar.querySelectorAll<HTMLElement>('.seg');
-    const parts: [number, number][] = [[0, R], [R, R + S], [R + S, R + S + fin]];
-    parts.forEach(([a, b], k) => {
-      segs[k].style.flexGrow = String(b - a);
-      // (the last stand has no end: its part fills once it has begun)
-      const share = k === 2 ? (t >= R + S ? 1 : 0) : (t - a) / (b - a);
-      (segs[k].firstElementChild as HTMLElement).style.width = `${Math.max(0, Math.min(1, share)) * 100}%`;
-    });
+    slot.append(copy);
   }
   // your kit, while you are in the round (not out, an angel or a zombie)
   const kit = $('pauseKit');
@@ -1546,6 +1487,10 @@ function keepHero(on: boolean): void {
   if (on) heroTimer = window.setInterval(() => (mode === 'pause' ? fillHero() : keepHero(false)), 250);
 }
 $('menuBtn').addEventListener('click', openPause);
+// a tap in the blank space round the menu closes it, like Resume (the owner's ask, 18 November 2026)
+$('pause').addEventListener('click', (e) => {
+  if (e.target === e.currentTarget && mode === 'pause') closePause();
+});
 $('pauseResume').addEventListener('click', closePause);
 $('pauseSettings').addEventListener('click', () => showSettings(undefined, 'pause'));
 
