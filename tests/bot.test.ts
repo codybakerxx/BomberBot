@@ -312,8 +312,8 @@ for (const level of ['hard'] as BotLevel[]) {
   assert.equal(LEVELS.beginner.squareBold, false);
   assert.ok(LEVELS.normal.squareBold && LEVELS.hard.squareBold);
   /** two players in the square, bricks gone, every block fallen */
-  const square = (): World => {
-    const w = createWorld({ seed: 6, players: [{ colorId: 'gold' }, { colorId: 'blue' }], softDensity: 0 });
+  const square = (seed = 6): World => {
+    const w = createWorld({ seed, players: [{ colorId: 'gold' }, { colorId: 'blue' }], softDensity: 0 });
     for (const i of w.shrinkOrder) w.tiles[i] = HARD;
     w.shrinkNext = w.shrinkOrder.length;
     w.tick = ROUND_TICKS + SHRINK_TICKS + 1;
@@ -322,15 +322,21 @@ for (const level of ['hard'] as BotLevel[]) {
     b.x = 9; b.y = 7;
     return w;
   };
-  for (const level of ['normal', 'hard'] as BotLevel[]) {
-    const w = square();
-    const bots = [0, 1].map((i) => createBot(i, level, 21));
-    let bombs = 0;
-    for (let t = 0; t < 90 * TICK_HZ && !w.over; t++) {
-      step(w, bots.map((bot) => botInput(w, bot)));
-      bombs += w.events.filter((e) => e.type === 'place').length;
+  // Over 24 arenas, not one: a single arena passed or failed by luck (a fuse 3 ticks longer, 18 November 2026,
+  // turned this arena's 27 s into a stall, while over 40 arenas the share settled within 90 s stayed the same,
+  // 22 and 21 of 40). Measured then, with the 7 by 5 and the 2.55 s fuse: Hard settles 21 of 24 within 90 s,
+  // Normal 11 (Normal presses, but carefully: two of them can circle a long time).
+  for (const [level, least] of [['normal', 8], ['hard', 18]] as [BotLevel, number][]) {
+    let decided = 0;
+    for (let seed = 1; seed <= 24; seed++) {
+      const w = square(seed);
+      const bots = [0, 1].map((i) => createBot(i, level, 21 + seed));
+      // (being shut in by the rival's bombs and caught by its own is the risk pressing takes on purpose:
+      // docs/CPU-PLAYERS.md, so it is not checked here; the cpu-matches runs tell it from blasting itself)
+      for (let t = 0; t < 90 * TICK_HZ && !w.over; t++) step(w, bots.map((bot) => botInput(w, bot)));
+      if (w.over) decided++;
     }
-    assert.ok(w.over, `two ${level} players in the square: decided within 90 seconds (${bombs} bombs dropped)`);
+    assert.ok(decided >= least, `two ${level} players in the square: ${decided} of 24 decided within 90 seconds (at least ${least})`);
   }
   // the pressing is only for the square: the same two players a minute earlier, out in the open arena, are as careful as ever
   {

@@ -1355,7 +1355,7 @@ const CAP_TILT = Math.atan2(FUSE_CURVE[0][0], -FUSE_CURVE[0][1]); // the cap lea
  * burning down the fuse. (cx, cy) is the middle of the ball.
  *
  * The fuse is a clock. The length of rope left is the share of the bomb's time that is left, so the spark
- * reaches the cap as the bomb goes off: 2.5 seconds from being dropped; a bomb that has been picked up was
+ * reaches the cap as the bomb goes off: 2.55 seconds from being dropped (FUSE_TICKS); a bomb that has been picked up was
  * given 3 seconds then, so its fuse is measured against that (it grows back at the first lift, because the
  * bomb really does get more time). A bomb caught in a blast has a few ticks left, so its spark jumps to
  * the cap. In the last three quarters of a second the ball throbs faster and flashes red-hot.

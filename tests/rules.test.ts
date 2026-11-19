@@ -196,7 +196,7 @@ const mk = (density = 0): World =>
   assert.equal(w.bombs.length, 2);
   run(w, ticks(200), { dir: 4, a: false, b: false });
   run(w, ticks(60), { dir: 2, a: false, b: false });
-  // first bomb goes at 150; the second (placed 35 ticks later) must chain right after
+  // first bomb goes at FUSE_TICKS (153); the second (placed 35 ticks later) must chain right after
   assert.equal(w.bombs.length, 0, 'second bomb chained early');
 }
 

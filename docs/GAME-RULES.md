@@ -21,7 +21,7 @@ The game runs at a fixed 60 ticks a second. Times below are given in seconds wit
 
 - A robot moves up, down, left or right, one direction at a time, and stops the moment no direction is held. It does not finish the step.
 - Robots start at 2.55 tiles a second. Each speed power-up adds 0.5 tiles a second, and up to six of them count, which brings a robot to 5.55 tiles a second, 2.18 times its starting speed. Collecting a speed power-up is the only thing that raises a robot's speed. The only thing that lowers it is a curse, for 8 seconds.
-- At the starting speed, getting clear of your own first bomb (two tiles along a lane) takes 0.78 seconds of the bomb's 2.5.
+- At the starting speed, getting clear of your own first bomb (two tiles along a lane) takes 0.78 seconds of the bomb's 2.55.
 - The tile a robot **counts as standing on** is the one whose middle it is nearest to. The game draws a ring on yours. That tile decides where your bomb is dropped, whether a blast catches you and which power-up you pick up.
 - A robot fills its lane, so it can only go sideways where there is an opening beside it. Bricks and solid blocks block it. So does a bomb, with one exception: a bomb on the tile the robot counts as standing on (the one it just dropped, or one thrown onto it) does not hold it in. It can move about on that tile and walk off. The moment it counts as standing on the next tile, that bomb is solid to it like any other, so there is no walking back through.
 
@@ -49,7 +49,7 @@ It matters for more than looks: a lifted bomb is thrown the way the robot is loo
 *`placeBomb` and `step` in sim.ts*
 
 - **A** drops a bomb on the tile you are standing on. You start able to have one bomb out at a time.
-- A bomb goes off 2.5 seconds (150 ticks) after it is dropped.
+- A bomb goes off 2.55 seconds (153 ticks) after it is dropped (the owner's choice, 18 November 2026; it was 2.5 s).
 - Its blast length is fixed when it is dropped. Picking up a flame afterwards does not lengthen bombs already out.
 - You cannot drop a bomb on a tile that already has one, or while you are carrying one.
 
@@ -300,7 +300,7 @@ All of these are named constants near the top of `src/sim.ts`. Changing one chan
 | `START_FIRE` | 1 | How long a blast is, in tiles each way, before any flame power-up |
 | `MAX_FIRE` | 8 | Longest blast, in tiles |
 | `KEEP_OPEN_W`, `KEEP_OPEN_H` | 7, 5 | The falling blocks leave an area this many tiles across and down open in the middle (it was a 5 by 5 square, `KEEP_OPEN`) |
-| `FUSE_TICKS` | 150 | Fuse of a dropped bomb (2.5 s) |
+| `FUSE_TICKS` | 153 | Fuse of a dropped bomb (2.55 s; it was 150, 2.5 s) |
 | `FLAME_TICKS` | 27 | How long a blast and a burning brick last (0.45 s) |
 | `CHAIN_TICKS` | 5 | Delay before a bomb caught in a blast goes off |
 | `CARRY_FUSE_TICKS` | 180 | Fuse set by the first lift (3 s) |

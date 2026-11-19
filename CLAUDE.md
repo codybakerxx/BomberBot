@@ -89,6 +89,7 @@ Do not undo these unless asked. The reasons are in `docs/ROADMAP.md` and `docs/C
 - Shield (very rare): the next blast does not knock the robot out; 30 seconds (`SHIELD_TICKS`) then it wears off; half a second of safety after it is used (`SHIELD_GRACE_TICKS`), so it covers one bomb, not a chain. Does not stack.
 - Curse (very rare): 8 seconds (`CURSE_TICKS`) at 85% of the starting speed (`CURSE_SPEED`), ignoring speed power-ups. It is the only thing besides a speed power-up that changes a robot's speed, and it gives the speed back.
 - Shield and curse are drawn on the robot (`drawStatus` in `render.ts`), not in the top bar.
+- A dropped bomb goes off after 2.55 seconds (`FUSE_TICKS` 153; the owner's ask, 18 November 2026: it was 150, 2.5 s). A lifted one has 3 s from the first lift (`CARRY_FUSE_TICKS`); one caught in a blast goes off 5 ticks later (`CHAIN_TICKS`).
 - A blast, and a burning brick, lasts 0.45 seconds (`FLAME_TICKS` 27: shortened a little from 30).
 - A bomb is passable only while the robot still counts as standing on its tile (`blocked` in `sim.ts`). Once on the next tile it is solid; with the boot, pushing back into it kicks it.
 - Kicking needs the boot. Lifting needs the glove. A lifted bomb has 3 seconds, keeps ticking, and the timer is set at the first lift only.

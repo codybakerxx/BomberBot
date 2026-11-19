@@ -141,7 +141,7 @@ No level cheats, and no level is made easier by being careless with its own bomb
 
 ## What has been measured
 
-`experiments/cpu-matches.ts` plays whole rounds with no screen and counts how each bot went out. These are the real CPU players under the real rules: three levels, a blast that starts one tile long, the timer, the falling blocks that start when it reaches 0:00, the square they leave open, and Normal and Hard pressing once they are in it. Recorded again on 18 November 2026, after the area the blocks leave open was made 7 by 5 (it was a 5 by 5 square); the first recording was on 11 November 2026, after the timer was shortened to 1 minute 30 and the blocks made 20% faster. Where the 18 November figures differ much from the 11 November ones, the notes say so.
+`experiments/cpu-matches.ts` plays whole rounds with no screen and counts how each bot went out. These are the real CPU players under the real rules: three levels, a blast that starts one tile long, the timer, the falling blocks that start when it reaches 0:00, the square they leave open, and Normal and Hard pressing once they are in it. Recorded again on 18 November 2026, after the area the blocks leave open was made 7 by 5 (it was a 5 by 5 square) and the fuse made 2.55 s (it was 2.5); the first recording was on 11 November 2026, after the timer was shortened to 1 minute 30 and the blocks made 20% faster. Where the 18 November figures differ much from the 11 November ones, the notes say so.
 
 A round has no end of its own: the timer runs 1 minute 30, the blocks take 50 seconds to fall, and then it goes on in the square until someone wins. These runs give up 2 minutes after the blocks stop (4 minutes 20 in) and count the round as **not decided**.
 
@@ -149,33 +149,33 @@ A round has no end of its own: the timer runs 1 minute 30, the blocks take 50 se
 
 | Level | Blasted itself | Shut in by a rival | Caught in a rival's blast | Under a block, early | Under a block, in the last 15 s of them | Won | Rounds drawn | Not decided | Decided after |
 |---|---|---|---|---|---|---|---|---|---|
-| Beginner | 0.0% | 0.0% | 62.1% | 3.3% | 4.6% | 20.0% | 0 of 60 | 12 of 60 | 156 s |
-| Normal | 0.0% | 23.3% | 43.8% | 0.8% | 8.8% | 23.3% | 4 of 60 | 0 of 60 | 146 s |
-| Hard | 0.0% | 29.6% | 43.8% | 0.0% | 1.7% | 23.3% | 2 of 60 | 2 of 60 | 160 s |
+| Beginner | 0.0% | 0.4% | 58.8% | 3.8% | 5.0% | 17.9% | 0 of 60 | 17 of 60 | 167 s |
+| Normal | 0.0% | 20.4% | 45.4% | 0.8% | 10.0% | 23.3% | 4 of 60 | 0 of 60 | 147 s |
+| Hard | 0.0% | 31.3% | 40.0% | 1.7% | 2.5% | 23.8% | 2 of 60 | 1 of 60 | 169 s |
 
 - "Shut in by a rival" and "blasted itself" are both a bot caught by its own blast. The script calls it "shut in by a rival" when, within six steps of where the bot stood, there was a tile its own bombs would not have reached that was blocked or about to be blasted by a bomb a rival dropped *after* the bomb that caught it. It looks at the arena as it was when that bomb was dropped, so a tile a block has landed on since still counts as a way out it had. A rival's bomb dropped on the very same tick counts too, and so does one a rival threw or kicked that came to rest on the way out afterwards. It is also "shut in by a rival" when the bot's own bomb went off early because a rival's bomb set it off, and that rival's bomb was dropped, kicked or thrown after the bot dropped its own. Anything else is "blasted itself".
 - Before Normal and Hard pressed in the square, Normal left 32 of 60 rounds not decided and Hard 9. Now it is none and 2. The price shows in "shut in by a rival": Normal went from 3.8% to about 20%, Hard from 27.5% to about 34%. That is the risk they now take on purpose. Beginner does not press, and its 20 of 60 is the old figure give or take (it was 15).
 - "Decided after" is the average length of the rounds that were decided. The blocks stop at 140 s, so most are settled in the square.
 - With the shorter timer and faster blocks, rounds are settled about 35 seconds sooner than before, and the other columns moved little. One thing did move: four Hards drew 9 rounds of 60 (it was 2). Why was not looked into; with the 7 by 5 it is back to 2.
-- With the 7 by 5 (18 November 2026): four Beginners leave fewer rounds not decided (12 of 60, was 20), and four Hards are shut in by a rival a little less (29.6%, was 34.2%): more room to get out of a squeeze. The rest is about where it was.
+- With the 7 by 5 and the 2.55 s fuse (18 November 2026): about where it was. Four Beginners left 12 of 60 not decided with the 7 by 5 alone and 17 with the longer fuse too (20 before either): noise, mostly. Four Hards draw 2 of 60 again.
 
 **One of each level in the same round** (three players, 180 rounds, each level in each of three corners equally often):
 
 | Level | Won | Blasted | Under a block, early | Blasted itself | Rivals it blasted |
 |---|---|---|---|---|---|
-| Beginner | 2.8% | 73.3% | 6.1% | 0.0% | 5 |
-| Normal | 32.8% | 60.0% | 1.7% | 0.0% | 58 |
-| Hard | 59.4% | 32.2% | 0.6% | 0.0% | 167 |
+| Beginner | 3.3% | 79.4% | 2.2% | 0.0% | 8 |
+| Normal | 28.3% | 64.4% | 1.7% | 0.0% | 68 |
+| Hard | 63.3% | 31.7% | 0.6% | 0.0% | 173 |
 
-1 of 180 drawn, 8 left undecided (with the 5 by 5: 5 drawn, 2 undecided) (it was 27 before they pressed in the square). The levels are well apart: each wins far more and blasts far more rivals than the one below.
+4 of 180 drawn, 5 left undecided (with the 5 by 5 and the 2.5 s fuse: 5 drawn, 2 undecided) (it was 27 before they pressed in the square). The levels are well apart: each wins far more and blasts far more rivals than the one below.
 
 **Three of one level against a slow, careless player** (a Beginner CPU player standing in for a person, 80 rounds):
 
 | Three of | Blasted the player | Average time | A block got the player | The player won | Not decided | CPU players that blasted themselves |
 |---|---|---|---|---|---|---|
-| Beginner | 58 of 80 | 116 s | 7 of 80 | 9 of 80 | 16 of 80 | 0 |
-| Normal | 64 of 80 | 100 s | 15 of 80 | 1 of 80 | 0 of 80 | 0 |
-| Hard | 68 of 80 | 92 s | 10 of 80 | 2 of 80 | 4 of 80 | 1 (replayed: a rival's doing, see below) |
+| Beginner | 50 of 80 | 123 s | 9 of 80 | 8 of 80 | 21 of 80 | 0 |
+| Normal | 53 of 80 | 120 s | 22 of 80 | 5 of 80 | 0 of 80 | 0 |
+| Hard | 66 of 80 | 92 s | 10 of 80 | 0 of 80 | 9 of 80 | 0 (1 with the 7 by 5 and the 2.5 s fuse, replayed: a rival's doing, see below) |
 
 This table is noisy, and the stand-in is not a person. Read it loosely.
 
@@ -183,17 +183,19 @@ This table is noisy, and the stand-in is not a person. Read it loosely.
 
 | Level | Blasted itself | Caught by a block | In the square at the end |
 |---|---|---|---|
-| Beginner | 0 of 40 | 1 of 40 | 39 of 40 |
-| Normal | 0 of 40 | 0 of 40 | 40 of 40 |
-| Hard | 0 of 40 | 0 of 40 | 40 of 40 |
+| Beginner | 0 of 40 | 4 of 40 | 36 of 40 |
+| Normal | 0 of 40 | 1 of 40 | 39 of 40 |
+| Hard | 0 of 40 | 1 of 40 | 39 of 40 |
+
+The Normal and Hard caught here (18 November 2026, with the 2.55 s fuse; 0 of 40 just before it) were replayed: each was standing still on a tile of the edge rings, shut in a pocket of bricks with no safe way to bomb out (the known gap, below), when a block landed on it. Over 120 arenas the old and new fuse give the same: Normal and Hard 1 of 120 each, Beginner 5 and 7 of 120. The 40 arenas here simply took in those cases this time.
 
 **Alone with a player who stands still, no timer** (40 arenas, 3 minutes each). This one is run without the timer, because otherwise the blocks would get the still player and it would look like a win:
 
 | Level | Blasted itself | Got the other player | Average time |
 |---|---|---|---|
-| Beginner | 0 of 40 | 13 of 40 | 153 s |
+| Beginner | 0 of 40 | 12 of 40 | 156 s |
 | Normal | 0 of 40 | 40 of 40 | 133 s |
-| Hard | 0 of 40 | 40 of 40 | 115 s |
+| Hard | 0 of 40 | 40 of 40 | 113 s |
 
 Most of that time is spent digging through bricks from one corner to the other. It takes longer than it did, because a blast now starts one tile long. Beginner's figures moved since the last run (11 of 40, then 17) although Beginner was not changed: the arenas are different, because the power-up chances have changed (this run has no timer, so the 7 by 5 plays no part in it).
 
@@ -211,6 +213,8 @@ The "blasted itself" column is only worth anything because every case that lands
 
 - **The 7 by 5 (18 November 2026).** The run against the stand-in put one Hard bot under "blasted itself" (seed 21, the stand-in in seat 1, player 3, 140 s in, as the blocks stopped). Replayed, it was a rival's doing that the script cannot see: a rival Hard with the glove lifted two of its bombs, one after the other, and threw them; they were still in the air when it dropped its next bomb, and they came down either side of it in the 7 by 5. When its last bomb went off, their flames were still burning across both of its ways out. The script misses it because the bombs that shut it in were its own (only thrown by the rival) and had already gone off, leaving flames, when it went out. Not a fault of the bot's own: left as it is, with this note.
 - **Beginner alone among bricks (tests/bot.test.ts, 18 November 2026).** With the 7 by 5, the alone test's Beginner in the brick arena ran from its own bomb onto the third ring as it closed and a block landed on it. That is its short sight for blocks (under a second) by design; the test now allows a block, never its own blast, for Beginner only. The `alone` run's figures are unchanged (1 of 40 caught by a block).
+
+- **The square fight test (tests/bot.test.ts, 18 November 2026).** With the 2.55 s fuse, the one arena where two Normals had to settle the fight in the square within 90 s stalled instead (it took 27 s with the 2.5 s fuse). Over 40 arenas the share settled within 90 s was the same with either fuse (22 and 21 of 40; 22 with the old 5 by 5 too): two Normals in the open area settle about half their fights within 90 s, and a few never. The test now plays 24 arenas and asks for at least 8 (Normal) and 18 (Hard) of them.
 
 One weakness the replays showed and that is still there: a CPU player with no safe route left stands still. Trying anyway would sometimes save it, and that is not built.
 
