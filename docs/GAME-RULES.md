@@ -67,7 +67,7 @@ It matters for more than looks: a lifted bomb is thrown the way the robot is loo
 
 ## Power-ups
 
-*`ITEM_CHANCE`, `createWorld` and `applyItem` in sim.ts*
+*`ITEM_SHARE`, `ITEM_WEIGHT`, `ITEM_CHANCE`, `createWorld` and `applyItem` in sim.ts*
 
 Each brick hides at most one power-up. You pick one up by standing on its tile. A power-up in the open is a square of colour a little smaller than its tile, bobbing slowly over its shadow.
 
@@ -86,25 +86,25 @@ Each brick hides at most one power-up. You pick one up by standing on its tile. 
 
 ### How rare each one is
 
-The chance under each brick is set in `ITEM_CHANCE`. The other columns are what that comes to in play, counted over 20,000 arenas by `experiments/item-rarity.ts`. An arena starts with about 79 bricks, and about 48 of them hide something (every chance was raised by a quarter in November 2026, the owner's ask: 38 before; then the laptop came).
+**60% of the bricks hide a power-up** (`ITEM_SHARE`): the lobby's **Power-ups** setting, from none to every brick (the owner's ask, 19 November 2026). Which one is drawn by each kind's weight (`ITEM_WEIGHT`), so each keeps its share of the power-ups however many there are: bombs and flames 30.6% of them each, speed 22.4%, boots and gloves 5.1% each, shields, curses and laptops 2% each. The chance under each brick is the two together (`ITEM_CHANCE`). The other columns are what that comes to in play, counted over 20,000 arenas by `experiments/item-rarity.ts`, at the usual 60%. An arena starts with about 79 bricks, and about 48 of them hide something (every chance was raised by a quarter in November 2026, the owner's ask: 38 before).
 
 | Power-up | Chance under each brick | Average in an arena | Arenas with at least one | Arenas with two or more |
 |---|---|---|---|---|
-| Bomb | 18.75% | 14.8 | 100% | 100% |
-| Flame | 18.75% | 14.8 | 100% | 100% |
-| Speed | 13.75% | 10.8 | 100% | 100% |
-| Boot | 3.125% | 2.6 | 100% | 71% |
-| Glove | 3.125% | 2.5 | 100% | 71% |
-| Shield | 1.25% | 1.0 | 62% | 26% |
-| Curse | 1.25% | 1.0 | 63% | 26% |
-| Laptop | 1.25% | 1.4 | 100% | 26% |
-| Nothing | 38.75% | | | |
+| Bomb | 18.4% | 14.5 | 100% | 100% |
+| Flame | 18.4% | 14.5 | 100% | 100% |
+| Speed | 13.5% | 10.6 | 100% | 100% |
+| Boot | 3.1% | 2.5 | 100% | 70% |
+| Glove | 3.1% | 2.5 | 100% | 70% |
+| Shield | 1.2% | 1.0 | 62% | 25% |
+| Curse | 1.2% | 1.0 | 61% | 25% |
+| Laptop | 1.2% | 1.3 | 100% | 25% |
+| Nothing | 40% | | | |
 
 - The **shield** and the **curse** are very rare on purpose. Each is missing from nearly four arenas in ten, and when one is there it is usually the only one.
 - Every arena has at least one **boot**, one **glove** and one **laptop**. If the dice give none, one is placed under a brick that would otherwise be empty. Nothing else is guaranteed. (The laptop is as rare under a brick as the shield; the one made sure of is why an arena averages more.)
 - These are what an arena *hides*. Fewer are picked up: a power-up lying in the open is destroyed by a blast, and some bricks are never broken.
 - The **boot** and the **glove** are the next rarest: two or three of each in an arena, and in three arenas in ten there is only the one.
-- The first five began at 40% of bricks between them and were raised to 46% in the same mix. The shield and the curse added 1% each. Then the boot and the glove went from 6% to 4% each and later to 2.5% each, and what they gave up went to the bomb, the flame and speed (now 15%, 15% and 11%). The total stayed at 48%, until every chance was raised by a quarter (60% in all) at the owner's ask in November 2026. The laptop added 1.25% (61.25%) on 18 November 2026.
+- The first five began at 40% of bricks between them and were raised to 46% in the same mix. The shield and the curse added 1% each. Then the boot and the glove went from 6% to 4% each and later to 2.5% each, and what they gave up went to the bomb, the flame and speed (now 15%, 15% and 11%). The total stayed at 48%, until every chance was raised by a quarter (60% in all) at the owner's ask in November 2026. The laptop added 1.25% (61.25%) on 18 November 2026. On 19 November 2026 the total became the Power-ups setting, 60% by default, the laptop sharing it with the rest (each kind's chance about 2% less than the day before).
 
 ### Shield
 
@@ -363,8 +363,9 @@ The host can change these before a match. Left alone, every one is the usual rul
 | Closing in | Very slow 75 s, Slow 60 s, Normal 50 s, Quick 42 s, Fast 32 s | How long the falling blocks take (`shrinkTicks`). Compact has 60 blocks to fall, Classic 94, Big 134 |
 | Rounds to win | 1 to 9 | The match ends when someone reaches it |
 | Bricks | Few, Some, Normal, Lots, Packed | `softDensity` (see The arena) |
+| Power-ups | 0% (None) to 100% of the bricks, in steps of 5%; 60% the usual | How many bricks hide a power-up (`itemChance` adds up to it). The line under it counts them in the arena pictured. None: no power-ups at all, not even the boot, glove and laptop every arena otherwise gets |
 | Custom start | Bombs 1 to 8, blast 1 to 8 tiles, speed +0 to +6 | What everyone starts each round with (`startBombs`, `startFire`, `startSpeed`) |
-| Custom power-ups | For each kind: Off, Rare (half), Normal, Lots (double) | Its chance under a brick (`itemChance`). A boot, a glove and a laptop are only made sure of when they are not Off |
+| Custom power-ups | For each kind: Off, Rare (half), Normal, Lots (double) | Which kinds the power-ups are: each kind's weight, compared to the others (`itemMix`); Power-ups still says how many. A kind Off never turns up, and the others share its bricks. A boot, a glove and a laptop are only made sure of when they are not Off. (Until 19 November 2026 these scaled each kind's own chance, so Off made fewer power-ups and Lots more) |
 | Lives | 1 to 5 | Lives each robot has in a round (`lives`); see Lives and angels |
 | Post-Mortem Behavior | Off (the default: watch) or on: Angel (with Angels come back) or Zombie | What a robot out of lives does: watches, haunts the wall throwing bombs in (`angels`: 'on'; 'revive' with Angels come back), or gets up as a zombie (`zombies`) |
 | Teams (Players page) | Off, or on: Custom (everyone on their own until colours are matched) or Teams of 2 or 4 (the row is the team); team colours; who sits where (drag a card); Friendly fire off or on | The last team standing wins (`teams`, `friendlyFire`); see Teams |

@@ -353,8 +353,9 @@ export interface WorldConfig {
   shrinkTicks?: number;
   /**
    * The chance that a brick hides each kind of power-up, in place of ITEM_CHANCE (same kinds; a kind left
-   * out never appears). The lobby's power-up settings. A kind set to 0 never appears, and the kick and
-   * grab power-ups are only made sure of when their chance is above 0. The chances must add up to 1 or less.
+   * out never appears). The lobby's Power-ups and Custom power-ups (`itemMix`). A kind set to 0 never appears,
+   * and the kick, grab and laptop power-ups are only made sure of when their chance is above 0. The chances
+   * must add up to 1 or less.
    */
   itemChance?: [ItemKind, number][];
   /** What every player starts the round with: bombs (1 to MAX_BOMBS, default 1), blast length (START_FIRE to MAX_FIRE), speed power-ups (0 to MAX_SPEED_ITEMS). */
@@ -389,23 +390,32 @@ export const MAX_SPEED_ITEMS = 6; // so six of them bring it to 0.0925 tiles a t
 export const MAX_BOMBS = 8;
 
 /**
- * The chance that a brick hides each power-up. A brick hides at most one, so
- * these add up to the share of bricks that hide anything (61.25%). The order
- * matters only for which random numbers give which power-up; keep new ones at
- * the end so arenas made from old seeds keep their first five kinds in place.
- * What these chances come to per arena is measured in docs/GAME-RULES.md.
+ * What the bricks hide. `ITEM_SHARE` of them hide a power-up (a brick hides at most one): 60%, the lobby's
+ * **Power-ups** setting (the owner's ask, 19 November 2026; every chance had been raised by a quarter to make
+ * it 60% in November 2026, it was 48%, and the laptop added 1.25% on top until this setting came). Which one
+ * is drawn by `ITEM_WEIGHT`, so each kind keeps its share of the power-ups however many there are. The order
+ * matters only for which random numbers give which power-up; keep new ones at the end so arenas made from old
+ * seeds keep their first kinds in place. What these come to per arena is measured in docs/GAME-RULES.md.
  */
-// (all a quarter up in November 2026, the owner's ask, on every map: 60% of bricks hide something, it was 48%)
-export const ITEM_CHANCE: [ItemKind, number][] = [
-  ['bomb', 0.1875],
-  ['fire', 0.1875],
-  ['speed', 0.1375],
-  ['kick', 0.03125], // rare. Every arena still gets at least one: see createWorld
-  ['grab', 0.03125], // likewise
-  ['shield', 0.0125], // very rare: in about six arenas in ten
-  ['curse', 0.0125], // very rare: in about six arenas in ten
-  ['laptop', 0.0125], // very rare, but every arena gets at least one (the owner's ask, 18 November 2026): see createWorld
+export const ITEM_SHARE = 0.6;
+export const ITEM_WEIGHT: [ItemKind, number][] = [
+  ['bomb', 60], // 30.6% of the power-ups
+  ['fire', 60],
+  ['speed', 44], // 22.4%
+  ['kick', 10], // rare (5.1%). Every arena still gets at least one: see createWorld
+  ['grab', 10], // likewise
+  ['shield', 4], // very rare (2%): in about six arenas in ten
+  ['curse', 4], // very rare: in about six arenas in ten
+  ['laptop', 4], // very rare, but every arena gets at least one (the owner's ask, 18 November 2026): see createWorld
 ];
+/** The chance under each brick of each kind, for a mix of weights and the share of bricks that hide one. */
+export function itemMix(weights: [ItemKind, number][], share: number): [ItemKind, number][] {
+  const sum = weights.reduce((n, [, w]) => n + Math.max(0, w), 0);
+  const of = Math.max(0, Math.min(1, share));
+  return weights.map(([k, w]) => [k, sum > 0 ? (Math.max(0, w) / sum) * of : 0]);
+}
+/** The usual chance under each brick of each power-up (bomb and flame 18.4%, speed 13.5%, boot and glove 3.1%, shield, curse and laptop 1.2%) */
+export const ITEM_CHANCE: [ItemKind, number][] = itemMix(ITEM_WEIGHT, ITEM_SHARE);
 export const SHIELD_TICKS = 30 * TICK_HZ; // a shield that is not used wears off after 30 s
 export const SHIELD_GRACE_TICKS = 30; // after a shield takes a blast, blasts do no harm for 0.5 s: long enough for that blast to clear
 export const CURSE_TICKS = 8 * TICK_HZ; // a curse lasts 8 s

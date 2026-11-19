@@ -33,6 +33,7 @@ import {
   keptOpen,
   TICK_HZ,
   ITEM_CHANCE,
+  ITEM_SHARE,
   MAX_PLAYERS,
   spawnPoints,
   MAX_BOMBS,
@@ -863,13 +864,14 @@ for (let seed = 1; seed <= 40; seed++) {
 {
   const chance = Object.fromEntries(ITEM_CHANCE) as Record<string, number>;
   assert.deepEqual(ITEM_CHANCE.map(([k]) => k), ['bomb', 'fire', 'speed', 'kick', 'grab', 'shield', 'curse', 'laptop']);
-  assert.ok(Math.abs(ITEM_CHANCE.reduce((s, [, c]) => s + c, 0) - 0.6125) < 1e-12, '61.25% of bricks hide something');
-  assert.equal(chance.shield, 0.0125);
-  assert.equal(chance.curse, 0.0125);
-  assert.equal(chance.laptop, 0.0125);
+  assert.equal(ITEM_SHARE, 0.6);
+  assert.ok(Math.abs(ITEM_CHANCE.reduce((s, [, c]) => s + c, 0) - ITEM_SHARE) < 1e-12, '60% of bricks hide something');
+  assert.equal(chance.shield, chance.curse);
+  assert.equal(chance.laptop, chance.shield);
+  assert.ok(Math.abs(chance.shield - 0.0122) < 0.0001, `a shield is under about 1.2% of bricks (${chance.shield})`);
   for (const k of ['bomb', 'fire', 'speed']) assert.ok(chance[k] >= 10 * chance.shield, `${k} is far commoner than a shield or a curse`);
-  assert.equal(chance.kick, 0.03125);
-  assert.equal(chance.grab, 0.03125);
+  assert.ok(Math.abs(chance.kick - 0.0306) < 0.0001, `a boot is under about 3.1% of bricks (${chance.kick})`);
+  assert.equal(chance.grab, chance.kick);
   for (const k of ['kick', 'grab']) assert.ok(chance[k] > 2 * chance.shield, `${k} is rare, but not as rare as a shield or a curse`);
   for (const k of ['bomb', 'fire', 'speed']) assert.ok(chance[k] >= 4 * chance.kick, `${k} is at least four times as common as a boot or a glove`);
 
@@ -890,7 +892,7 @@ for (let seed = 1; seed <= 40; seed++) {
     // boots, gloves and laptops run over, because every arena is given one if the dice gave none (the laptop,
     // the rarest of the three, most: about four arenas in ten get theirs that way)
     const over = k === 'laptop' ? 0.007 : 0.004;
-    assert.ok(share - c > -0.004 && share - c < over, `${k}: ${(share * 100).toFixed(2)}% of bricks, meant to be ${c * 100}%`);
+    assert.ok(share - c > -0.004 && share - c < over, `${k}: ${(share * 100).toFixed(2)}% of bricks, meant to be ${(c * 100).toFixed(2)}%`);
   }
   assert.equal(arenasWith.kick, N, 'every arena has a boot');
   assert.equal(arenasWith.grab, N, 'every arena has a glove');

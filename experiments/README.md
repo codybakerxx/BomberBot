@@ -126,7 +126,7 @@ The second part adds a test round of 8 swipes that chooses between the setting b
 
 ## `cpu-matches.ts`: do the CPU players blast themselves, and are the levels in order?
 
-Unlike the scripts above this is a measurement, not a model: it plays whole rounds with the real CPU players (`src/bot.ts`) under the real rules, timer and falling blocks included, with no screen, and counts how each one went out. Recorded on 11 November 2026, and again with the laptop on 18 November 2026 and with its slower plane on 19 November 2026 (the table below).
+Unlike the scripts above this is a measurement, not a model: it plays whole rounds with the real CPU players (`src/bot.ts`) under the real rules, timer and falling blocks included, with no screen, and counts how each one went out. Recorded on 11 November 2026, and again with the laptop on 18 November 2026 and with its slower plane and power-ups at 60% on 19 November 2026 (the table below).
 
 | Run | What it plays |
 |---|---|
@@ -141,9 +141,9 @@ Four of the same level:
 
 | Level | Blasted itself | Shut in by a rival | Caught in a rival's blast | Under a block, early | Under a block, in the last 15 s of them | Won | Rounds drawn | Not decided |
 |---|---|---|---|---|---|---|---|---|
-| Beginner | 0.0% | 0.4% | 60.8% | 1.7% | 6.7% | 19.6% | 0 of 60 | 13 of 60 |
-| Normal | 0.0% | 20.8% | 42.1% | 2.1% | 10.8% | 24.2% | 2 of 60 | 0 of 60 |
-| Hard | 0.0% | 21.7% | 48.8% | 0.4% | 4.2% | 21.3% | 4 of 60 | 5 of 60 |
+| Beginner | 0.0% | 0.0% | 63.8% | 2.9% | 1.7% | 18.8% | 0 of 60 | 15 of 60 |
+| Normal | 0.0% | 22.9% | 42.5% | 2.5% | 7.9% | 24.2% | 2 of 60 | 0 of 60 |
+| Hard | 0.0% | 27.5% | 45.4% | 0.4% | 2.5% | 22.5% | 4 of 60 | 2 of 60 |
 
 The other tables are in [docs/CPU-PLAYERS.md](../docs/CPU-PLAYERS.md).
 
@@ -174,18 +174,18 @@ The first tuning had the pilots let go whenever the rules' own sums put the riva
 
 ## `item-rarity.ts`: how many of each power-up is in an arena?
 
-Builds 20,000 arenas with the real `createWorld` and counts what the bricks hide. It turns the chances in `ITEM_CHANCE` into what a player meets. Recorded on 18 November 2026, with the laptop (10 November 2026 before every chance was raised by a quarter: an arena then hid about 38):
+Builds 20,000 arenas with the real `createWorld` and counts what the bricks hide. It turns the chances in `ITEM_CHANCE` (the usual 60% of bricks, `ITEM_SHARE`, shared out by `ITEM_WEIGHT`) into what a player meets. Recorded on 19 November 2026 (10 November 2026 before every chance was raised by a quarter: an arena then hid about 38):
 
 | Power-up | Chance under each brick | Average in an arena | Arenas with at least one | Arenas with two or more |
 |---|---|---|---|---|
-| Bomb | 18.75% | 14.8 | 100% | 100% |
-| Flame | 18.75% | 14.8 | 100% | 100% |
-| Speed | 13.75% | 10.8 | 100% | 100% |
-| Boot | 3.125% | 2.6 | 100% | 71% |
-| Glove | 3.125% | 2.5 | 100% | 71% |
-| Shield | 1.25% | 1.0 | 62% | 26% |
-| Curse | 1.25% | 1.0 | 63% | 26% |
-| Laptop | 1.25% | 1.4 | 100% | 26% |
+| Bomb | 18.4% | 14.5 | 100% | 100% |
+| Flame | 18.4% | 14.5 | 100% | 100% |
+| Speed | 13.5% | 10.6 | 100% | 100% |
+| Boot | 3.1% | 2.5 | 100% | 70% |
+| Glove | 3.1% | 2.5 | 100% | 70% |
+| Shield | 1.2% | 1.0 | 62% | 25% |
+| Curse | 1.2% | 1.0 | 61% | 25% |
+| Laptop | 1.2% | 1.3 | 100% | 25% |
 
 An arena has about 79 bricks, and about 48 hide something. This counts what is hidden, not what gets picked up: blasts destroy power-ups lying in the open, and some bricks are never broken.
 

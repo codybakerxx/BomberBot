@@ -35,6 +35,7 @@ import {
   BRICKS,
   CLOSE_IN,
   ITEM_AMOUNTS,
+  ITEM_SHARE_STEP,
   ITEM_NAMES,
   MatchSetup,
   MAX_CPUS,
@@ -283,11 +284,14 @@ export function createLobby(host: LobbyHost): {
    * the next map comes in from the other side as it goes, a step behind. Moved back, all of it comes back:
    * nothing is decided until the finger lifts. Let go past a third of the way, or with a flick that way, and
    * it flies on at the speed it was thrown while the new map swoops in from where it had got to, overshoots a
-   * touch and settles; otherwise it springs back into place. Up and down are left to the page, so it still
-   * scrolls. A drag that starts on a button inside (a dot, a size, Start) does not press it. With Less
+   * touch and settles; otherwise it springs back into place. A drag up to 55° from level still moves the maps
+   * (the owner's ask, 19 November 2026: a swipe or flick at 45 to 50° should work; it had to be within 40°),
+   * and is then the map's for good, the page kept from scrolling; anything steeper is left to the page, so it
+   * still scrolls. A drag that starts on a button inside (a dot, a size, Start) does not press it. With Less
    * movement on it only slides, and changes with a short fade.
    */
-  const SLOP = 6; // page pixels sideways before the map is held (less, and a tap on a dot would wiggle it)
+  const SLOP = 6; // page pixels moved before it is decided, map or page (less, and a tap on a dot would wiggle it)
+  const STEEP = 1.43; // up or down at most this many times as far as sideways (55° from level) is still the map's
   const COMMIT = 0.33; // let go past this share of the map's width and it goes
   const FLICK = 0.45; // page pixels a millisecond: a flick this fast that way sends it whatever the distance
   const clamp01 = (v: number): number => Math.max(0, Math.min(1, v));
@@ -337,8 +341,14 @@ export function createLobby(host: LobbyHost): {
     let peek: HTMLCanvasElement | null = null;
     let peekMap: MapId | '' = '';
     let u = 0;
-    let trail: { t: number; x: number }[] = [];
+    let trail: { t: number; x: number; y: number }[] = [];
+    let tx0 = 0;
+    let ty0 = 0;
+    // (a finger's own way of going up and down is the page's: pan-y. A drag the map takes, at whatever angle,
+    // is kept from scrolling it by its touches, below; pointer events cannot stop a scroll)
     area.style.touchAction = 'pan-y';
+    /** a move from where it started: still too small to say (0), the map's (1), or the page's to scroll (-1) */
+    const way = (dx: number, dy: number): number => (Math.max(Math.abs(dx), Math.abs(dy)) < SLOP ? 0 : Math.abs(dy) > Math.abs(dx) * STEEP ? -1 : 1);
     const cv = $<HTMLCanvasElement>('arenaPic');
     const name = $('arenaName');
     const target = (d: number): MapId => {
@@ -352,8 +362,28 @@ export function createLobby(host: LobbyHost): {
       x0 = e.clientX;
       y0 = e.clientY;
       held = false;
-      trail = [{ t: e.timeStamp, x: e.clientX }];
+      trail = [{ t: e.timeStamp, x: e.clientX, y: e.clientY }];
     });
+    // A touch: the moment a move is the map's, it is kept from scrolling the page (this has to be decided
+    // before the browser starts to scroll, a few pixels on: so at SLOP, as below). Touch events come with
+    // pointer events, in either order, so both decide the same way from the same start.
+    area.addEventListener(
+      'touchstart',
+      (e) => {
+        if (e.touches.length !== 1) return;
+        tx0 = e.touches[0].clientX;
+        ty0 = e.touches[0].clientY;
+      },
+      { passive: true },
+    );
+    area.addEventListener(
+      'touchmove',
+      (e) => {
+        if (!e.cancelable || e.touches.length !== 1) return;
+        if (held || (id !== -1 && way(e.touches[0].clientX - tx0, e.touches[0].clientY - ty0) === 1)) e.preventDefault();
+      },
+      { passive: false },
+    );
     const hold = (): void => {
       held = true;
       quietUntil = Infinity;
@@ -390,16 +420,17 @@ export function createLobby(host: LobbyHost): {
       if (e.pointerId !== id) return;
       const dx = e.clientX - x0;
       const dy = e.clientY - y0;
-      trail.push({ t: e.timeStamp, x: e.clientX });
+      trail.push({ t: e.timeStamp, x: e.clientX, y: e.clientY });
       while (trail.length > 2 && e.timeStamp - trail[0].t > 90) trail.shift();
       if (!held) {
-        if (Math.abs(dy) > SLOP && Math.abs(dy) >= Math.abs(dx)) {
-          id = -1; // up or down: the page's, to scroll
+        const w = way(dx, dy);
+        if (w === 0) return;
+        if (w === -1) {
+          id = -1; // steeper: the page's, to scroll
           return;
         }
-        if (Math.abs(dx) < SLOP || Math.abs(dx) <= Math.abs(dy) * 1.2) return;
         hold();
-        x0 += Math.sign(dx) * SLOP; // (no jump as it is picked up)
+        x0 += Math.sign(dx) * Math.min(Math.abs(dx), SLOP); // (no jump as it is picked up)
       }
       const raw = (e.clientX - x0) / W;
       const a = Math.abs(raw);
@@ -415,7 +446,11 @@ export function createLobby(host: LobbyHost): {
       cv.classList.remove('held');
       const first = trail[0];
       const dt = e.timeStamp - first.t;
-      const v = dt > 0 ? (e.clientX - first.x) / dt : 0; // page pixels a millisecond, + to the right
+      // page pixels a millisecond, + to the right: the flick's whole speed, when it went that way within the
+      // angle the map takes (at 50° only two thirds of it is sideways)
+      const vx = dt > 0 ? (e.clientX - first.x) / dt : 0;
+      const vy = dt > 0 ? (e.clientY - first.y) / dt : 0;
+      const v = Math.abs(vy) <= Math.abs(vx) * STEEP ? Math.sign(vx) * Math.hypot(vx, vy) : vx;
       const flung = Math.abs(v) >= FLICK && Math.sign(v) === Math.sign(u) && Math.abs(u) * W > 16;
       const flungBack = Math.abs(v) >= FLICK && Math.sign(v) === -Math.sign(u);
       const go = !cancelled && (flung || (Math.abs(u) >= COMMIT && !flungBack)); // past a third it goes, unless thrown back
@@ -1513,15 +1548,32 @@ export function createLobby(host: LobbyHost): {
         },
         text: (v) => BRICKS[v].name,
       }),
+      slider({
+        // the owner's ask, 19 November 2026: how many power-ups an arena has
+        label: 'Power-ups',
+        hint: () => {
+          const n = previewWorld().hidden.size; // (the arena in the picture: its own bricks, as Bricks sets them)
+          return `How many of the bricks hide a power-up. The arena above has ${n === 0 ? 'none' : n}.`;
+        },
+        min: 0,
+        max: 100,
+        step: ITEM_SHARE_STEP,
+        get: () => s().itemShare,
+        set: (v) => {
+          s().itemShare = v;
+          changed();
+        },
+        text: (v) => (v ? `${v}%` : 'None'),
+      }),
       toggle({
         label: 'Custom power-ups',
-        hint: 'How often each power-up turns up under the bricks',
+        hint: 'Which power-ups they are: how often each turns up, compared to the others',
         get: () => s().itemsOn,
         set: (v) => {
           s().itemsOn = v;
           changed();
         },
-        offText: 'The usual mix: about half the bricks hide a power-up. Shields and curses are very rare.',
+        offText: 'The usual mix. Shields, curses and laptops are very rare.',
         under: ITEM_NAMES.map(([kind, name, what]) =>
           slider({
             label: name,

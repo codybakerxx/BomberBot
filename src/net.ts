@@ -22,7 +22,7 @@ import type { BotLevel } from './bot';
  * The version of these messages. A page says it in `hello`; the server turns away a page with another (one
  * left open from before an update), telling it to reload. Raise it whenever a message changes its meaning.
  */
-export const PROTOCOL = 4; // 3: the laptop's plane (steering in the inputs, planes and falling bombs in the world); 4: the plane slower, turning less, flying longer
+export const PROTOCOL = 5; // 3: the laptop's plane (steering in the inputs, planes and falling bombs in the world); 4: the plane slower, turning less, flying longer; 5: Power-ups (itemShare in the setup), and a custom mix is only which kinds
 
 /** Room codes: four letters, without the ones easily mixed up (I, O) or that spell words easily (vowels). */
 export const CODE_LETTERS = 'BCDFGHJKLMNPQRSTVWXZ';

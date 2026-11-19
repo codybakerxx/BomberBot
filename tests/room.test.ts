@@ -7,7 +7,7 @@
  */
 import assert from 'node:assert';
 import { COLORS } from '../src/render';
-import { step } from '../src/sim';
+import { createWorld, ITEM_CHANCE, SOFT, step } from '../src/sim';
 import { Room, COLOR_IDS, LEAD_MS, TICK_MS, type Conn, type Member } from '../src/room';
 import {
   decodeWorld,
@@ -23,7 +23,7 @@ import {
   type ServerMsg,
 } from '../src/net';
 import { makeRng } from '../src/sim';
-import { ARENAS, MAPS, defaultRules, itemChances, defaultSetup, dropOnto, fixedSize, lineUp, pickTeam, readSetup, recolour, rollCpus, seatLast, seating, setTeamSize, settleTeams, evenTeams, startTeams, summary, swapTeams, canEven, RULE_GROUPS, resetGroup, groupIsDefault, groupValues, SOUND_GROUPS, SOUND_NAMES, teamChoices, teamSizes, teamsFor, wholeTile, worldConfig } from '../src/setup';
+import { ARENAS, MAPS, ITEM_SHARE_STEP, type MatchSetup, defaultRules, itemChances, defaultSetup, dropOnto, fixedSize, lineUp, pickTeam, readSetup, recolour, rollCpus, seatLast, seating, setTeamSize, settleTeams, evenTeams, startTeams, summary, swapTeams, canEven, RULE_GROUPS, resetGroup, groupIsDefault, groupValues, SOUND_GROUPS, SOUND_NAMES, teamChoices, teamSizes, teamsFor, wholeTile, worldConfig } from '../src/setup';
 import { BOT_LEVELS } from '../src/bot';
 import { DANCE_IDS } from '../src/dances';
 import type { World } from '../src/sim';
@@ -71,13 +71,50 @@ for (const a of ARENAS) {
   assert.deepStrictEqual(rollCpus(saved, () => 0.999999).map((c) => c.level), saved.cpus.map(() => BOT_LEVELS[BOT_LEVELS.length - 1]), 'the top of the range is the last level');
 }
 
-// a custom power-up mix with Lots of everything asks for more than every brick: scaled down to fit
+// Power-ups (the owner's ask, 19 November 2026) says how many bricks hide a power-up; the mix, usual or
+// custom, only says which: Lots of everything is the usual mix, and the total is still Power-ups
 {
+  const sum = (c: [string, number][]): number => c.reduce((n, [, x]) => n + x, 0);
+  assert.equal(defaultSetup('gold').itemShare, 60, '60% by default');
+  assert.deepStrictEqual(itemChances(defaultSetup('gold')), ITEM_CHANCE, 'the default setup gives the usual chances');
   const lots = { ...defaultSetup('gold'), itemsOn: true, items: { bomb: 3, fire: 3, speed: 3, kick: 3, grab: 3, shield: 3, curse: 3, laptop: 3 } };
   const c = itemChances(lots);
-  const sum = c.reduce((n, [, x]) => n + x, 0);
-  assert.ok(Math.abs(sum - 1) < 1e-9, `at most every brick (${sum})`);
-  assert.ok(Math.abs(c[0][1] / c[2][1] - 0.1875 / 0.1375) < 1e-9, 'in the same proportions');
+  assert.ok(Math.abs(sum(c) - 0.6) < 1e-12, `still 60% of the bricks (${sum(c)})`);
+  assert.ok(Math.abs(c[0][1] / c[2][1] - 60 / 44) < 1e-9, 'in the usual proportions');
+  for (let p = 0; p <= 100; p += ITEM_SHARE_STEP) {
+    for (const itemsOn of [false, true]) {
+      const t = sum(itemChances({ ...lots, itemsOn, itemShare: p }));
+      assert.ok(Math.abs(t - p / 100) < 1e-12, `${p}%${itemsOn ? ', a custom mix' : ''}: ${t}`);
+    }
+  }
+  // one kind on its own takes all of it; every kind off, or None, hides nothing
+  const bombs = itemChances({ ...lots, itemShare: 40, items: { ...lots.items, fire: 0, speed: 0, kick: 0, grab: 0, shield: 0, curse: 0, laptop: 0 } });
+  assert.deepStrictEqual(bombs.filter(([, x]) => x > 0), [['bomb', 0.4]]);
+  const off = { ...lots, items: { bomb: 0, fire: 0, speed: 0, kick: 0, grab: 0, shield: 0, curse: 0, laptop: 0 } };
+  assert.equal(sum(itemChances(off)), 0, 'every kind off: none');
+  for (const s of [{ ...defaultSetup('gold'), itemShare: 0 }, off]) {
+    const w = createWorld(worldConfig(s, 'gold', 7));
+    assert.equal(w.hidden.size, 0, 'no power-ups, not even a boot, a glove or a laptop made sure of');
+  }
+  // more bricks hide one with more of it, in the same arena (the lobby's line under it counts them)
+  let last = -1;
+  for (let p = 0; p <= 100; p += 20) {
+    const n = createWorld(worldConfig({ ...defaultSetup('gold'), itemShare: p }, 'gold', 7)).hidden.size;
+    assert.ok(n > last, `${p}%: ${n} power-ups`);
+    last = n;
+  }
+  const all = createWorld(worldConfig({ ...defaultSetup('gold'), itemShare: 100 }, 'gold', 7));
+  assert.equal(all.hidden.size, all.tiles.filter((t) => t === SOFT).length, '100%: every brick hides one');
+  // read back: a saved share is kept to its steps; one saved before the setting is the usual
+  const colorIds = COLORS.map((c) => c.id);
+  assert.equal(readSetup({ ...defaultSetup('gold'), itemShare: 37 }, 'gold', colorIds).itemShare, 35);
+  assert.equal(readSetup({ ...defaultSetup('gold'), itemShare: 400 }, 'gold', colorIds).itemShare, 100);
+  const old = { ...defaultSetup('gold') } as Partial<MatchSetup>;
+  delete old.itemShare;
+  assert.equal(readSetup(old, 'gold', colorIds).itemShare, 60);
+  assert.ok(summary({ ...defaultSetup('gold'), itemShare: 30 }).includes('Power-ups 30%'));
+  assert.ok(summary({ ...defaultSetup('gold'), itemShare: 0 }).includes('No power-ups'));
+  assert.ok(!summary(defaultSetup('gold')).includes('Power-ups'), 'the usual is not mentioned');
 }
 
 // the arena is a whole number of page pixels on a screen of density 3 (an iPhone), so it is never stretched
@@ -610,7 +647,7 @@ console.log('room checks passed');
   const d = defaultSetup(me);
   const s = defaultSetup(me);
   s.arena = 'compact';
-  Object.assign(s, { timerOn: false, roundSecs: 200, closeIn: 4, firstTo: 3, lives: 4, postMortem: true, afterlife: 'zombie', angelsBack: true, bricks: 0, itemsOn: true, startOn: true, startBombs: 3, startFire: 4, startSpeed: 2 });
+  Object.assign(s, { timerOn: false, roundSecs: 200, closeIn: 4, firstTo: 3, lives: 4, postMortem: true, afterlife: 'zombie', angelsBack: true, bricks: 0, itemShare: 25, itemsOn: true, startOn: true, startBombs: 3, startFire: 4, startSpeed: 2 });
   s.items = { ...s.items, bomb: 0 };
   const all = defaultRules(s, me);
   const groups = Object.keys(RULE_GROUPS) as (keyof typeof RULE_GROUPS)[];

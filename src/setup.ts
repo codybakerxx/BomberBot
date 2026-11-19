@@ -12,7 +12,7 @@
 import { DANCES, readDance, type DanceId } from './dances';
 import { BotLevel, BOT_LEVELS } from './bot';
 import { KeyMap, PadMap, defaultKeys, defaultPad, readKeys, readPad } from './bindings';
-import { ItemKind, ITEM_CHANCE, MAX_BOMBS, MAX_FIRE, MAX_LIVES, MAX_SPEED_ITEMS, START_FIRE, TICK_HZ, WorldConfig } from './sim';
+import { ItemKind, ITEM_CHANCE, ITEM_SHARE, ITEM_WEIGHT, itemMix, MAX_BOMBS, MAX_FIRE, MAX_LIVES, MAX_SPEED_ITEMS, START_FIRE, TICK_HZ, WorldConfig } from './sim';
 
 // ---------------------------------------------------------------- the match
 
@@ -94,7 +94,14 @@ export const CLOSE_IN = [
   { name: 'Fast', secs: 32 },
 ];
 
-/** How often each power-up turns up, as a share of its usual chance. */
+/**
+ * Power-ups (the owner's ask, 19 November 2026): how many of the bricks hide one, in percent, from none to
+ * every brick in steps of ITEM_SHARE_STEP. 60% is the usual (ITEM_SHARE).
+ */
+export const ITEM_SHARE_STEP = 5;
+export const ITEM_SHARE_DEFAULT = Math.round(ITEM_SHARE * 100);
+
+/** How often each power-up turns up in a custom mix, compared to the others (its usual weight times this). */
 export const ITEM_AMOUNTS = [
   { name: 'Off', times: 0 },
   { name: 'Rare', times: 0.5 },
@@ -172,7 +179,9 @@ export interface MatchSetup {
   startBombs: number;
   startFire: number;
   startSpeed: number;
-  /** a custom power-up mix: when off, the usual chances (ITEM_CHANCE) */
+  /** how many of the bricks hide a power-up, in percent (0 to 100, in steps of ITEM_SHARE_STEP; 60 the usual) */
+  itemShare: number;
+  /** a custom power-up mix (which kinds the power-ups are): when off, the usual mix (ITEM_WEIGHT) */
   itemsOn: boolean;
   /** index into ITEM_AMOUNTS for each kind */
   items: Record<ItemKind, number>;
@@ -592,6 +601,7 @@ export function defaultSetup(myColor: string): MatchSetup {
     startBombs: 1,
     startFire: START_FIRE,
     startSpeed: 0,
+    itemShare: ITEM_SHARE_DEFAULT,
     itemsOn: false,
     items: { bomb: 2, fire: 2, speed: 2, kick: 2, grab: 2, shield: 2, curse: 2, laptop: 2 },
     lives: 1,
@@ -637,7 +647,7 @@ export const RULE_GROUPS = {
   time: ['timerOn', 'roundSecs', 'closeIn'],
   winning: ['firstTo'],
   lives: ['lives', 'postMortem', 'afterlife', 'angelsBack'],
-  arena: ['bricks', 'itemsOn', 'items'],
+  arena: ['bricks', 'itemShare', 'itemsOn', 'items'],
   start: ['startOn', 'startBombs', 'startFire', 'startSpeed'],
 } as const satisfies Record<string, readonly (keyof MatchSetup)[]>;
 export type RuleGroup = keyof typeof RULE_GROUPS;
@@ -687,13 +697,18 @@ export function arenaSize(s: MatchSetup, guests = 0): { cols: number; rows: numb
   return { cols: a.cols + (grown ? 2 : 0), rows: a.rows + (grown ? 2 : 0), grown };
 }
 
-/** The chance of each power-up for this setup (the usual ones unless the mix is custom). */
+/**
+ * The chance of each power-up under a brick for this setup. Power-ups says how many bricks hide one; the mix
+ * (the usual one, or the custom one) only says which: a kind at Lots is twice as likely as at Normal compared
+ * to the others, and a kind Off never turns up, the rest sharing its bricks.
+ */
 export function itemChances(s: MatchSetup): [ItemKind, number][] {
-  if (!s.itemsOn) return ITEM_CHANCE;
-  const out = ITEM_CHANCE.map(([k, c]): [ItemKind, number] => [k, c * ITEM_AMOUNTS[s.items[k]].times]);
-  // (Lots of many kinds could ask for more than every brick: then each is scaled down to fit, in proportion)
-  const sum = out.reduce((n, [, c]) => n + c, 0);
-  return sum > 1 ? out.map(([k, c]) => [k, c / sum]) : out;
+  const share = s.itemShare / 100;
+  if (!s.itemsOn) return share === ITEM_SHARE ? ITEM_CHANCE : itemMix(ITEM_WEIGHT, share);
+  return itemMix(
+    ITEM_WEIGHT.map(([k, w]): [ItemKind, number] => [k, w * ITEM_AMOUNTS[s.items[k]].times]),
+    share,
+  );
 }
 
 /** The config sim.ts builds a round from: you first, then the other players on this screen, then the CPU players in their lobby order. */
@@ -737,7 +752,8 @@ export function summary(s: MatchSetup, guests = 0): string {
   if (afterlifeOf(s) === 'angel') parts.push(s.angelsBack ? 'Angels come back' : 'Angels');
   if (afterlifeOf(s) === 'zombie') parts.push('Zombies');
   if (s.startOn) parts.push('Custom start');
-  if (s.itemsOn) parts.push('Custom power-ups');
+  if (s.itemShare !== ITEM_SHARE_DEFAULT) parts.push(s.itemShare ? `Power-ups ${s.itemShare}%` : 'No power-ups');
+  if (s.itemsOn && s.itemShare) parts.push('Custom power-ups');
   return parts.join(' · ');
 }
 
@@ -783,6 +799,8 @@ export function readSetup(raw: unknown, myColor: string, colorIds: string[]): Ma
   out.startBombs = clampInt(r.startBombs, 1, MAX_BOMBS, 1);
   out.startFire = clampInt(r.startFire, START_FIRE, MAX_FIRE, START_FIRE);
   out.startSpeed = clampInt(r.startSpeed, 0, MAX_SPEED_ITEMS, 0);
+  out.itemShare = clampInt(r.itemShare, 0, 100, d.itemShare);
+  out.itemShare -= out.itemShare % ITEM_SHARE_STEP;
   if (typeof r.itemsOn === 'boolean') out.itemsOn = r.itemsOn;
   if (r.items && typeof r.items === 'object') {
     for (const [k] of ITEM_CHANCE) out.items[k] = clampInt((r.items as Record<string, unknown>)[k], 0, ITEM_AMOUNTS.length - 1, 2);
