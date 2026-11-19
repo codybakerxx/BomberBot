@@ -820,6 +820,13 @@
     .hero-clock small { letter-spacing: 0.06em; }
   }
   .round-hero:not(.solo) h2 { white-space: nowrap; } /* (the match's winner, alone in the box, may wrap) */
+  /* under 390 px the room's or Local match chip leaves no room for "Paused" before the icons (it ran under them):
+     the menu being open on this screen says the round is paused */
+  @media (max-width: 389px) { .pause-head .state-chip { display: none; } }
+  @media (max-width: 340px) {
+    /* the narrowest phones: the clock's words wrap onto two lines to leave the round's name its room */
+    .hero-clock small { max-width: 92px; }
+  }
   .ping-chip.good { border-color: rgba(92, 255, 142, 0.35); } .ping-chip.fair { border-color: rgba(255, 197, 106, 0.4); } .ping-chip.poor { border-color: rgba(255, 122, 122, 0.45); }
   .hero-clock { display: flex; flex-direction: column; align-items: flex-end; padding-left: 12px; border-left: 1px solid var(--line); }
   .hero-clock b { font: 700 28px/1 var(--font-display); font-variant-numeric: tabular-nums; letter-spacing: 0.02em; color: var(--ink); }
