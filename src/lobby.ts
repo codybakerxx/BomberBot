@@ -33,6 +33,8 @@ import {
   mapOf,
   type ArenaId,
   BRICK_SHARE_MAX,
+  BRICK_SHARE_STEP,
+  ALWAYS_ON,
   CLOSE_IN,
   ITEM_AMOUNTS,
   ITEM_SHARE_STEP,
@@ -1548,6 +1550,7 @@ export function createLobby(host: LobbyHost): {
         hint: 'How much of the arena’s open floor starts as bricks (the corners stay clear). The picture above shows it.',
         min: 0,
         max: BRICK_SHARE_MAX,
+        step: BRICK_SHARE_STEP,
         normal: () => usual().brickShare,
         get: () => s().brickShare,
         set: (v) => {
@@ -1584,8 +1587,24 @@ export function createLobby(host: LobbyHost): {
         },
         offText: 'The usual mix. Shields, curses and laptops are very rare.',
         // each kind a switch (the owner's ask, 19 November 2026), and how often under it while it is on
-        under: ITEM_NAMES.map(([kind, name, what]) =>
-          toggle({
+        under: ITEM_NAMES.map(([kind, name, what]) => {
+          const often = (label: string, hint?: string): Opt =>
+            slider({
+              label,
+              hint,
+              min: 1,
+              max: ITEM_AMOUNTS.length - 1,
+              normal: () => usual().items[kind],
+              get: () => s().items[kind],
+              set: (v) => {
+                s().items[kind] = v;
+                changed();
+              },
+              text: (v) => ITEM_AMOUNTS[v].name,
+            });
+          // the extra bomb and the flame are always on: no switch, only how often (the owner's ask, 19 November 2026)
+          if (ALWAYS_ON.includes(kind)) return often(name, what);
+          return toggle({
             label: name,
             hint: what,
             get: () => s().itemOn[kind],
@@ -1594,22 +1613,9 @@ export function createLobby(host: LobbyHost): {
               changed();
             },
             offText: 'Never turns up.',
-            under: [
-              slider({
-                label: 'How often',
-                min: 1,
-                max: ITEM_AMOUNTS.length - 1,
-                normal: () => usual().items[kind],
-                get: () => s().items[kind],
-                set: (v) => {
-                  s().items[kind] = v;
-                  changed();
-                },
-                text: (v) => ITEM_AMOUNTS[v].name,
-              }),
-            ],
-          }),
-        ),
+            under: [often('How often')],
+          });
+        }),
       }),
     ], groupReset('arena')),
     group('Starting kit', BOMB_ICON, [

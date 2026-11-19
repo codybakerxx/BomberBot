@@ -12,7 +12,7 @@
 import { DANCES, readDance, type DanceId } from './dances';
 import { BotLevel, BOT_LEVELS } from './bot';
 import { KeyMap, PadMap, defaultKeys, defaultPad, readKeys, readPad } from './bindings';
-import { ItemKind, ITEM_CHANCE, ITEM_SHARE, ITEM_WEIGHT, itemMix, MAX_BOMBS, MAX_FIRE, MAX_LIVES, MAX_SPEED_ITEMS, START_FIRE, TICK_HZ, WorldConfig } from './sim';
+import { ItemKind, ITEM_CHANCE, ITEM_SHARE, ITEM_WEIGHT, itemMix, MAX_BOMBS, MAX_FIRE, MAX_LIVES, MAX_SPEED_ITEMS, SOFT_DENSITY, START_FIRE, TICK_HZ, WorldConfig } from './sim';
 
 // ---------------------------------------------------------------- the match
 
@@ -81,8 +81,11 @@ export function mapOf(s: MatchSetup): (typeof MAPS)[number] {
  * bricks, in percent (the corners the robots start in always stay clear). It was five steps (BRICKS, kept to
  * read a setup saved before); the usual, 78%, is Normal's.
  */
-export const BRICK_SHARE_DEFAULT = 78;
+export const BRICK_SHARE_DEFAULT = Math.round(SOFT_DENSITY * 100); // (78% until it went in steps of 5%, the owner's ask, 19 November 2026)
 export const BRICK_SHARE_MAX = 100;
+export const BRICK_SHARE_STEP = 5;
+/** the kinds Custom power-ups has no switch for (the owner's ask, 19 November 2026): always in the mix */
+export const ALWAYS_ON: readonly ItemKind[] = ['bomb', 'fire'];
 /** The five steps Bricks had before (a setup saved then is read as its step's percentage). */
 export const BRICKS = [
   { name: 'Few', density: 0.5 },
@@ -716,7 +719,7 @@ export function itemChances(s: MatchSetup): [ItemKind, number][] {
   const share = s.itemShare / 100;
   if (!s.itemsOn) return share === ITEM_SHARE ? ITEM_CHANCE : itemMix(ITEM_WEIGHT, share);
   return itemMix(
-    ITEM_WEIGHT.map(([k, w]): [ItemKind, number] => [k, s.itemOn[k] === false ? 0 : w * ITEM_AMOUNTS[s.items[k]].times]),
+    ITEM_WEIGHT.map(([k, w]): [ItemKind, number] => [k, s.itemOn[k] === false && !ALWAYS_ON.includes(k) ? 0 : w * ITEM_AMOUNTS[s.items[k]].times]),
     share,
   );
 }
@@ -809,6 +812,7 @@ export function readSetup(raw: unknown, myColor: string, colorIds: string[]): Ma
   const old = r as Partial<MatchSetup> & { bricks?: unknown };
   if (typeof old.brickShare === 'number') out.brickShare = clampInt(old.brickShare, 0, BRICK_SHARE_MAX, d.brickShare);
   else if (typeof old.bricks === 'number') out.brickShare = Math.round(BRICKS[clampInt(old.bricks, 0, BRICKS.length - 1, 2)].density * 100);
+  out.brickShare = Math.round(out.brickShare / BRICK_SHARE_STEP) * BRICK_SHARE_STEP; // (to the nearest step: Normal's 78% is 80%)
   if (typeof r.startOn === 'boolean') out.startOn = r.startOn;
   out.startBombs = clampInt(r.startBombs, 1, MAX_BOMBS, 1);
   out.startFire = clampInt(r.startFire, START_FIRE, MAX_FIRE, START_FIRE);
@@ -823,12 +827,14 @@ export function readSetup(raw: unknown, myColor: string, colorIds: string[]): Ma
   if (r.itemOn && typeof r.itemOn === 'object') {
     for (const [k] of ITEM_CHANCE) if (typeof (r.itemOn as Record<string, unknown>)[k] === 'boolean') out.itemOn[k] = (r.itemOn as Record<string, boolean>)[k];
   }
-  // (a kind saved at Off, before each had its own switch, is switched off at the usual amount)
+  // (a kind saved at Off, before each had its own switch, is switched off at the usual amount; the extra bomb
+  // and the flame have no switch, and are always on)
   for (const [k] of ITEM_CHANCE) {
     if (out.items[k] === 0) {
       out.itemOn[k] = false;
       out.items[k] = 2;
     }
+    if (ALWAYS_ON.includes(k)) out.itemOn[k] = true;
   }
   out.lives = clampInt(r.lives, 1, MAX_LIVES, 1);
   // Angels were on by default in version 4, for one evening; the owner had them off by default, so a setup

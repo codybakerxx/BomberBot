@@ -340,7 +340,7 @@ export interface WorldConfig {
   rows?: number;
   /** one entry per player, up to eight (MAX_PLAYERS); where each starts is `spawnPoints` */
   players: { colorId: string }[];
-  /** share of open tiles that start as bricks, 0 to 1. Default 0.78. */
+  /** share of open tiles that start as bricks, 0 to 1. Default SOFT_DENSITY. */
   softDensity?: number;
   /** what the timer counts down from, in ticks. Default ROUND_TICKS (1 minute 30). 0 = no timer and no falling blocks. */
   roundTicks?: number;
@@ -398,6 +398,8 @@ export const MAX_BOMBS = 8;
  * seeds keep their first kinds in place. What these come to per arena is measured in docs/GAME-RULES.md.
  */
 export const ITEM_SHARE = 0.6;
+/** share of the open floor that starts as bricks (the lobby's Brick density, in steps of 5%; it was 0.78 until 19 November 2026) */
+export const SOFT_DENSITY = 0.8;
 export const ITEM_WEIGHT: [ItemKind, number][] = [
   ['bomb', 60], // 30.6% of the power-ups
   ['fire', 60],
@@ -586,7 +588,7 @@ export function createWorld(cfg: WorldConfig): World {
 
   const hidden = new Map<number, ItemKind>();
   const chances = cfg.itemChance ?? ITEM_CHANCE;
-  const density = cfg.softDensity ?? 0.78;
+  const density = cfg.softDensity ?? SOFT_DENSITY;
   for (let y = 0; y < h; y++) {
     for (let x = 0; x < w; x++) {
       const i = y * w + x;

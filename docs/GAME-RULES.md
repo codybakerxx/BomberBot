@@ -10,7 +10,7 @@ The game runs at a fixed 60 ticks a second. Times below are given in seconds wit
 
 - The usual arena (Classic) is 15 tiles wide and 13 tall. The outer ring is wall, leaving 13 by 11 to play in. The lobby also offers Compact (11 by 9 to play in) and Big (15 by 13): the same build in other sizes. It also offers two maps, Midnight (steel blocks and bricks) and Wild West (red rock and wooden crates): a map is only how the arena looks, and every rule here is the same on both.
 - **Solid blocks** never break. They are the outer wall plus a pillar on every second tile in both directions. The pillars turn the arena into a grid of lanes.
-- **Bricks** can be blasted away. At the start each open tile has a 78% chance of holding a brick. The lobby's Bricks setting changes that: Few 50%, Some 65%, Normal 78%, Lots 86%, Packed 93%.
+- **Bricks** can be blasted away. At the start each open tile has an 80% chance of holding a brick (`SOFT_DENSITY`). The lobby's Brick density setting changes that, from 0% to 100% in steps of 5% (it was 78% until 19 November 2026).
 - Each player's starting tile and the tiles next to it are always left clear, so nobody starts boxed in.
 - Two to eight players (you and one to seven CPU players, as the lobby says). The first four start in the corners, in this order: top-left, bottom-right, top-right, bottom-left. You are always top-left. A fifth starts in the middle. With six, the fifth and sixth start in the middle row, a third of the way in from each side. Seven add the middle of the top and bottom edges to the five; eight use the corners and the middle of all four edges. With more than six players the arena is two tiles wider and taller.
 - The layout comes from a seed number. The same seed always builds the same arena. The game picks a new random seed for every round.
@@ -86,18 +86,18 @@ Each brick hides at most one power-up. You pick one up by standing on its tile. 
 
 ### How rare each one is
 
-**60% of the bricks hide a power-up** (`ITEM_SHARE`): the lobby's **Power-up density** setting, from none to every brick (the owner's ask and name, 19 November 2026). Which one is drawn by each kind's weight (`ITEM_WEIGHT`), so each keeps its share of the power-ups however many there are: bombs and flames 30.6% of them each, speed 22.4%, boots and gloves 5.1% each, shields, curses and laptops 2% each. The chance under each brick is the two together (`ITEM_CHANCE`). The other columns are what that comes to in play, counted over 20,000 arenas by `experiments/item-rarity.ts`, at the usual 60%. An arena starts with about 79 bricks, and about 48 of them hide something (every chance was raised by a quarter in November 2026, the owner's ask: 38 before).
+**60% of the bricks hide a power-up** (`ITEM_SHARE`): the lobby's **Power-up density** setting, from none to every brick (the owner's ask and name, 19 November 2026). Which one is drawn by each kind's weight (`ITEM_WEIGHT`), so each keeps its share of the power-ups however many there are: bombs and flames 30.6% of them each, speed 22.4%, boots and gloves 5.1% each, shields, curses and laptops 2% each. The chance under each brick is the two together (`ITEM_CHANCE`). The other columns are what that comes to in play, counted over 20,000 arenas by `experiments/item-rarity.ts`, at the usual 60%. An arena starts with about 81 bricks, and about 49 of them hide something (every chance was raised by a quarter in November 2026, the owner's ask: 38 before).
 
 | Power-up | Chance under each brick | Average in an arena | Arenas with at least one | Arenas with two or more |
 |---|---|---|---|---|
-| Bomb | 18.4% | 14.5 | 100% | 100% |
-| Flame | 18.4% | 14.5 | 100% | 100% |
-| Speed | 13.5% | 10.6 | 100% | 100% |
-| Boot | 3.1% | 2.5 | 100% | 70% |
-| Glove | 3.1% | 2.5 | 100% | 70% |
-| Shield | 1.2% | 1.0 | 62% | 25% |
-| Curse | 1.2% | 1.0 | 61% | 25% |
-| Laptop | 1.2% | 1.3 | 100% | 25% |
+| Bomb | 18.4% | 14.8 | 100% | 100% |
+| Flame | 18.4% | 14.8 | 100% | 100% |
+| Speed | 13.5% | 10.9 | 100% | 100% |
+| Boot | 3.1% | 2.6 | 100% | 72% |
+| Glove | 3.1% | 2.6 | 100% | 71% |
+| Shield | 1.2% | 1.0 | 63% | 26% |
+| Curse | 1.2% | 1.0 | 63% | 26% |
+| Laptop | 1.2% | 1.4 | 100% | 26% |
 | Nothing | 40% | | | |
 
 - The **shield** and the **curse** are very rare on purpose. Each is missing from nearly four arenas in ten, and when one is there it is usually the only one.
@@ -348,7 +348,7 @@ All of these are named constants near the top of `src/sim.ts`. Changing one chan
 | `DEATH_TICKS` | 90 | Length of the knocked-out animation (1.5 s). If it is you, the panel appears when it ends |
 | `GHOST_TICKS` | 300 | How long the count after a knock-out goes on (5 s), so the ghost has time to float off the top of the screen |
 
-Starting values for every player are set in `createWorld`: 1 bomb, a blast 1 tile long, no speed power-ups, no boot, no glove, no shield, no curse, no laptop. The arena size (13 by 11) and the brick chance (78%) are defaults there too.
+Starting values for every player are set in `createWorld`: 1 bomb, a blast 1 tile long, no speed power-ups, no boot, no glove, no shield, no curse, no laptop. The arena size (13 by 11) and the brick chance (80%, `SOFT_DENSITY`) are defaults there too.
 
 ## Set in the lobby
 
@@ -362,10 +362,10 @@ The host can change these before a match. Left alone, every one is the usual rul
 | Round timer | On or off; 0:30 to 5:00 in steps of 15 seconds | `roundTicks`. Off: no timer and no falling blocks; a round lasts until one robot is left |
 | Closing in | Very slow 75 s, Slow 60 s, Normal 50 s, Quick 42 s, Fast 32 s | How long the falling blocks take (`shrinkTicks`). Compact has 60 blocks to fall, Classic 94, Big 134 |
 | Rounds to win | 1 to 9 | The match ends when someone reaches it |
-| Brick density | 0% (None) to 100% of the open floor, in steps of 1%; 78% the usual | `softDensity` (see The arena): the share of the open floor that starts as bricks; the corners the robots start in stay clear. (It was Bricks, five steps: Few 50%, Some 65%, Normal 78%, Lots 86%, Packed 93%, until 19 November 2026) |
+| Brick density | 0% (None) to 100% of the open floor, in steps of 5%; 80% the usual | `softDensity` (see The arena): the share of the open floor that starts as bricks; the corners the robots start in stay clear. (It was Bricks, five steps: Few 50%, Some 65%, Normal 78%, Lots 86%, Packed 93%, until 19 November 2026; then steps of 1% with 78% the usual for a few hours; a saved percentage goes to the nearest 5%) |
 | Power-up density | 0% (None) to 100% of the bricks, in steps of 5%; 60% the usual | How many bricks hide a power-up (`itemChance` adds up to it). The line under it counts them in the arena pictured. None: no power-ups at all, not even the boot, glove and laptop every arena otherwise gets |
 | Custom start | Bombs 1 to 8, blast 1 to 8 tiles, speed +0 to +6 | What everyone starts each round with (`startBombs`, `startFire`, `startSpeed`) |
-| Custom power-ups | For each kind: a switch, and while on, How often: Rare (half), Normal, Lots (double) | Which kinds the power-ups are: each kind's weight, compared to the others (`itemMix`); Power-ups still says how many. A kind Off never turns up, and the others share its bricks. A boot, a glove and a laptop are only made sure of when they are not Off. (Until 19 November 2026 these scaled each kind's own chance, so Off made fewer power-ups and Lots more) |
+| Custom power-ups | For each kind: How often, Rare (half), Normal, Lots (double); every kind but the extra bomb and the flame also has a switch, How often showing while it is on | Which kinds the power-ups are: each kind's weight, compared to the others (`itemMix`); Power-up density still says how many. A kind switched off never turns up, and the others share its bricks. The extra bomb and the flame cannot be switched off (`ALWAYS_ON`; the owner's ask, 19 November 2026). A boot, a glove and a laptop are only made sure of when they are on. (Until 19 November 2026 these scaled each kind's own chance, so Off made fewer power-ups and Lots more) |
 | Lives | 1 to 5 | Lives each robot has in a round (`lives`); see Lives and angels |
 | Post-Mortem Behavior | Off (the default: watch) or on: Angel (with Angels come back) or Zombie | What a robot out of lives does: watches, haunts the wall throwing bombs in (`angels`: 'on'; 'revive' with Angels come back), or gets up as a zombie (`zombies`) |
 | Teams (Players page) | Off, or on: Custom (everyone on their own until colours are matched) or Teams of 2 or 4 (the row is the team); team colours; who sits where (drag a card); Friendly fire off or on | The last team standing wins (`teams`, `friendlyFire`); see Teams |

@@ -116,10 +116,16 @@ for (const a of ARENAS) {
   assert.ok(summary({ ...defaultSetup('gold'), itemShare: 0 }).includes('No power-ups'));
   assert.ok(!summary(defaultSetup('gold')).includes('Power-up'), 'the usual is not mentioned');
   // a kind switched off never turns up, whatever its amount; the others share its bricks
-  const noBombs = { ...defaultSetup('gold'), itemsOn: true, itemOn: { ...defaultSetup('gold').itemOn, bomb: false } };
-  const nb = itemChances(noBombs);
-  assert.equal(nb[0][1], 0);
-  assert.ok(Math.abs(sum(nb) - 0.6) < 1e-12);
+  const noShields = { ...defaultSetup('gold'), itemsOn: true, itemOn: { ...defaultSetup('gold').itemOn, shield: false } };
+  const ns = itemChances(noShields);
+  assert.equal(ns.find(([k]) => k === 'shield')![1], 0);
+  assert.ok(Math.abs(sum(ns) - 0.6) < 1e-12);
+  // the extra bomb and the flame have no switch (the owner's ask, 19 November 2026): always on
+  const offAnyway = { ...defaultSetup('gold'), itemsOn: true, itemOn: { ...defaultSetup('gold').itemOn, bomb: false, fire: false } };
+  assert.deepEqual(itemChances(offAnyway), itemChances(defaultSetup('gold')));
+  const read = readSetup(offAnyway, 'gold', colorIds);
+  assert.equal(read.itemOn.bomb, true);
+  assert.equal(read.itemOn.fire, true);
   // a kind saved at Off, before the switches, comes back switched off at Normal
   const was = readSetup({ ...defaultSetup('gold'), itemOn: undefined, items: { ...defaultSetup('gold').items, curse: 0 } }, 'gold', colorIds);
   assert.equal(was.itemOn.curse, false);
@@ -127,11 +133,14 @@ for (const a of ARENAS) {
   assert.equal(was.itemOn.bomb, true);
 }
 
-// Brick density (the owner's ask, 19 November 2026): a percentage of the open floor, 78% by default
+// Brick density (the owner's ask, 19 November 2026): a percentage of the open floor in steps of 5%, 80% by default
 {
   const colorIds = COLORS.map((c) => c.id);
-  assert.equal(defaultSetup('gold').brickShare, 78);
-  assert.equal(worldConfig(defaultSetup('gold'), 'gold', 1).softDensity, 0.78);
+  assert.equal(defaultSetup('gold').brickShare, 80);
+  assert.equal(worldConfig(defaultSetup('gold'), 'gold', 1).softDensity, 0.8);
+  // saved between steps (78%, the old usual): the nearest step
+  assert.equal(readSetup({ ...defaultSetup('gold'), brickShare: 78 }, 'gold', colorIds).brickShare, 80);
+  assert.equal(readSetup({ ...defaultSetup('gold'), brickShare: 37 }, 'gold', colorIds).brickShare, 35);
   const none = createWorld(worldConfig({ ...defaultSetup('gold'), brickShare: 0 }, 'gold', 3));
   assert.equal(none.tiles.filter((t) => t === SOFT).length, 0, 'None: no bricks');
   const full = createWorld(worldConfig({ ...defaultSetup('gold'), brickShare: 100 }, 'gold', 3));

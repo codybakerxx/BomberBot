@@ -76,7 +76,7 @@ Every number has a name. Change the value, then run `npm run check`.
 | How long the timer runs before blocks fall, and how long they take | `ROUND_TICKS`, `SHRINK_TICKS`. For one round only, pass `roundTicks` to `createWorld` (0 = no timer) | `src/sim.ts` |
 | How often each power-up appears | `ITEM_CHANCE` near the top. Then run `npx tsx experiments/item-rarity.ts` and update the rarity table in GAME-RULES.md | `src/sim.ts` |
 | How long a shield or a curse lasts, and how slow a curse is | `SHIELD_TICKS`, `CURSE_TICKS`, `CURSE_SPEED` | `src/sim.ts` |
-| How many bricks the arena starts with | `softDensity` default in `createWorld` (0.78) | `src/sim.ts` |
+| How many bricks the arena starts with | `SOFT_DENSITY` (0.8), the `softDensity` default in `createWorld` | `src/sim.ts` |
 | How far a thumb must move | The constants near the top | `src/swipe.ts` |
 
 The meaning of each one is listed in [GAME-RULES.md](GAME-RULES.md) and [CONTROLS.md](CONTROLS.md).

@@ -141,9 +141,9 @@ Four of the same level:
 
 | Level | Blasted itself | Shut in by a rival | Caught in a rival's blast | Under a block, early | Under a block, in the last 15 s of them | Won | Rounds drawn | Not decided |
 |---|---|---|---|---|---|---|---|---|
-| Beginner | 0.0% | 0.0% | 63.8% | 2.9% | 1.7% | 18.8% | 0 of 60 | 15 of 60 |
-| Normal | 0.0% | 22.9% | 42.5% | 2.5% | 7.9% | 24.2% | 2 of 60 | 0 of 60 |
-| Hard | 0.0% | 27.5% | 45.4% | 0.4% | 2.5% | 22.5% | 4 of 60 | 2 of 60 |
+| Beginner | 0.0% | 0.4% | 64.6% | 2.5% | 3.8% | 20.8% | 0 of 60 | 10 of 60 |
+| Normal | 0.0% | 18.3% | 46.7% | 0.8% | 10.4% | 23.8% | 3 of 60 | 0 of 60 |
+| Hard | 0.0% | 27.5% | 45.8% | 0.0% | 1.7% | 21.7% | 4 of 60 | 4 of 60 |
 
 The other tables are in [docs/CPU-PLAYERS.md](../docs/CPU-PLAYERS.md).
 
@@ -152,7 +152,7 @@ The other tables are in [docs/CPU-PLAYERS.md](../docs/CPU-PLAYERS.md).
 - The first version checked only that a bomb left a way out. Alone, no bot ever blasted itself. Four together, about one in five went out to its own bomb (Normal 23%, Hard 20%, Extreme 25%). Replaying those matches showed every one of them standing trapped after another player's bomb had cut the route it planned. Checking, before pressing A, that no nearby player could shut the route brought "blasted itself" to zero.
 - The same replays found two plain bugs: Beginner never moved at all (its pause before setting off cancelled its own plan), and a bot could park on a spot too far away to attack from and stay there. Both showed up as numbers that looked too good: a Beginner that never blasted itself because it never dropped a bomb.
 - With one of each level in a round, the levels come out in order and well apart: Hard won 63% of those rounds, Normal 31%, Beginner 2%.
-- "Shut in by a rival" and "blasted itself" are both a bot caught by its own blast. What separates them is in `shutIn` in the script, and it was drawn up from replays. Each time a case has landed under "blasted itself" it has been replayed. Some were the test being too narrow (a rival's bomb dropped on the same tick, one thrown onto the way out, a rival's kicked bomb setting the bot's own off early; most lately, with the laptop, a rival's bomb falling from a plane, a rival's bomb a falling block took away, and a bot whose shield kept it alive half a second into its own blast: see docs/CPU-PLAYERS.md). Two were real faults in the CPU players (standing still after a shield was used up; refusing a safe tile because a block was due on it later) and were fixed. Replay any case that lands there before believing either column.
+- "Shut in by a rival" and "blasted itself" are both a bot caught by its own blast. What separates them is in `shutIn` in the script, and it was drawn up from replays. Each time a case has landed under "blasted itself" it has been replayed. Some were the test being too narrow (a rival's bomb dropped on the same tick, one thrown onto the way out, a rival's kicked bomb setting the bot's own off early; with the laptop, a rival's bomb falling from a plane, a rival's bomb a falling block took away, and a bot whose shield kept it alive half a second into its own blast; most lately a rival's bomb thrown after the bot dropped its own, still in the air and coming down on its way out: see docs/CPU-PLAYERS.md). Two were real faults in the CPU players (standing still after a shield was used up; refusing a safe tile because a block was due on it later) and were fixed. Replay any case that lands there before believing either column.
 - Before the timer, CPU players seldom finished each other off. The first timer closed the whole arena by 0:00, and about half of rounds were draws: the bots left all reached the last tile and went under the same block. Now a 5 by 5 square is left open and the round goes on in it. The blocks now start when the timer reaches 0:00 rather than a minute before. Draws are rare and most rounds are settled in the square, but at first between a sixth and a half were still going 2 minutes after the blocks stopped (Normal 32 of 60).
 - Normal and Hard now press once they are in the square after 0:00 (`squareBold`). Not decided fell to 0 of 60 for Normal and 2 of 60 for Hard, and "shut in by a rival" rose (Normal 3.8% to about 20%), which is the risk they now take. Beginner does not press and still leaves about a third of rounds undecided.
 

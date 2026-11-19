@@ -14,8 +14,9 @@
  * experiments this is a measurement, not a model. What it cannot tell you is
  * how they feel to play against.
  */
-import { createWorld, step, World, PlayerInput, TICK_HZ, FLOOR, SOFT, ROUND_TICKS, SHRINK_TICKS, DROP_TICKS, DROP_FIRE, FLAME_TICKS, dropLanding, tileAt } from '../src/sim';
+import { createWorld, step, World, PlayerInput, TICK_HZ, FLOOR, SOFT, ROUND_TICKS, SHRINK_TICKS, DROP_TICKS, DROP_FIRE, FLAME_TICKS, dropLanding, tileAt, DX, DY } from '../src/sim';
 import { createBot, botInput, Bot, BotLevel, BOT_LEVELS, LEVELS } from '../src/bot';
+const wrap = (v: number, n: number): number => ((v % n) + n) % n;
 
 export interface Outcome {
   /**
@@ -62,10 +63,15 @@ export function playMatch(seed: number, levels: (BotLevel | null)[], maxTicks: n
   // a player's own bombs that a rival's bomb set off early (see `early` below), kept while their blast burns,
   // so a robot whose shield took the first blast and that is caught in this one half a second later still counts
   const setOff: { owner: number; cx: number; cy: number; range: number; tick: number }[] = [];
+  const thrownOn = new Map<number, number>(); // bomb id -> the tick it was thrown, while it is in the air
   let t = 0;
   for (; t < maxTicks; t++) {
     for (let i = 0; i < bots.length; i++) inputs[i] = bots[i] ? botInput(world, bots[i]!) : undefined;
     const before = world.bombs.map((b) => ({ id: b.id, owner: b.owner, cx: b.cx, cy: b.cy, range: b.range, ground: b.state === 'ground', fuse: b.fuse }));
+    // bombs in the air after a throw, and where they are coming down (a bounce carries one on a tile later)
+    const flying = world.bombs
+      .filter((b) => b.state === 'air')
+      .map((b) => ({ id: b.id, owner: b.owner, range: b.range, cx: wrap(b.fromX + DX[b.flyDir] * b.flyDist, world.w), cy: wrap(b.fromY + DY[b.flyDir] * b.flyDist, world.h) }));
     // bombs falling from planes that land on this tick blast like a bomb going off (not on a brick: it only
     // burns), decided by whoever let them go, on the tick they did (ids below 0: they are not in world.bombs)
     const landing = world.drops
@@ -88,6 +94,8 @@ export function playMatch(seed: number, levels: (BotLevel | null)[], maxTicks: n
       const c = cause.get(g.id);
       if (g.id >= 0 && rushed.has(g.id) && c && c.owner !== g.owner && c.tick >= (droppedOn.get(g.id) ?? 0)) setOff.push({ owner: g.owner, cx: g.cx, cy: g.cy, range: g.range, tick: t });
     }
+    for (const b of world.bombs) if (b.state === 'air' && !thrownOn.has(b.id)) thrownOn.set(b.id, t);
+    for (const b of world.bombs) if (b.state !== 'air') thrownOn.delete(b.id);
     for (const b of world.bombs) {
       const tile = b.cy * world.w + b.cx;
       if (!droppedAt.has(b.id)) {
@@ -130,7 +138,9 @@ export function playMatch(seed: number, levels: (BotLevel | null)[], maxTicks: n
         continue;
       }
       // its own blast. Did a rival shut it in, or had its own bomb been moved, or set off early by a rival's?
-      const boxed = shutIn(world, before, e.player, px, py, (id) => droppedOn.get(id) ?? 0, (id) => restingAt.get(id)?.since ?? 0, (i) => landedOn.get(i) ?? -1, threats);
+      // (a rival's bomb in the air, thrown since, comes down where it is going: it blocks that tile and will blast)
+      const landing = flying.map((b) => ({ owner: b.owner, cx: b.cx, cy: b.cy, range: b.range, since: thrownOn.get(b.id) ?? t, lands: true }));
+      const boxed = shutIn(world, before, e.player, px, py, (id) => droppedOn.get(id) ?? 0, (id) => restingAt.get(id)?.since ?? 0, (i) => landedOn.get(i) ?? -1, [...threats, ...landing]);
       const moved = before.some((b) => b.owner === e.player && droppedAt.has(b.id) && droppedAt.get(b.id) !== b.cy * world.w + b.cx);
       // Set off early: the bomb that caught it went off before its fuse ran out, because a rival's bomb reached
       // it, and that rival's bomb was dropped, kicked or thrown after this one was dropped. (A rival's bomb that
@@ -162,7 +172,7 @@ function inBlast(world: World, b: { cx: number; cy: number; range: number }, x: 
 
 type Seen = { id: number; owner: number; cx: number; cy: number; range: number; ground: boolean; fuse: number };
 /** a rival's blast to come (or burning) that is not a bomb lying in the arena: see `threats` in `playMatch` */
-type Threat = { owner: number; cx: number; cy: number; range: number; since: number };
+type Threat = { owner: number; cx: number; cy: number; range: number; since: number; lands?: boolean };
 
 /**
  * A player has just been caught by its own blast at (px, py). Did a rival shut
@@ -188,7 +198,10 @@ function shutIn(world: World, bombs: Seen[], who: number, px: number, py: number
   // dropped then (the two could not have known of each other), or kicked or thrown there since
   const after = (b: Seen): boolean => restingSince(b.id) >= droppedOn(since);
   const rivals: { cx: number; cy: number; range: number }[] = bombs.filter((b) => b.owner !== who && b.ground && after(b));
-  for (const r of threats) if (r.owner !== who && r.since >= droppedOn(since)) rivals.push(r);
+  const theirs = threats.filter((r) => r.owner !== who && r.since >= droppedOn(since));
+  for (const r of theirs) rivals.push(r);
+  const coming = (x: number, y: number): boolean => theirs.some((r) => r.lands && r.cx === x && r.cy === y);
+  if (coming(px, py)) return true; // (one coming down on the tile it is crossing: its way out is shut too)
   if (!rivals.length) return false;
   const bombAt = (x: number, y: number): Seen | undefined => bombs.find((b) => b.ground && b.cx === x && b.cy === y);
   const seen = new Set<number>([py * world.w + px]);
@@ -202,6 +215,7 @@ function shutIn(world: World, bombs: Seen[], who: number, px: number, py: number
         const ny = y + dy;
         const i = ny * world.w + nx;
         if (!open(i) || seen.has(i)) continue;
+        if (coming(nx, ny)) return true; // a rival's bomb thrown since is coming down in the way
         const b = bombAt(nx, ny);
         if (b) {
           if (b.owner !== who && after(b)) return true; // a rival's bomb that arrived since is in the way
