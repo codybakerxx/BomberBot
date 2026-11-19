@@ -1415,7 +1415,7 @@ function showLobby(fresh = false, page?: LobbyPage): void {
 /**
  * Match settings (the result panel) and Leave to match settings (the menu): the match ends and the lobby opens
  * on its Match page, the map and the rules (the owner's ask, 19 November 2026). Online it is the host's, and the
- * room goes back to the lobby as with End match; the host's page then opens on Match (`toMatchPage`).
+ * room goes back to the lobby as with Leave to the lobby; the host's page then opens on Match (`toMatchPage`).
  */
 let toMatchPage = false;
 function leaveToMatch(): void {
@@ -1510,9 +1510,11 @@ function fillPause(): void {
   $('pauseHostLine').textContent = hosting ? 'Match · you are the host' : `Match · ${hostName()} is the host`;
   $('pauseRestart').hidden = !hosting;
   $('pauseLobby').hidden = !hosting;
-  $('pauseLobby').textContent = net ? 'End match' : 'Leave to the lobby';
+  // (the same words online, where it ends the match for the whole room: the owner's ask, 19 November 2026; they
+  // were End match and End match · match settings)
+  $('pauseLobby').textContent = 'Leave to the lobby';
   $('pauseMatch').hidden = !hosting;
-  $('pauseMatch').textContent = net ? 'End match · match settings' : 'Leave to match settings';
+  $('pauseMatch').textContent = 'Leave to match settings';
   $('pauseLeave').hidden = !net;
   const title = $('pauseTitle');
   title.textContent = done ? `${sideName(matchWinner)} won the match` : world.over ? `Round ${roundNo} · over` : `Round ${roundNo}`;
@@ -1723,7 +1725,7 @@ $('pauseRestart').addEventListener('click', () =>
 );
 $('pauseLobby').addEventListener('click', () =>
   net
-    ? confirmFirst('Everyone back to the lobby?', 'This match ends for everyone in the room, and its score is not kept. In the lobby you can change the players and the rules.', 'End match', (yes) => {
+    ? confirmFirst('Leave to the lobby?', 'This match ends for everyone in the room, and its score is not kept. Everyone goes back to the lobby, where you can change the players and the rules.', 'End match', (yes) => {
         if (yes) net?.send({ t: 'lobby' });
       })
     : confirmFirst('Leave to the lobby?', 'This match ends and its score is not kept. In the lobby you can change the players and the rules.', 'Leave match', (yes) => {
@@ -1732,7 +1734,7 @@ $('pauseLobby').addEventListener('click', () =>
 );
 $('pauseMatch').addEventListener('click', () =>
   net
-    ? confirmFirst('Everyone back to the lobby?', 'This match ends for everyone in the room, and its score is not kept. You go to the Match page, to change the map and the rules.', 'End match', (yes) => {
+    ? confirmFirst('Leave to match settings?', 'This match ends for everyone in the room, and its score is not kept. You go to the Match page, to change the map and the rules; the others go back to the lobby.', 'End match', (yes) => {
         if (yes) leaveToMatch();
       })
     : confirmFirst('Leave to match settings?', 'This match ends and its score is not kept. On the Match page you can change the map and the rules.', 'Leave match', (yes) => {

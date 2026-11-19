@@ -30,7 +30,7 @@ The picture's tick is read off a clock (`frame` in `predict.ts`). Frames come on
   A room needs someone to play against: a CPU player or another person. Up to eight players in all; a person who
   joins a full room takes the last CPU player's place.
 - **A round** cannot be paused. Anyone can open the menu, and the round carries on behind it (the owner's
-  choice). Only the host has **Restart** (the whole match again, for everyone) and **End match** (everyone back
+  choice). Only the host has **Restart** (the whole match again, for everyone) and **Leave to the lobby** (it was End match; everyone back
   to the lobby). Everyone has **Leave the room**.
 - **Rounds are played out.** Nobody gets a round at random, as in solo play. When a round is decided, only the
   host has **Next round** (or **Rematch** and **Lobby** once the match is won). The others see who starts it.
