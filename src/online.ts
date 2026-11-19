@@ -14,7 +14,7 @@
  * - Pings: every 15 seconds to keep the connection open; in a round twice a second, to keep the picture's
  *   clock in step with the server's (predict.ts).
  */
-import { PROTOCOL, makeCode, parseMsg, type ClientMsg, type MemberInfo, type Score, type Seat, type ServerMsg, type WorldData } from './net';
+import { PROTOCOL, makeCode, parseMsg, type BellAnswer, type ClientMsg, type MemberInfo, type Score, type Seat, type ServerMsg, type WorldData } from './net';
 import { Predictor } from './predict';
 import type { GameEvent, World, WorldConfig } from './sim';
 import type { MatchSetup } from './setup';
@@ -37,6 +37,8 @@ export interface OnlineHooks {
   status(s: 'connecting' | 'open' | 'lost'): void;
   /** something went wrong. `fatal`: the room is gone for this page (no room with that code, full...). */
   error(why: string, fatal: boolean): void;
+  /** the answer to the host's bell (Tell friends): how it went, the server's line, how many friends were rung */
+  bell(answer: BellAnswer, why: string, n: number): void;
 }
 
 /** In a round: a ping twice a second for the picture's clock, and a quick few at the start of each round. */
@@ -214,7 +216,8 @@ export class Online {
         return;
       }
       case 'note':
-        this.hooks.error(m.why, false);
+        if (m.bell) this.hooks.bell(m.bell, m.why, m.n ?? 0);
+        else this.hooks.error(m.why, false);
         return;
       case 'error': {
         if (m.fatal && this.creating && !this.joined && m.why.includes('taken') && this.tries++ < 6) {

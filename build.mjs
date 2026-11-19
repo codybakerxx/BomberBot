@@ -32,7 +32,11 @@ writeFileSync('dist/index.html', html);
 
 for (const f of readdirSync('public')) copyFileSync(`public/${f}`, `dist/${f}`);
 const version = createHash('sha256').update(html).digest('hex').slice(0, 12);
-writeFileSync('dist/sw.js', readFileSync('src/sw.js', 'utf8').replace('__VERSION__', version));
+// (every __VERSION__: a plain replace changed only the first, in sw.js's opening comment, so the worker's own
+// VERSION stayed '__VERSION__' and its saved copy had the same name in every build)
+const sw = readFileSync('src/sw.js', 'utf8').replaceAll('__VERSION__', version);
+if (!sw.includes(`const VERSION = '${version}'`)) throw new Error('src/sw.js has lost its VERSION line');
+writeFileSync('dist/sw.js', sw);
 writeFileSync(
   'dist/manifest.webmanifest',
   JSON.stringify(

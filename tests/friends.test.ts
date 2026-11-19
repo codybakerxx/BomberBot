@@ -68,8 +68,10 @@ async function main(): Promise<void> {
     return new Response(null, { status: url.endsWith('gone') ? 410 : 201 });
   }) as typeof fetch;
   try {
-    const r = (await (await post('/invite', { code: 'BKTW', name: 'Cody', me: host.sub.endpoint })).json()) as { why: string };
+    const r = (await (await post('/invite', { code: 'BKTW', name: 'Cody', me: host.sub.endpoint })).json()) as { why: string; bell: string; n: number };
     assert.strictEqual(r.why, 'Told 2 friends that room BKTW is open.');
+    assert.strictEqual(r.bell, 'sent', 'the page is told how it went, to say it under the bell');
+    assert.strictEqual(r.n, 2, 'and how many friends were rung');
     assert.ok(!got.has(host.sub.endpoint), 'not the host');
     for (const p of [ann, bo]) {
       const sent = got.get(p.sub.endpoint)!;
@@ -81,8 +83,9 @@ async function main(): Promise<void> {
       assert.strictEqual(n.url, '/?room=BKTW');
     }
     assert.strictEqual((await storage.list({ prefix: 'f:' })).size, 3, 'the phone that is gone is dropped');
-    const again = (await (await post('/invite', { code: 'BKTW', name: 'Cody' })).json()) as { why: string };
+    const again = (await (await post('/invite', { code: 'BKTW', name: 'Cody' })).json()) as { why: string; bell: string };
     assert.match(again.why, /just told/, 'not twice in a minute');
+    assert.strictEqual(again.bell, 'wait');
     // the key stays the same between calls
     const k1 = await (await f.fetch(new Request('https://x/api/push/key'))).json();
     const k2 = await (await f.fetch(new Request('https://x/api/push/key'))).json();
@@ -90,6 +93,20 @@ async function main(): Promise<void> {
     // turning off takes a phone off the list
     await post('/api/push/unsubscribe', { endpoint: ann.sub.endpoint });
     assert.strictEqual((await storage.list({ prefix: 'f:' })).size, 2);
+    // the host alone with invites on: nobody to ring (the bell never rings the phone it is tapped on), and saying
+    // so does not use up the room's minute
+    await post('/api/push/unsubscribe', { endpoint: bo.sub.endpoint });
+    got.clear();
+    const alone = (await (await post('/invite', { code: 'QZXV', name: 'Cody', me: host.sub.endpoint })).json()) as { why: string; bell: string; n: number };
+    assert.strictEqual(alone.bell, 'none');
+    assert.strictEqual(alone.n, 0);
+    assert.strictEqual(got.size, 0, 'nothing sent, not even to the host');
+    const twice = (await (await post('/invite', { code: 'QZXV', name: 'Cody', me: host.sub.endpoint })).json()) as { bell: string };
+    assert.strictEqual(twice.bell, 'none', 'asking again straight away says the same');
+    // no phone given (its worker was not running): the host's own phone is the only one on the list, so it is rung
+    const blind = (await (await post('/invite', { code: 'QZXV', name: 'Cody' })).json()) as { bell: string; n: number };
+    assert.strictEqual(blind.bell, 'sent');
+    assert.ok(got.has(host.sub.endpoint));
   } finally {
     globalThis.fetch = realFetch;
   }

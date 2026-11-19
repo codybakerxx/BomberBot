@@ -26,7 +26,7 @@ import { BOMB_ICON, Opt, answerConfirm, choice, confirmFirst, confirmOpen, group
 import { Hand, SENSITIVITY, DEFAULT_SENS, STRAIGHT, standardAims } from './swipe';
 import { Online } from './online';
 import { canInstall, howToAdd, install, isApple, myEndpoint, onWebsite, pushOff, pushOn, pushState, type PushState } from './app';
-import { decodeWorld, packInput, readCode, unpackInput, type Score, type Seat, type ServerMsg } from './net';
+import { decodeWorld, packInput, readCode, unpackInput, type BellAnswer, type Score, type Seat, type ServerMsg } from './net';
 /** Look up an element of src/page.html by its id. */
 const $ = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T;
 const canvas = $<HTMLCanvasElement>('cv');
@@ -1176,6 +1176,7 @@ $('handRight').addEventListener('click', () => {
 
 /** Hide every screen and panel over the game: the lobby, Settings, the menu, the result panel. */
 function hideScreens(): void {
+  hideBellTip();
   lobby.hide();
   $('settings').hidden = true;
   $('pause').hidden = true;
@@ -1735,6 +1736,7 @@ function joinOnline(code: string | null): void {
         if (!wasIn || mode === 'title') openOnlineSheet(code ?? '', why);
         else sayNet(why, 6000);
       },
+      bell: bellAnswer,
     },
     serverHost(),
   );
@@ -1745,6 +1747,7 @@ function joinOnline(code: string | null): void {
 function leaveOnline(bye = true): void {
   if (net && bye) net.leave();
   net = null;
+  hideBellTip();
   $('roomTell').hidden = $('roomShare').hidden = true;
   modeChip($('lobbyMode'), null);
   try {
@@ -1865,9 +1868,14 @@ function onRound(w: World, s: Seat[], score: Score, fresh: boolean): void {
 const COPY_GLYPH =
   '<svg class="copy-glyph" viewBox="0 0 24 24" aria-hidden="true"><rect x="8.5" y="8.5" width="11" height="11" rx="2.5"/><path d="M15.5 5.5v-.5a2 2 0 0 0-2-2H6a2.5 2.5 0 0 0-2.5 2.5v7.5a2 2 0 0 0 2 2h.5"/></svg>' +
   '<svg class="done-glyph" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>';
+/** Online: a green globe, at the start of the room's pill (the owner's ask: a symbol, not the word). */
+const ONLINE_GLYPH =
+  '<span class="net-badge"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></svg></span>';
 /**
- * The chip at the top saying Local match, or Online with the room's code: a button that copies the code
- * (the owner's ask). A tap turns it green with a tick for a moment (if copying fails, a note shows the code).
+ * The chip at the top saying Local match, or, online, the room's code in a gold pill that starts with a green
+ * globe (the owner's design, 18 November 2026: it said Online in words, which did not fit beside the buttons).
+ * The pill copies the code (the owner's ask): a tap turns it green with a tick for a moment (if copying fails, a
+ * note shows the code). The lobby, Settings and the menu during a match each have one.
  */
 function modeChip(chip: HTMLElement, code: string | null): void {
   if (chip.dataset.code === (code ?? '')) return;
@@ -1877,11 +1885,12 @@ function modeChip(chip: HTMLElement, code: string | null): void {
     chip.textContent = 'Local match';
     return;
   }
-  chip.innerHTML = '<span class="chip-word">Online</span>';
+  chip.textContent = '';
   const b = document.createElement('button');
   b.type = 'button';
   b.className = 'code-copy';
-  b.setAttribute('aria-label', `Room code ${code.split('').join(' ')}. Copy it`);
+  b.setAttribute('aria-label', `Online, room code ${code.split('').join(' ')}. Copy it`);
+  b.insertAdjacentHTML('beforeend', ONLINE_GLYPH);
   const word = document.createElement('span');
   word.className = 'code-word';
   word.textContent = code;
@@ -1922,13 +1931,74 @@ async function copyText(text: string): Promise<boolean> {
   }
 }
 
-// Tell friends: a notification to everyone who turned them on (Settings › App), that this room is open
+// Tell friends: a notification to everyone who turned them on (Settings › App), that this room is open. The bell
+// swings when tapped, and says how it went in a bubble under it (the owner found it seemed to do nothing,
+// 18 November 2026: its answer was a line at the very top of the screen, and with nobody else signed up for
+// invites there is never anything to send; the bell does not ring the phone it is tapped on)
+let bellTimer = 0;
+let bellWait = 0;
+/** Say something under the bell, for `ms` (0: until the next thing is said). A tap anywhere closes it. */
+function bellSay(head: string, body = '', good = false, ms = 6000): void {
+  const bell = $('roomTell');
+  if (bell.hidden || mode !== 'lobby') {
+    // (the lobby was left meanwhile: the line at the top instead)
+    if (ms) sayNet(body ? `${head}. ${body}` : head, ms);
+    return;
+  }
+  const tip = $('bellTip');
+  $('bellTipHead').textContent = head;
+  $('bellTipBody').textContent = body;
+  tip.classList.toggle('good', good);
+  tip.hidden = false;
+  // under the bell, its right edge with the bell's, but never off either side of the screen (on a phone 390
+  // wide the bell is near the middle, and a bubble ending at its edge ran off the left)
+  const r = bell.getBoundingClientRect();
+  const w = tip.offsetWidth;
+  const right = Math.round(Math.min(Math.max(8, innerWidth - r.right), innerWidth - w - 8));
+  tip.style.top = `${Math.round(r.bottom + 9)}px`;
+  tip.style.right = `${right}px`;
+  // the little point at its top, under the middle of the bell
+  tip.style.setProperty('--arrow', `${Math.round(Math.min(Math.max(10, innerWidth - right - (r.left + r.width / 2) - 5), w - 22))}px`);
+  clearTimeout(bellTimer);
+  if (ms) bellTimer = window.setTimeout(hideBellTip, ms);
+}
+function hideBellTip(): void {
+  clearTimeout(bellTimer);
+  clearTimeout(bellWait);
+  $('bellTip').hidden = true;
+}
+addEventListener(
+  'pointerdown',
+  (e) => {
+    if (!$('bellTip').hidden && !$('roomTell').contains(e.target as Node)) hideBellTip();
+  },
+  true,
+);
+addEventListener('resize', hideBellTip);
+/** The server's answer to the bell (worker.ts, `Friends`), in plain words under it. */
+function bellAnswer(answer: BellAnswer, why: string, n: number): void {
+  clearTimeout(bellWait);
+  if (answer === 'sent') bellSay(`Rang ${n} friend${n === 1 ? '' : 's'}!`, `They’ve been told that room ${net?.code ?? ''} is open.`, true);
+  else if (answer === 'none')
+    bellSay('Nobody to ring yet', 'The bell rings friends who switched on Room invites in Settings › App. It never rings your own phone.', false, 9000);
+  else if (answer === 'wait') bellSay('Friends were just rung', 'A room can ring once a minute.');
+  else if (answer === 'busy') bellSay('Lots of rings this hour', 'Try again a little later.');
+  else bellSay('Couldn’t ring anyone', why);
+}
 $('roomTell').addEventListener('click', async () => {
   if (!net || !net.isHost) return;
-  sayNet('Telling friends…', 4000);
-  const me = await myEndpoint();
-  net?.send({ t: 'invite', me }); // (the room may have been left while that was looked up)
+  const bell = $('roomTell');
+  bell.classList.remove('ringing');
+  void bell.offsetWidth; // (so the swing starts again on every tap)
+  bell.classList.add('ringing');
+  bellSay('Ringing friends…', '', false, 0);
+  const me = await myEndpoint(); // (never waits more than a moment)
+  if (!net) return; // (the room was left meanwhile)
+  net.send({ t: 'invite', me });
+  clearTimeout(bellWait);
+  bellWait = window.setTimeout(() => bellSay('No answer from the server', 'Check your connection and try again.'), 8000);
 });
+$('roomTell').addEventListener('animationend', () => $('roomTell').classList.remove('ringing'));
 
 // share the room: the phone's share sheet, or the link copied
 $('roomShare').addEventListener('click', async () => {
@@ -1966,6 +2036,7 @@ function showSettings(tab?: SetTab, from?: 'lobby' | 'pause'): void {
   if (from) setFrom = from;
   if (tab) setTab = tab;
   hideScreens();
+  modeChip($('setMode'), net?.code ?? null); // (online it said Local match here until 18 November 2026)
   mode = 'settings';
   document.body.classList.add('menu-open');
   $('settings').hidden = false;

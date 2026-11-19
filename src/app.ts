@@ -74,20 +74,35 @@ function supported(): boolean {
   // (an iPhone allows them only in the home-screen app, whatever Safari shows of the pieces)
   return onWebsite() && (isApp() || !isApple()) && 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
 }
-async function registration(): Promise<ServiceWorkerRegistration | null> {
+/**
+ * The service worker (src/sw.js), once it is running: null if this browser cannot have one, or if it is not
+ * running within `ms`. (`ready` waits for ever when the worker never starts, and a button waiting on it would
+ * look as if it did nothing.)
+ */
+async function registration(ms = 4000): Promise<ServiceWorkerRegistration | null> {
   if (!supported()) return null;
   try {
-    return await navigator.serviceWorker.ready;
+    return await Promise.race([navigator.serviceWorker.ready, new Promise<null>((done) => setTimeout(() => done(null), ms))]);
   } catch {
     return null;
   }
 }
-async function subscription(): Promise<PushSubscription | null> {
-  const reg = await registration();
+async function subscription(ms?: number): Promise<PushSubscription | null> {
+  const reg = await registration(ms);
   try {
     return reg ? await reg.pushManager.getSubscription() : null;
   } catch {
     return null;
+  }
+}
+/** This phone's sign-up address, kept beside the game so the bell does not have to wait for the worker to find it. */
+const MINE = 'pushEndpoint';
+function keepMine(endpoint: string | null): void {
+  try {
+    if (endpoint) localStorage.setItem(MINE, endpoint);
+    else localStorage.removeItem(MINE);
+  } catch {
+    /* optional */
   }
 }
 
@@ -105,7 +120,7 @@ function keyBytes(s: string): Uint8Array<ArrayBuffer> {
 /** Turn notifications on: ask the phone, sign up, tell the server. Says what went wrong, or '' if it worked. */
 export async function pushOn(): Promise<string> {
   const reg = await registration();
-  if (!reg) return 'This browser cannot show notifications.';
+  if (!reg) return supported() ? 'BomberBot is still getting ready on this phone. Try again in a moment.' : 'This browser cannot show notifications.';
   const ok = await Notification.requestPermission();
   if (ok !== 'granted') return ok === 'denied' ? 'Notifications are blocked for BomberBot.' : '';
   try {
@@ -120,6 +135,7 @@ export async function pushOn(): Promise<string> {
     sub ??= await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: keyBytes(key) });
     const s = await fetch('/api/push/subscribe', { method: 'POST', body: JSON.stringify({ sub: sub.toJSON() }) });
     if (!s.ok) return ((await s.json().catch(() => null)) as { why?: string } | null)?.why ?? 'The server did not take it.';
+    keepMine(sub.endpoint);
     return '';
   } catch {
     return 'Could not reach the server. Check your connection and try again.';
@@ -127,6 +143,7 @@ export async function pushOn(): Promise<string> {
 }
 
 export async function pushOff(): Promise<void> {
+  keepMine(null);
   const sub = await subscription();
   if (!sub) return;
   const endpoint = sub.endpoint;
@@ -134,7 +151,16 @@ export async function pushOff(): Promise<void> {
   await fetch('/api/push/unsubscribe', { method: 'POST', body: JSON.stringify({ endpoint }) }).catch(() => null);
 }
 
-/** This phone's own sign-up, so a host's Tell friends leaves it out. */
+/**
+ * This phone's own sign-up, so a host's Tell friends leaves it out. Never waits more than a moment for the
+ * service worker (the bell must always answer); then the address kept when notifications were turned on.
+ */
 export async function myEndpoint(): Promise<string | undefined> {
-  return (await subscription())?.endpoint;
+  const live = (await subscription(1200))?.endpoint;
+  if (live) return live;
+  try {
+    return localStorage.getItem(MINE) ?? undefined;
+  } catch {
+    return undefined;
+  }
 }

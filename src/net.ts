@@ -261,8 +261,14 @@ export type ServerMsg =
   | { t: 'pong'; c: number; d?: number }
   /** something went wrong; `why` is said to the player. `fatal`: the connection is closing. */
   | { t: 'error'; why: string; fatal?: boolean }
-  /** a short line for the top of the screen (how a Tell friends went) */
-  | { t: 'note'; why: string };
+  /**
+   * a short line for the top of the screen. The answer to the host's bell (Tell friends) also says how it went
+   * (`bell`) and how many friends were rung (`n`), so the page can say it under the bell in its own words.
+   */
+  | { t: 'note'; why: string; bell?: BellAnswer; n?: number };
+
+/** How a ring of the host's bell (Tell friends) went: friends rung, nobody to ring, too soon, too many this hour, or it failed. */
+export type BellAnswer = 'sent' | 'none' | 'wait' | 'busy' | 'fail';
 
 /** Read a message, or null if it is not one. */
 export function parseMsg<T extends { t: string }>(raw: unknown): T | null {

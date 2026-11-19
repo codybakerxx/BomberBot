@@ -13,6 +13,7 @@
               onlineCode and onlineJoin join one, onlineNote says what is happening, onlineCancel).
               It covers everything else while it is up.
     netNote   a line at the top about the online connection ("Reconnecting…", "Link copied")
+    bellTip   a bubble under the host's bell (roomTell) saying how ringing friends went (bellTipHead, bellTipBody)
     cv        the arena (a canvas)
     timer     the countdown, centred at the top (beside the arena when the phone is sideways)
     score     the scoreboard: four heads, two each side of the timer, each with the rounds it has won beside it
@@ -397,11 +398,18 @@
   }
   .icon-btn { width: 44px; height: 44px; border-radius: 12px; }
   .icon-btn[hidden] { display: none; } /* (the room's share and bell buttons, when not in a room) */
-  /* the host online has four buttons up there (Tell friends too): narrower, so the room's code stays on one line */
-  @media (max-width: 430px) {
-    #lobby .bar-end:has(#roomTell:not([hidden])) { gap: 4px; }
-    #lobby .bar-end:has(#roomTell:not([hidden])) .icon-btn { width: 38px; }
-    #lobby .bar:has(#roomTell:not([hidden])) .mode-chip { white-space: nowrap; letter-spacing: 0.1em; }
+  /* the host online has four buttons on the right (Tell friends too) and, on the Match page, two on the left:
+     narrower buttons on every phone held upright, so the room's chip fits between them (the owner, 18 November
+     2026: on his iPhone Pro Max, 440 wide, the chip ran under the ‹ and the bell; this stopped at 430 before) */
+  @media (max-width: 480px) {
+    #lobby > .bar:has(#roomTell:not([hidden])) { column-gap: 6px; }
+    #lobby > .bar:has(#roomTell:not([hidden])) > .bar-start, #lobby > .bar:has(#roomTell:not([hidden])) > .bar-end { gap: 4px; }
+    #lobby > .bar:has(#roomTell:not([hidden])) .icon-btn { width: 38px; }
+  }
+  @media (max-width: 389px) {
+    #lobby > .bar:has(#roomTell:not([hidden])) { column-gap: 4px; padding-left: 6px; padding-right: 6px; }
+    #lobby > .bar:has(#roomTell:not([hidden])) > .bar-start, #lobby > .bar:has(#roomTell:not([hidden])) > .bar-end { gap: 3px; }
+    #lobby > .bar:has(#roomTell:not([hidden])) .icon-btn { width: 35px; }
   }
   .icon-btn svg, .round-btn svg, .step svg, .side-btn svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
   .round-btn { flex: 0 0 auto; width: 52px; height: 52px; border-radius: 50%; background: #151a28; }
@@ -420,19 +428,35 @@
   .mode-chip::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
   /* the narrowest phones (320 wide): tighter, so Local match clears the buttons beside it */
   @media (max-width: 359px) {
-    #lobby .bar .mode-chip, #settings .mode-chip { font-size: 11px; letter-spacing: 0.05em; padding: 4px 8px; }
+    #lobby .bar .mode-chip:not(.online), #settings .mode-chip:not(.online) { font-size: 11px; letter-spacing: 0.05em; padding: 4px 8px; }
     #lobby .bar .mode-chip:not(.online)::before, #settings .mode-chip:not(.online)::before { display: none; }
   }
-  /* online: the room's code is a button that copies it (a soft inner pill with a copy icon; a tick once copied) */
-  .mode-chip.online { padding: 3px 3px 3px 10px; gap: 7px; }
+  /* online (the owner's design, 18 November 2026): one gold pill, the room's code, that copies it (a copy icon; a
+     tick once copied), starting with a glowing green globe that says the game is online. It said ONLINE in words
+     before the code, which took the room the chip did not have: it ran under the buttons beside it. The same chip
+     in the lobby, in Settings and in the menu during a match. */
+  .mode-chip.online { padding: 0; gap: 0; border: 0; background: none; letter-spacing: 0; }
+  .mode-chip.online::before { display: none; }
   .code-copy {
-    display: inline-flex; align-items: center; gap: 6px; min-height: 26px; padding: 3px 8px 3px 10px; border: 0; border-radius: 999px; cursor: pointer;
+    display: inline-flex; align-items: center; gap: 6px; min-height: 28px; padding: 2px 9px 2px 2px; border: 0; border-radius: 999px; cursor: pointer;
     font: 700 13px/1 var(--font-display); letter-spacing: 0.16em; color: #05060b; background: var(--accent);
     box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35), 0 1px 6px rgba(255, 197, 106, 0.25);
     transition: background 0.18s ease, transform 0.12s ease; -webkit-tap-highlight-color: transparent;
   }
   .code-copy:active { transform: scale(0.95); }
-  .code-copy svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; flex: 0 0 auto; }
+  .code-copy svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; flex: 0 0 auto; }
+  /* the green globe: online. A soft ring goes out from it now and then, as a live signal does (not with Less movement) */
+  .net-badge { position: relative; flex: none; display: grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; background: #06170e; box-shadow: inset 0 0 0 1.5px rgba(92, 255, 142, 0.6), 0 0 7px rgba(92, 255, 142, 0.35); }
+  .code-copy .net-badge svg { width: 15px; height: 15px; stroke: #5cff8e; stroke-width: 2; filter: drop-shadow(0 0 1.5px rgba(92, 255, 142, 0.85)); }
+  .net-badge::after { content: ''; position: absolute; inset: 0; border-radius: 50%; border: 1.5px solid #5cff8e; opacity: 0; animation: live-ring 2.8s ease-out infinite; pointer-events: none; }
+  @keyframes live-ring { 0% { transform: scale(1); opacity: 0.75; } 60%, 100% { transform: scale(1.5); opacity: 0; } }
+  body.calm .net-badge::after { animation: none; }
+  @media (prefers-reduced-motion: reduce) { .net-badge::after { animation: none; } }
+  /* a phone 320 wide hosting on the Match page: no room for the copy icon (the pill still copies when tapped) */
+  @media (max-width: 359px) {
+    #lobby > .bar:has(#roomTell:not([hidden])) .code-copy { letter-spacing: 0.1em; padding-right: 8px; gap: 5px; }
+    #lobby > .bar:has(#lobbyPrev:not([hidden])):has(#roomTell:not([hidden])) .code-copy .copy-glyph { display: none; }
+  }
   .code-copy .done-glyph { display: none; }
   .code-copy.copied { background: #7fe0a0; }
   .code-copy.copied .copy-glyph { display: none; }
@@ -454,12 +478,25 @@
   #lobby > .bar > .bar-start { justify-self: start; display: flex; align-items: center; gap: 6px; }
   #lobby > .bar > .bar-end { justify-self: end; align-items: center; }
   /* in a room there are more buttons on the right than fit both sides of a centred chip: the chip then sits in the
-     middle of the room left between the two sides, and on a phone it shows the dot and the code without the word */
+     middle of the room left between the two sides */
   #lobby > .bar:has(#roomShare:not([hidden])) { grid-template-columns: auto minmax(0, 1fr) auto; }
-  @media (max-width: 430px) {
-    #lobby .mode-chip.online .chip-word, #pause .mode-chip.online .chip-word { display: none; }
-    #lobby .mode-chip.online { padding-left: 9px; }
-  }
+  /* the bell's answer (Tell friends): a bubble under the bell, where the thumb is (the owner found the bell seemed
+     to do nothing, 18 November 2026: its answer was a line at the very top of the screen, gone in 4 seconds).
+     Placed by bellSay in main.ts; a tap anywhere closes it. */
+  .bell-tip { position: fixed; z-index: 41; width: max-content; max-width: min(290px, calc(100vw - 16px)); display: grid; gap: 4px; padding: 10px 13px 11px; text-align: left; background: #141a2a; border: 1px solid rgba(255, 197, 106, 0.5); border-radius: 14px; box-shadow: 0 14px 30px rgba(0, 0, 0, 0.6); animation: tip-in 0.18s ease-out; }
+  .bell-tip[hidden] { display: none; }
+  .bell-tip::before { content: ''; position: absolute; top: -6px; right: var(--arrow, 14px); width: 10px; height: 10px; background: #141a2a; border-top: 1px solid rgba(255, 197, 106, 0.5); border-left: 1px solid rgba(255, 197, 106, 0.5); transform: rotate(45deg); }
+  .bell-tip b { font: 700 14px/1.2 var(--font-display); letter-spacing: 0.04em; color: var(--accent); }
+  .bell-tip span { font: 500 13px/1.35 var(--font-body); color: var(--ink-dim); }
+  .bell-tip span:empty { display: none; }
+  .bell-tip.good, .bell-tip.good::before { border-color: rgba(92, 255, 142, 0.55); }
+  .bell-tip.good b { color: #5cff8e; }
+  @keyframes tip-in { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+  body.calm .bell-tip { animation: none; }
+  /* the bell swings when tapped (as the bell on Settings › App does), so the tap is seen to ring it */
+  #roomTell.ringing svg { transform-origin: 50% 15%; animation: ring-now 0.9s ease-in-out; }
+  @keyframes ring-now { 0%, 100% { transform: rotate(0); } 14% { transform: rotate(18deg); } 30% { transform: rotate(-15deg); } 46% { transform: rotate(10deg); } 62% { transform: rotate(-6deg); } 78% { transform: rotate(3deg); } }
+  body.calm #roomTell.ringing svg { animation: none; }
   .summary { margin: 2px 14px 8px; text-align: center; font: 500 13px/1.3 var(--font-body); color: var(--ink-dim); }
   .pages { flex: 0 0 auto; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); margin: 0 14px; border-bottom: 1px solid var(--line); }
   .pages.three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
@@ -828,6 +865,7 @@
   .state-chip[hidden] { display: none; }
   .pause-head { justify-content: flex-start !important; flex-wrap: nowrap !important; padding: 0 128px 0 0 !important; min-height: 36px !important; gap: 6px !important; }
   .pause-head .mode-chip, .pause-head .state-chip { font-size: 11px; letter-spacing: 0.1em; padding: 4px 8px; white-space: nowrap; }
+  .pause-head .mode-chip.online { padding: 0; letter-spacing: 0; } /* (the room's pill is the chip) */
   .pause-gear { right: -4px !important; top: -2px !important; width: 38px !important; height: 38px !important; }
   .pause-key { position: absolute; right: 40px; top: -2px; width: 38px; height: 38px; } /* beside the gear (the owner's ask) */
   .pause-mute { position: absolute; right: 84px; top: -2px; width: 38px; height: 38px; }
@@ -1003,6 +1041,8 @@
 <canvas id="ghosts" aria-hidden="true"></canvas>
 <div id="playTip" role="status" aria-live="polite" hidden></div>
 <div id="netNote" role="status" aria-live="polite" hidden></div>
+<!-- the answer to the host's bell (Tell friends), in a bubble under it -->
+<div id="bellTip" class="bell-tip" role="status" aria-live="polite" hidden><b id="bellTipHead"></b><span id="bellTipBody"></span></div>
 
 <div id="touch">
   <div id="dzone">
@@ -1191,7 +1231,7 @@
           </ol>
           <div class="opts" id="notifyOpts"></div>
           <p class="hint" id="notifyNote" role="status" aria-live="polite"></p>
-          <p class="invite-fine">Hosting? Tap the bell yourself to call everyone in. Room invites are the only notifications BomberBot sends, a room can ring once a minute, and you can turn them off here any time.</p>
+          <p class="invite-fine">Hosting? Tap the bell yourself to call everyone in: it rings everyone else who has invites on, never your own phone. Room invites are the only notifications BomberBot sends, a room can ring once a minute, and you can turn them off here any time.</p>
         </div>
       </section>
     </div>

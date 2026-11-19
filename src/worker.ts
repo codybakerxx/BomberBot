@@ -13,7 +13,7 @@
  * Rooms are not saved anywhere: when the last person goes, the room goes too. `Friends` keeps its list on disk.
  */
 import { Room, type Conn, type Member } from './room';
-import { parseMsg, readCode, type ClientMsg } from './net';
+import { parseMsg, readCode, type BellAnswer, type ClientMsg, type ServerMsg } from './net';
 import { encryptFor, makeVapidKeys, vapidHeader, type Notice, type VapidKeys } from './push';
 
 // The few Cloudflare Workers pieces used here (their full types are not part of this project).
@@ -120,20 +120,23 @@ export class RoomDO {
     return new Response(null, { status: 101, webSocket: client } as unknown as ResponseInit);
   }
 
-  /** The host's Tell friends: a notification to every phone that said yes, through `Friends`. */
+  /** The host's Tell friends: a notification to every phone that said yes, through `Friends`. Always answered. */
   private async invite(m: Member, me: string | undefined, conn: Conn): Promise<void> {
     const room = this.room;
-    if (!room || m.id !== room.hostId || room.playing) return;
-    let why: string;
-    try {
-      const r = await friends(this.env).fetch(
-        new Request('https://friends/invite', { method: 'POST', body: JSON.stringify({ code: room.code, name: m.name, me: me ?? '' }) }),
-      );
-      why = ((await r.json()) as { why: string }).why;
-    } catch {
-      why = 'Could not send notifications just now.';
+    let answer: Rang;
+    if (!room || m.id !== room.hostId || room.playing) answer = { bell: 'fail', why: 'Only the host can ring friends, from the lobby.', n: 0 };
+    else {
+      try {
+        const r = await friends(this.env).fetch(
+          new Request('https://friends/invite', { method: 'POST', body: JSON.stringify({ code: room.code, name: m.name, me: me ?? '' }) }),
+        );
+        answer = (await r.json()) as Rang;
+      } catch {
+        answer = { bell: 'fail', why: 'Could not send notifications just now.', n: 0 };
+      }
     }
-    conn.send(JSON.stringify({ t: 'note', why }));
+    const msg: ServerMsg = { t: 'note', why: answer.why, bell: answer.bell, n: answer.n };
+    conn.send(JSON.stringify(msg));
   }
 
   /** Start or stop the two clocks: the round's (while one is being played) and the tidying one. */
@@ -193,6 +196,12 @@ interface Friend {
   p256dh: string;
   auth: string;
   at: number;
+}
+/** How a Tell friends went (net.ts `BellAnswer`), a line saying so, and how many friends it reached. */
+interface Rang {
+  bell: BellAnswer;
+  why: string;
+  n: number;
 }
 
 /** A short name for a phone's sign-up, to keep it under on disk. */
@@ -264,23 +273,24 @@ export class Friends {
       if (typeof body.endpoint === 'string') await store.delete(await keyOf(body.endpoint));
       return reply({ ok: true });
     }
-    if (path === '/invite') return reply({ why: await this.invite(body) });
+    if (path === '/invite') return reply(await this.invite(body));
     return reply({ why: 'Not found' }, 404);
   }
 
-  /** Tell everyone on the list (but the host) that a room is open. Says how it went, in a line for the host. */
-  private async invite(body: Record<string, unknown>): Promise<string> {
+  /** Tell everyone on the list (but the host) that a room is open. Says how it went, with a line for the host. */
+  private async invite(body: Record<string, unknown>): Promise<Rang> {
     const store = this.state.storage;
     const code = readCode(typeof body.code === 'string' ? body.code : '');
-    if (!code) return 'No room to tell anyone about.';
+    if (!code) return { bell: 'fail', why: 'No room to tell anyone about.', n: 0 };
     const now = Date.now();
     const last = (await store.get<number>('room:' + code)) ?? 0;
-    if (now - last < ROOM_GAP_MS) return 'Friends were just told. Try again in a minute.';
+    if (now - last < ROOM_GAP_MS) return { bell: 'wait', why: 'Friends were just told. Try again in a minute.', n: 0 };
     const hour = ((await store.get<number[]>('sent')) ?? []).filter((t) => now - t < 3_600_000);
-    if (hour.length >= HOURLY) return 'Lots of notifications have gone out this hour. Try again later.';
+    if (hour.length >= HOURLY) return { bell: 'busy', why: 'Lots of notifications have gone out this hour. Try again later.', n: 0 };
     const me = typeof body.me === 'string' && body.me ? await keyOf(body.me) : '';
     const list = [...(await store.list<Friend>({ prefix: 'f:', limit: MAX_FRIENDS })).entries()].filter(([k]) => k !== me);
-    if (!list.length) return 'Nobody else has notifications on yet (Settings › App).';
+    // (the host's own phone is never rung: the bell is for calling everyone else in)
+    if (!list.length) return { bell: 'none', why: 'Nobody else has Room invites on yet (Settings › App). The bell never rings your own phone.', n: 0 };
     // the newest sign-ups first, if there are more than one notification can reach
     list.sort((a, b) => b[1].at - a[1].at);
     await store.put('room:' + code, now);
@@ -314,6 +324,8 @@ export class Friends {
       }),
     );
     const n = results.filter(Boolean).length;
-    return n ? `Told ${n} friend${n === 1 ? '' : 's'} that room ${code} is open.` : 'The notifications did not go through. Try again in a minute.';
+    return n
+      ? { bell: 'sent', why: `Told ${n} friend${n === 1 ? '' : 's'} that room ${code} is open.`, n }
+      : { bell: 'fail', why: 'The notifications did not go through. Try again in a minute.', n: 0 };
   }
 }
