@@ -10,10 +10,10 @@
  *
  * It holds no game rules. Those are all in sim.ts.
  */
-import { createWorld, step, ticksLeft, World, PlayerInput, Dir, TICK_HZ, DEATH_TICKS, type GameEvent, type ItemKind } from './sim';
+import { createWorld, step, ticksLeft, World, PlayerInput, type Player, Dir, TICK_HZ, DEATH_TICKS, type GameEvent, type ItemKind } from './sim';
 import { Bot, BotLevel, BOT_LEVELS, LEVELS, createBot, botInput } from './bot';
 import { COLORS, NOBODY, botName, colorById, drawAngels, drawGround, drawHead, drawItemTile, drawStatic, drawDynamic, drawGhosts, groundKey, setMap, setOrangeFire, warmSprites } from './render';
-import { Input, PadReader, typing } from './input';
+import { Input, PadReader, pilotAim, typing } from './input';
 import { drawTitle, closeTitle, drawIcon } from './title';
 import { initAudio, preview, setSound, sfx, wakeAudio } from './audio';
 import { createLobby, LobbyHost } from './lobby';
@@ -654,6 +654,19 @@ function shake(time: number): void {
 function flyingAim(inp: PlayerInput): PlayerInput {
   const me = shownWorld().players[myIdx()];
   if (inp.aim !== undefined && !(me && me.flying > 0)) delete inp.aim;
+  return pilot(inp, me);
+}
+
+/**
+ * With Inverse plane controls on (Settings › Controls; the default), a player here flying the laptop's plane
+ * steers it like a pilot: left and right turn it to its own left and right (`pilotAim` in input.ts), worked out
+ * from where its plane is heading on this screen. Off, the aim is the way the thumb, keys or stick point.
+ */
+function pilot<T extends PlayerInput | undefined>(inp: T, p: Player | undefined): T {
+  if (!inp || !p || !(p.flying > 0) || !prefs.planeInverse) return inp;
+  const aim = pilotAim(inp.dir, p.planeDir);
+  if (aim === undefined) delete inp.aim;
+  else inp.aim = aim;
   return inp;
 }
 
@@ -804,8 +817,8 @@ function tick(): void {
   // your controls give. Once the round is decided nobody is asked for anything: the winner celebrates.
   const inputs: (PlayerInput | undefined)[] = [];
   if (!world.over) {
-    inputs[0] = input.state();
-    guests.forEach((g, i) => (inputs[i + 1] = input.reader(g.pad)?.state()));
+    inputs[0] = pilot(input.state(), world.players[0]);
+    guests.forEach((g, i) => (inputs[i + 1] = pilot(input.reader(g.pad)?.state(), world.players[i + 1])));
     for (const b of bots) inputs[b.id] = botInput(world, b);
   }
   advance(inputs);
@@ -1231,6 +1244,19 @@ const sensOpts: Opt[] = [
     },
     text: (v) => `${v}%`,
     onThumb: true,
+  }),
+  // (the owner's ask, 19 November 2026: the plane's steering inverted, and a setting for it)
+  toggle({
+    label: 'Inverse plane controls',
+    hint: () =>
+      prefs.planeInverse
+        ? 'Steer the laptop’s plane like a pilot: left and right turn it to its own left and right, whichever way it is flying'
+        : 'The laptop’s plane flies the way you point',
+    get: () => prefs.planeInverse,
+    set: (v) => {
+      prefs.planeInverse = v;
+      prefsChanged();
+    },
   }),
 ];
 let refreshSens = (): void => {};
@@ -2352,11 +2378,13 @@ const refreshSound = mount($('soundOpts'), soundOpts);
  */
 const controlOpts: Opt[] = [
   group('Steering', STEER_ICON, [{ el: $('steerSet'), refresh() {} }, ...sensOpts], {
-    isDefault: () => settings.hand === 'left' && settings.sens === DEFAULT_SENS,
+    isDefault: () => settings.hand === 'left' && settings.sens === DEFAULT_SENS && prefs.planeInverse === defaultPrefs().planeInverse,
     reset: () => {
       settings.hand = 'left';
       settings.sens = DEFAULT_SENS;
       applySettings(true);
+      prefs.planeInverse = defaultPrefs().planeInverse;
+      prefsChanged();
     },
   }),
   group('Visibility', EYE_ICON, padOpts, {
@@ -2372,11 +2400,12 @@ refreshSens = refreshPad;
 
 // Reset all, at the foot of Controls and of Sound (the owner's ask, as on the Match page): asks first
 $('controlsReset').addEventListener('click', () =>
-  confirmFirst('Reset all control settings?', 'The steering thumb, movement sensitivity and touch controls go back to their defaults. Keys and buttons are on Gamepad and stay as they are.', 'Reset all', (yes) => {
+  confirmFirst('Reset all control settings?', 'The steering thumb, movement sensitivity, plane controls and touch controls go back to their defaults. Keys and buttons are on Gamepad and stay as they are.', 'Reset all', (yes) => {
     if (!yes) return;
     settings.hand = 'left';
     settings.sens = DEFAULT_SENS;
     applySettings(true);
+    prefs.planeInverse = defaultPrefs().planeInverse;
     prefs.padShow = defaultPrefs().padShow;
     prefsChanged();
   }),

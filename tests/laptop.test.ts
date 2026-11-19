@@ -37,6 +37,7 @@ import {
 } from '../src/sim';
 import { packInput, tickCodes, tickText, unpackInput, worldHash } from '../src/net';
 import { botInput, createBot } from '../src/bot';
+import { pilotAim } from '../src/input';
 
 const none: PlayerInput = { dir: 0, a: false, b: false };
 const press = (o: Partial<PlayerInput>): PlayerInput => ({ ...none, ...o });
@@ -301,6 +302,38 @@ function takeOff(w: World): void {
   run(w, 60);
   assert.ok(w.over);
   assert.equal(w.players[0].flying, 0);
+}
+
+// Inverse plane controls (the owner's ask, 19 November 2026; on by default): left and right turn the plane to
+// its own left and right, whichever way it is flying, for as long as they are held; up, down or nothing flies on
+{
+  assert.equal(pilotAim(3, 0), (AIM_STEPS * 3) / 4, 'heading right, left aims up the screen');
+  assert.equal(pilotAim(4, 0), AIM_STEPS / 4, 'heading right, right aims down');
+  assert.equal(pilotAim(3, TURN_STEPS / 4), 0, 'heading down the screen, left aims to the screen’s right');
+  assert.equal(pilotAim(4, TURN_STEPS / 4), AIM_STEPS / 2, 'and right to its left');
+  assert.equal(pilotAim(4, TURN_STEPS - 4), AIM_STEPS / 4, 'round past a full turn');
+  for (const d of [0, 1, 2] as const) assert.equal(pilotAim(d, 300), undefined, 'up, down or nothing: straight on');
+  const w = holding(4);
+  takeOff(w);
+  const p = w.players[0];
+  assert.equal(p.planeDir, 0);
+  const fly = (dir: 0 | 1 | 2 | 3 | 4, n: number): void => {
+    for (let i = 0; i < n; i++) {
+      const aim = pilotAim(dir, p.planeDir);
+      step(w, [aim === undefined ? press({ dir }) : press({ dir, aim })]);
+    }
+  };
+  fly(3, 60);
+  assert.equal(p.planeDir, TURN_STEPS - 60 * PLANE_TURN, 'left held a second: turned anticlockwise at full turn');
+  fly(3, 200);
+  assert.equal(p.planeDir, (((-260 * PLANE_TURN) % TURN_STEPS) + TURN_STEPS) % TURN_STEPS, 'and keeps turning round');
+  const held = p.planeDir;
+  fly(1, 30);
+  assert.equal(p.planeDir, held, 'up flies straight on');
+  fly(0, 30);
+  assert.equal(p.planeDir, held, 'and so does nothing held');
+  fly(4, 10);
+  assert.equal(p.planeDir, (held + 10 * PLANE_TURN) % TURN_STEPS, 'right turns it clockwise');
 }
 
 // the same presses give the same flight on every copy, and the steering gets through online

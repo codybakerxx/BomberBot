@@ -12,7 +12,7 @@
  * or a new player joining in the lobby (couch play), whose robot then reads its own `PadReader`. While
  * Settings is waiting for a new key or button (`capture`), presses go there and nowhere else.
  */
-import { AIM_STEPS, type Dir, type PlayerInput } from './sim';
+import { AIM_STEPS, TURN_STEPS, type Dir, type PlayerInput } from './sim';
 import { SwipePad } from './swipe';
 import { KeyMap, PadMap, PAD, defaultKeys, defaultPad, keyAction, normKey } from './bindings';
 
@@ -39,6 +39,21 @@ export function aimOf(vx: number, vy: number): number | undefined {
   const turns = Math.atan2(vy, vx) / (2 * Math.PI);
   return ((Math.round(turns * AIM_STEPS) % AIM_STEPS) + AIM_STEPS) % AIM_STEPS;
 }
+/**
+ * Steering the laptop's plane like a pilot (Settings › Controls › Inverse plane controls, on by default: the
+ * owner's ask, 19 November 2026): left and right turn the plane to its own left and right, whichever way it is
+ * flying (flying down the screen, left turns it towards the screen's right); up, down or nothing flies it straight
+ * on. Given as an aim a quarter turn to that side of where it is heading, so the rules turn it as fast as a plane
+ * turns for as long as the direction is held. The rules and what is sent online are as before: only the aim
+ * differs. `planeDir` is the plane's heading in TURN_STEPS.
+ */
+export function pilotAim(dir: Dir, planeDir: number): number | undefined {
+  const turn = dir === 3 ? -1 : dir === 4 ? 1 : 0;
+  if (!turn) return undefined;
+  const at = Math.round((planeDir * AIM_STEPS) / TURN_STEPS) + (turn * AIM_STEPS) / 4;
+  return ((at % AIM_STEPS) + AIM_STEPS) % AIM_STEPS;
+}
+
 /** The aim of the directions held together (keys, a controller's D-pad): eight ways. */
 function aimOfDirs(held: (d: Dir) => boolean): number | undefined {
   return aimOf((held(4) ? 1 : 0) - (held(3) ? 1 : 0), (held(2) ? 1 : 0) - (held(1) ? 1 : 0));

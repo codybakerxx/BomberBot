@@ -929,10 +929,16 @@ export interface Prefs {
   padKeys: PadMap;
   /** shake the controller on a knockout or a blast close by */
   rumble: boolean;
+  /**
+   * Inverse plane controls (Settings › Controls › Steering; the owner's ask, 19 November 2026, on by default):
+   * left and right turn the laptop's plane to its own left and right (`pilotAim` in input.ts). Off, it flies the
+   * way you point, as it did at first.
+   */
+  planeInverse: boolean;
 }
 
 export function defaultPrefs(): Prefs {
-  return { soundOn: true, volume: 80, muted: [], sharpness: DEFAULT_SHARPNESS, ghosts: true, orangeFire: false, calm: false, padShow: 100, keys: defaultKeys(), padKeys: defaultPad(), rumble: true };
+  return { soundOn: true, volume: 80, muted: [], sharpness: DEFAULT_SHARPNESS, ghosts: true, orangeFire: false, calm: false, padShow: 100, keys: defaultKeys(), padKeys: defaultPad(), rumble: true, planeInverse: true };
 }
 
 export function readPrefs(raw: unknown): Prefs {
@@ -948,6 +954,7 @@ export function readPrefs(raw: unknown): Prefs {
     orangeFire: typeof r.orangeFire === 'boolean' ? r.orangeFire : d.orangeFire,
     calm: typeof r.calm === 'boolean' ? r.calm : d.calm,
     padShow: clampInt(r.padShow, 40, 200, d.padShow),
+    planeInverse: typeof r.planeInverse === 'boolean' ? r.planeInverse : d.planeInverse,
     keys: readKeys(r.keys),
     padKeys: readPad(r.padKeys),
     rumble: typeof r.rumble === 'boolean' ? r.rumble : d.rumble,
