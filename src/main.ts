@@ -1914,8 +1914,6 @@ function showSetTab(t: SetTab): void {
   const next = SET_TABS[i + 1];
   $('setPrev').hidden = !prev;
   $('setNext').hidden = !next;
-  $('setPrev').querySelector('span')!.textContent = prev ? SET_NAMES[prev] : '';
-  $('setNext').querySelector('span')!.textContent = next ? SET_NAMES[next] : '';
   $('setPrev').setAttribute('aria-label', prev ? `Previous page: ${SET_NAMES[prev]}` : '');
   $('setNext').setAttribute('aria-label', next ? `Next page: ${SET_NAMES[next]}` : '');
   const sc = document.querySelector('#settings .scroll');
@@ -1936,6 +1934,7 @@ $('setPrev').addEventListener('click', () => stepSettings(-1));
 $('setNext').addEventListener('click', () => stepSettings(1));
 $('setDone').addEventListener('click', closeSettings);
 $('setBack').addEventListener('click', closeSettings);
+$('setClose').addEventListener('click', closeSettings);
 
 /** Your settings changed: save them, put them into effect, and redraw the pages that show them. */
 function prefsChanged(): void {

@@ -555,6 +555,11 @@
   .side-btn svg { width: 16px; height: 16px; flex: 0 0 auto; }
   .side-btn span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .side-btn[hidden] { display: flex; visibility: hidden; }
+  /* Settings' foot: Done between two plain arrows, no page names (the owner's ask, 18 November 2026; the names
+     are on the tabs at the top) */
+  #settings .foot { grid-template-columns: 52px minmax(0, 1fr) 52px; }
+  #settings .side-btn { width: 52px; height: 46px; padding: 0; }
+  #settings .side-btn svg { width: 22px; height: 22px; }
   .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 12px; display: flex; flex-direction: column; align-items: center; gap: 8px; }
   .you-row { width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 6px; }
   #youBot { width: 150px; height: 150px; }
@@ -1072,7 +1077,9 @@
       <span class="mode-chip" id="setMode">Local match</span>
       <span class="bar-sub">Settings · just for you</span>
     </div>
-    <div class="bar-end"></div>
+    <!-- an X to close Settings, as well as the back arrow (the owner's ask, 18 November 2026): both go back where
+         Settings was opened from, like Done -->
+    <div class="bar-end"><button id="setClose" class="icon-btn" type="button" aria-label="Close settings"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/></svg></button></div>
   </header>
   <nav class="pages five" role="tablist" aria-label="Settings pages">
     <button type="button" role="tab" id="pgControls" aria-controls="setControls">Controls</button>
@@ -1165,9 +1172,9 @@
     </div>
   </div>
   <footer class="foot">
-    <button id="setPrev" class="side-btn" type="button" data-pad="LB" data-key="Q"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg><span></span></button>
+    <button id="setPrev" class="side-btn" type="button" data-pad="LB" data-key="Q"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></button>
     <button id="setDone" class="go big" type="button">Done</button>
-    <button id="setNext" class="side-btn" type="button" data-pad="RB" data-key="E"><span></span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg></button>
+    <button id="setNext" class="side-btn" type="button" data-pad="RB" data-key="E"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg></button>
   </footer>
 </div>
 
