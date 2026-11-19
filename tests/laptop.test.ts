@@ -123,7 +123,7 @@ function takeOff(w: World): void {
   const down = AIM_STEPS / 4;
   step(w, [press({ aim: down })]);
   assert.equal(p.planeDir, PLANE_TURN, 'one tick: a little way round, clockwise');
-  run(w, 40, press({ aim: down }));
+  run(w, TURN_STEPS / 4 / PLANE_TURN, press({ aim: down }));
   assert.equal(p.planeDir, TURN_STEPS / 4, 'then pointing down');
   const y = p.planeY;
   run(w, 5, press({ aim: down }));
@@ -195,7 +195,7 @@ function takeOff(w: World): void {
     v *= DROP_DRAG;
   }
   const lx = Math.round(x);
-  assert.ok(x - d0.x > 1.2 && x - d0.x < 1.6, `lands about 1.4 tiles on (${(x - d0.x).toFixed(2)})`);
+  assert.ok(x - d0.x > 0.8 && x - d0.x < 1.0, `lands about 0.9 of a tile on (${(x - d0.x).toFixed(2)})`);
   // the other robot stands right there
   const q = w.players[1];
   q.x = lx;

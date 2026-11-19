@@ -123,7 +123,7 @@ The menu during an online match shows the ping, to tell a slow connection from a
 | `in` | what you are pressing (five bits, and the way you steer, `IN_AIM`, while you fly a laptop's plane), the tick it is for (`k`), its number (`n`) and the round's (`e`) |
 | `ping` | every 15 s to keep the connection open; twice a second in a round, for the clock |
 
-`PROTOCOL` is 3 since the laptop (18 November 2026): a tick's text is one character a player (`DIGITS`), or two for one steering a plane (one from `STEER`, which holds its five bits, then one from `AIMS`, the way: 64 of them). A page only sends its steering while its plane is up (`flyingAim` in main.ts), so the usual tick text is as short as ever. Another player's plane is drawn where the server last said, like their robot (`predict.ts` does not guess their steering).
+`PROTOCOL` is 3 since the laptop (18 November 2026), 4 since its plane was slowed (19 November 2026: a page from before would fly it differently): a tick's text is one character a player (`DIGITS`), or two for one steering a plane (one from `STEER`, which holds its five bits, then one from `AIMS`, the way: 64 of them). A page only sends its steering while its plane is up (`flyingAim` in main.ts), so the usual tick text is as short as ever. Another player's plane is drawn where the server last said, like their robot (`predict.ts` does not guess their steering).
 | `sync`, `bye` | out of step; leaving |
 
 | From the server | |

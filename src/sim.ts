@@ -454,17 +454,19 @@ export const ZOMBIE_SAFE_TICKS = 60; // blasts leave it be for 1 s after it gets
 // the laptop: B flies a plane over the arena that drops bombs (the owner's design, 18 November 2026). The robot
 // stands at its laptop while the plane is up. The plane is steered smoothly at any angle; its bombs fall, keep
 // some of its speed as they go, and go off where they land, with nothing on screen saying where that will be.
-export const PLANE_TICKS = 8 * TICK_HZ; // a flight lasts up to 8 s
-export const PLANE_SPEED = 0.08; // tiles a tick (4.8 tiles a second: quicker than a robot with every speed power-up)
-export const TURN_STEPS = 256; // the plane's heading is kept in 256ths of a turn ...
-export const PLANE_TURN = 2; // ... and turns at most this many a tick (169° a second): it sweeps round, never on the spot
+// (19 November 2026, the owner, to make it easier to control: slower, turning less, and twice as long a flight.
+// It was 4.8 tiles a second, 169° a second and 8 s.)
+export const PLANE_TICKS = 16 * TICK_HZ; // a flight lasts up to 16 s
+export const PLANE_SPEED = 0.05; // tiles a tick (3 tiles a second: a little quicker than a robot with no speed power-ups)
+export const TURN_STEPS = 1024; // the plane's heading is kept in 1024ths of a turn ...
+export const PLANE_TURN = 4; // ... and turns at most this many a tick (84° a second, a full circle in about 4.3 s): it sweeps round, never on the spot
 export const AIM_STEPS = 64; // the way it is steered (PlayerInput.aim) comes in 64ths of a turn
 export const PLANE_BOMBS = 3; // bombs a plane can drop
 export const PLANE_FIRST_GAP = 30; // none in its first half second, so the first cannot land on the robot it took off from
 export const PLANE_DROP_GAP = 20; // and at least a third of a second between two
 export const PLANE_AFTER = 30; // once its last bomb is away it flies on half a second, then home
 export const DROP_TICKS = 48; // a dropped bomb falls for 0.8 s: long enough to see it coming and get out of the way
-export const DROP_DRAG = 0.95; // keeping 95% of its speed each tick: it lands about 1.5 tiles on from where it was let go
+export const DROP_DRAG = 0.95; // keeping 95% of its speed each tick: it lands about a tile (0.9) on from where it was let go
 export const DROP_FIRE = 1; // its blast reaches one tile each way
 
 /**

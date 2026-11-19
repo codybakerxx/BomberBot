@@ -74,8 +74,9 @@ Holding a **laptop** (a power-up: see [GAME-RULES.md](GAME-RULES.md), Laptop), *
 - **B** takes off. Your robot stands still while you fly.
 - **Steering:** the plane goes the way you point and never stops, turning smoothly. On the swipe pad it follows your thumb: the way it points from where your stroke began, so a stroke that curves steers the plane round with it, and a thumb kept still at the end of a stroke keeps pointing that way. Lifting the thumb lets the plane fly straight on. With keys or a D-pad it goes eight ways (two arrows together for a diagonal); with a stick, any way it leans. The robot's own swipe reading (the four aims and Movement sensitivity) plays no part.
 - **A** drops a bomb, three in all. The A button says how many are left ("Drop · 2 left").
-- **B** again lands the plane ("Land" on the B button). It also lands by itself after 8 seconds, or half a second after its last bomb.
-- Nothing shows where a bomb will land: you judge it by eye. A bomb carries on about a tile and a half the way the plane was flying as it falls.
+- **B** again lands the plane ("Land" on the B button). It also lands by itself after 16 seconds, or half a second after its last bomb.
+- Nothing shows where a bomb will land: you judge it by eye. A bomb carries on about a tile the way the plane was flying as it falls.
+- The plane flies at 3 tiles a second and turns at most 84° a second, so a swipe turns it in a gentle curve (the owner asked for it slower and turning less, 19 November 2026: it was 4.8 tiles and 169° a second).
 - While flying, the caption on the swipe pad says **Steer the plane**, and a one-line tip over the arena explains it the first time you pick a laptop up in a match.
 
 Online, your steering is sent with your presses, in 64 ways (`IN_AIM` in net.ts: see [ONLINE.md](ONLINE.md)).

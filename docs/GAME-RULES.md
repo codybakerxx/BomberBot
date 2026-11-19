@@ -134,11 +134,11 @@ The chance under each brick is set in `ITEM_CHANCE`. The other columns are what 
 
 - Picked up like any power-up. The robot holds it in its hands. While it does, **B** is the laptop, so it cannot lift bombs, glove or not (a bomb it was already carrying is still thrown first).
 - **B** flies a plane, in the robot's colours, from the robot, the way it faces. The robot **stands still** until the plane lands, and can be blasted where it stands. Signal waves over its helmet say it is flying.
-- The plane never stops. It flies at 4.8 tiles a second, faster than any robot, and turns smoothly towards the way it is steered, at most 169° a second (a full circle takes about 2 seconds), so it sweeps round in a curve rather than turning on the spot. It can be steered any way at all (in 64ths of a turn), not just the four ways a robot walks: with the swipe pad the way the thumb points from where its stroke began (a stroke that curves steers round with it), with a stick the way it leans, with the D-pad or the keys in eight ways. Off one edge of the arena it comes back in on the other.
+- The plane never stops. It flies at 3 tiles a second, a little quicker than a robot with no speed power-ups, and turns smoothly towards the way it is steered, at most 84° a second (a full circle takes about 4 seconds), so it sweeps round in a gentle curve rather than turning on the spot. (It was 4.8 tiles and 169° a second until 19 November 2026, when the owner asked for it slower and turning less, to be easier to control.) It can be steered any way at all (in 64ths of a turn), not just the four ways a robot walks: with the swipe pad the way the thumb points from where its stroke began (a stroke that curves steers round with it), with a stick the way it leans, with the D-pad or the keys in eight ways. Off one edge of the arena it comes back in on the other.
 - **A** drops a bomb, **3** in all: none in the first half second (so the first cannot come down on the robot it took off from), and at least a third of a second between two.
-- A dropped bomb falls for **0.8 s**, carried on the way the plane was flying and slowing as it falls: it lands about a tile and a half on from where it was let go. It is drawn shrinking as it falls. **Nothing shows where it will land** (the owner's ask: hitting someone should not be easy).
+- A dropped bomb falls for **0.8 s**, carried on the way the plane was flying and slowing as it falls: it lands about a tile on from where it was let go. It is drawn shrinking as it falls. **Nothing shows where it will land** (the owner's ask: hitting someone should not be easy).
 - It goes off **the moment it lands**, a blast **one tile each way**, in the pilot's name. On a brick, only the brick burns and breaks. On a solid block it blasts from the top of it. A power-up where it lands is destroyed, and a bomb there is set off, like any blast.
-- **B** again lands the plane at once. Otherwise it lands by itself 8 seconds after take-off, or half a second after its last bomb. Bombs still falling still land. Once it lands the laptop is used up.
+- **B** again lands the plane at once. Otherwise it lands by itself **16 seconds** after take-off (8 until the owner asked for twice as long, 19 November 2026), or half a second after its last bomb. It blinks for its last second and a half. Bombs still falling still land. Once it lands the laptop is used up.
 - Knocked out while flying, the plane is gone (bombs already falling still land). When the round is decided every plane lands. A robot coming back with a new life has no laptop.
 - Teammates: a plane's blast hurts them only with Friendly fire on, like any blast.
 - CPU players fly it too (see `docs/CPU-PLAYERS.md`).
@@ -330,16 +330,16 @@ All of these are named constants near the top of `src/sim.ts`. Changing one chan
 | `SHIELD_GRACE_TICKS` | 30 | After a shield takes a blast, how long blasts do no harm (0.5 s) |
 | `CURSE_TICKS` | 480 | How long a curse lasts (8 s) |
 | `CURSE_SPEED` | 0.85 | Walking speed while cursed, as a share of the starting speed |
-| `PLANE_TICKS` | 480 | Longest flight (8 s) |
-| `PLANE_SPEED` | 0.08 | The plane's speed in tiles per tick (4.8 a second) |
-| `TURN_STEPS`, `PLANE_TURN` | 256, 2 | The plane's heading is kept in 256ths of a turn, and turns at most 2 of them a tick (169° a second) |
+| `PLANE_TICKS` | 960 | Longest flight (16 s; 8 s until 19 November 2026) |
+| `PLANE_SPEED` | 0.05 | The plane's speed in tiles per tick (3 a second; it was 0.08, 4.8 a second) |
+| `TURN_STEPS`, `PLANE_TURN` | 1024, 4 | The plane's heading is kept in 1024ths of a turn, and turns at most 4 of them a tick (84° a second; it was 169°, in 256ths) |
 | `AIM_STEPS` | 64 | The way it is steered comes in 64ths of a turn |
 | `PLANE_STEP` | | How far it moves each tick at each heading: worked out once with sums only (no `Math.sin`), so every engine agrees |
 | `PLANE_BOMBS` | 3 | Bombs a plane drops |
 | `PLANE_FIRST_GAP`, `PLANE_DROP_GAP` | 30, 20 | No bomb in the first half second, and a third of a second between two |
 | `PLANE_AFTER` | 30 | Once its last bomb is away it flies on half a second, then lands |
 | `DROP_TICKS` | 48 | How long a dropped bomb falls (0.8 s) |
-| `DROP_DRAG` | 0.95 | A falling bomb keeps this share of its speed each tick (it lands about 1.5 tiles on) |
+| `DROP_DRAG` | 0.95 | A falling bomb keeps this share of its speed each tick (it lands about 0.9 of a tile on) |
 | `DROP_FIRE` | 1 | A plane's bomb's blast, tiles each way |
 | `ITEM_CHANCE` | see Power-ups | The chance that a brick hides each power-up |
 | `ROUND_TICKS` | 5400 | What the timer counts down from (1 minute 30). The blocks start when it reaches 0 |

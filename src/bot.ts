@@ -143,7 +143,7 @@ export interface LevelSpec {
   slop: number;
   /**
    * flying: how far off its feel for where a bomb lands can be, as a share of how far bombs carry on as they
-   * fall (about a tile and a half), either way, picked afresh for each flight: it judges by eye, as a person
+   * fall (about a tile), either way, picked afresh for each flight: it judges by eye, as a person
    * has to (there is nothing on screen saying where a bomb will land)
    */
   carry: number;
