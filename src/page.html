@@ -803,8 +803,24 @@
   .pause-card .round-hero h2 { margin: 0; text-align: left; font-size: 22px !important; line-height: 1.05; overflow-wrap: anywhere; }
   .hero-sub { margin-top: 3px; display: flex; flex-wrap: wrap; gap: 4px 10px; font: 600 12px/1.25 var(--font-body); color: var(--ink-dim); }
   .hero-sub span { white-space: nowrap; }
-  .hero-sub .ping::before { content: ''; display: inline-block; width: 7px; height: 7px; margin-right: 5px; border-radius: 50%; background: currentColor; vertical-align: 1px; }
-  .hero-sub .ping.good { color: #5cff8e; } .hero-sub .ping.fair { color: var(--accent); } .hero-sub .ping.poor { color: #ff7a7a; }
+  /* online: the ping beside the room's chip, as signal bars (lit by how good it is) and milliseconds */
+  .ping-chip { display: inline-flex; align-items: center; gap: 5px; padding: 4px 8px; font: 700 11px/1 var(--font-display); letter-spacing: 0.06em; font-variant-numeric: tabular-nums; white-space: nowrap; color: var(--ink); border: 1px solid var(--line); border-radius: 999px; }
+  .ping-chip[hidden] { display: none; }
+  .ping-chip svg { width: 13px; height: 11px; flex: none; }
+  .ping-chip rect { fill: rgba(255, 255, 255, 0.18); }
+  .ping-chip.good rect { fill: #5cff8e; } .ping-chip.fair rect:nth-child(-n + 2) { fill: var(--accent); } .ping-chip.poor rect:first-child { fill: #ff7a7a; }
+  /* on a narrow phone the room's chip leaves no room beside it: the ping goes under the round's name instead */
+  .hero-sub .ping-chip { display: none; padding: 2px 7px; }
+  @media (max-width: 374px) {
+    .pause-head .ping-chip { display: none; }
+    .hero-sub .ping-chip:not([hidden]) { display: inline-flex; }
+    /* and the round box a little smaller, so "Round 1" stays on one line beside the clock */
+    .pause-card .round-hero h2 { font-size: 20px !important; }
+    .hero-clock b { font-size: 24px; }
+    .hero-clock small { letter-spacing: 0.06em; }
+  }
+  .round-hero:not(.solo) h2 { white-space: nowrap; } /* (the match's winner, alone in the box, may wrap) */
+  .ping-chip.good { border-color: rgba(92, 255, 142, 0.35); } .ping-chip.fair { border-color: rgba(255, 197, 106, 0.4); } .ping-chip.poor { border-color: rgba(255, 122, 122, 0.45); }
   .hero-clock { display: flex; flex-direction: column; align-items: flex-end; padding-left: 12px; border-left: 1px solid var(--line); }
   .hero-clock b { font: 700 28px/1 var(--font-display); font-variant-numeric: tabular-nums; letter-spacing: 0.02em; color: var(--ink); }
   .hero-clock small { margin-top: 3px; font: 700 10px/1.1 var(--font-display); letter-spacing: 0.14em; text-transform: uppercase; color: var(--ink-dim); text-align: right; }
@@ -1211,6 +1227,8 @@
     <div class="pause-head">
       <span class="mode-chip" id="pauseMode">Local match</span>
       <span class="state-chip" id="pauseState">Paused</span>
+      <!-- online: the ping, as signal bars and milliseconds, beside the room's chip (the owner's ask, 18 November 2026) -->
+      <span class="ping-chip" id="pauseNet" role="status" hidden><svg viewBox="0 0 16 14" aria-hidden="true"><rect x="1" y="9" width="3" height="4" rx="1"/><rect x="6.5" y="5.5" width="3" height="7.5" rx="1"/><rect x="12" y="1.5" width="3" height="11.5" rx="1"/></svg><span id="pausePing"></span></span>
       <!-- Settings is a gear at the top right of the menu (the owner's design, November 2026) -->
       <!-- the key: what each power-up and mark in the arena means (the owner's ask, November 2026) -->
       <!-- mute: all sound off or on in one tap (the owner's ask); the same switch as Settings › Sound -->

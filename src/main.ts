@@ -1355,7 +1355,8 @@ function fillPause(): void {
   const state = $('pauseState');
   // only while the round goes on: "Round over" and "Match over" are said by the top of the menu (fillHero), and
   // "You are out" by the standings beside your name (the owner's call)
-  state.textContent = roundLive ? (net ? 'Playing' : 'Paused') : '';
+  // (online the round never pauses, so there the ping takes this chip's place: fillHero)
+  state.textContent = roundLive && !net ? 'Paused' : '';
   state.hidden = !state.textContent;
   // online: the room's code, the round goes on behind the menu, and only the host restarts or ends the match
   modeChip($('pauseMode'), net?.code ?? null);
@@ -1436,8 +1437,24 @@ function fillHero(): void {
   const after = afterlifeOf(setup);
   if (after === 'angel') goal.push(bit(setup.angelsBack ? 'Angels come back' : 'Angels'));
   else if (after === 'zombie') goal.push(bit('Zombies'));
-  if (net && net.rtt) goal.push(bit(`Ping ${net.rtt} ms`, `ping ${net.rtt < 80 ? 'good' : net.rtt < 160 ? 'fair' : 'poor'}`));
   $('pauseGoal').replaceChildren(...goal);
+  // online: the ping beside the room's chip (the round trip to the server, so a slow connection can be told
+  // from a fault): signal bars lit by how good it is, and the milliseconds; until the first one, a dash
+  // (on a narrow phone a copy under the round's name is shown in its place: page.html)
+  const ping = $('pauseNet');
+  ping.hidden = !net;
+  if (net) {
+    const rtt = net.rtt;
+    ping.className = `ping-chip${rtt ? (rtt < 80 ? ' good' : rtt < 160 ? ' fair' : ' poor') : ''}`;
+    $('pausePing').textContent = rtt ? `${rtt} ms` : '– ms';
+    ping.setAttribute('aria-label', rtt ? `Ping ${rtt} milliseconds, ${rtt < 80 ? 'good' : rtt < 160 ? 'fair' : 'slow'}` : 'Ping not measured yet');
+    const copy = ping.cloneNode(true) as HTMLElement;
+    copy.removeAttribute('id');
+    copy.removeAttribute('role');
+    copy.querySelector('#pausePing')?.removeAttribute('id');
+    copy.setAttribute('aria-hidden', 'true');
+    $('pauseGoal').append(copy);
+  }
   // the clock: what it is counting down to, in the colours of the one over the arena
   const clock = $('pauseClock');
   const bar = $('pauseBar');
