@@ -33,7 +33,7 @@
               appInstall, notifyOpts, notifyNote: the home screen and notifications, app.ts) and setGraphics
               (gfxOpts); then setPrev, setDone, setNext
     pause     the menu during a match: pauseState, pauseTitle, pauseInfo, standings, pauseResume, pauseSettings,
-              pauseRestart (the whole match again, from 0), pauseLobby
+              pauseRestart (the whole match again, from 0), pauseMatch (to the lobby's Match page), pauseLobby
     confirm   "are you sure?" before anything that cannot be undone (ui.ts)
 -->
 <!-- class "booting": taken off by main.ts once the canvases have been sized for the screen (see the styles for html.booting) -->
@@ -154,8 +154,19 @@
   #resultCard h2 { margin: 0; }
   #resultCard .sub { margin: 0; }
   #resultCard .sub[hidden] { display: none; }
-  body:not(.portrait) #resultCard .row { flex-direction: column; align-items: stretch; }
-  body:not(.portrait) #resultCard .go { flex: 0 0 auto; padding: 10px 12px; }
+  /* its buttons one above the other, full width, upright and sideways alike (the owner's ask, 19 November 2026:
+     they were side by side upright) */
+  #resultCard .row { flex-direction: column; flex-wrap: nowrap; align-items: stretch; gap: 8px; }
+  #resultCard .go { flex: 0 0 auto; padding: 10px 12px; }
+  #resultCard .go[hidden] { display: none; }
+  /* sideways the panel is as narrow as the side column: smaller type, so Match settings fits (on two lines if need be) */
+  body:not(.portrait) #resultCard .go { padding: 10px 6px; font-size: 15px; line-height: 1.15; letter-spacing: 0.04em; }
+  /* where it would not fit on the screen (fitResult in main.ts): smaller type, slimmer buttons */
+  #resultCard.tight { gap: 7px; padding: 10px 12px 12px; }
+  #resultCard.tight h2 { font-size: 20px; }
+  #resultCard.tight .sub { font-size: 13px; line-height: 1.3; }
+  #resultCard.tight .row { gap: 6px; }
+  #resultCard.tight .go { padding: 8px 6px; font-size: 14px; }
   #timer.hurry { color: var(--accent); border-color: rgba(255, 197, 106, 0.5); }
   #timer.done { color: #ff5a6e; border-color: rgba(255, 90, 110, 0.6); }
   #timer.last { color: #ff5a6e; border-color: rgba(255, 90, 110, 0.6); animation: timer-pulse 1s steps(2, jump-none) infinite; }
@@ -920,6 +931,11 @@
   .standings.many canvas { width: 24px; height: 24px; }
   .standings.many small, .standings.many .st { display: none; }
   .pause-card .go { padding-top: 11px; padding-bottom: 11px; }
+  /* the two ways out, Leave to match settings and Leave to the lobby, in slightly smaller type so each stays on one
+     line, and on a short screen every button slimmer, so the whole menu still fits with Safari's bars showing
+     (the owner's ask: the last button included) */
+  .pause-card .go.danger { padding-left: 10px; padding-right: 10px; font-size: 15px; letter-spacing: 0.06em; }
+  @media (max-height: 700px) { .pause-card .go { padding-top: 9px; padding-bottom: 9px; } .pause-card .go.big { padding-top: 12px; padding-bottom: 12px; } }
   .pause-card .divider { margin: 0; }
   .pause-card h2 { text-align: center; font-size: 26px; }
   .pause-head { position: relative; display: flex; justify-content: center; align-items: center; gap: 8px; flex-wrap: wrap; min-height: 40px; padding: 0 46px; }
@@ -1297,6 +1313,8 @@
     <button class="go big" id="pauseResume" type="button" data-pad="≡" data-key="Esc">Resume</button>
     <button class="go quiet" id="pauseRestart" type="button">Restart</button>
     <div class="divider"><span id="pauseHostLine">Match · you are the host</span></div>
+    <!-- Leave to match settings: the match ends and the lobby opens on its Match page (the owner's ask, 19 November 2026) -->
+    <button class="go danger" id="pauseMatch" type="button">Leave to match settings</button>
     <button class="go danger" id="pauseLobby" type="button">Leave to the lobby</button>
     <button class="go danger" id="pauseLeave" type="button" hidden>Leave the room</button>
   </section>
@@ -1343,8 +1361,10 @@
   <div class="card" id="resultCard">
     <h2 id="resultTitle"></h2>
     <p id="resultText" class="sub"></p>
+    <!-- one above the other (the owner's ask, 19 November 2026), with Match settings, straight to the lobby's Match page -->
     <div class="row">
       <button id="again" class="go" type="button">Next round</button>
+      <button id="toMatch" class="go quiet" type="button">Match settings</button>
       <button id="change" class="go quiet" type="button">Menu</button>
     </div>
   </div>

@@ -16,7 +16,7 @@ import { COLORS, NOBODY, botName, colorById, drawAngels, drawGround, drawHead, d
 import { Input, PadReader, pilotAim, typing } from './input';
 import { drawTitle, closeTitle, drawIcon } from './title';
 import { initAudio, preview, setSound, sfx, wakeAudio } from './audio';
-import { createLobby, LobbyHost } from './lobby';
+import { createLobby, LobbyHost, type LobbyPage } from './lobby';
 import { readDance, type DanceId } from './dances';
 import { createPadNav } from './padnav';
 import { PAD } from './bindings';
@@ -468,8 +468,37 @@ function layout(): void {
   const cardWidth = stacked ? W - 16 : Math.min(side - 12, 320);
   resultCard.style.width = `${cardWidth}px`;
   resultCard.style.left = `${stacked ? 8 : Math.round((side - cardWidth) / 2)}px`;
-  resultCard.style.top = `${stacked ? Math.round(topBar + infoRow + ch + 14) : box.top + box.height + 8}px`;
+  resultPlace = { top: stacked ? Math.round(topBar + infoRow + ch + 14) : box.top + box.height + 8, stacked };
+  fitResult();
   redrawStatic();
+}
+
+/** Where layout() put the result panel: its top, and whether it lies over the controls (upright). */
+let resultPlace = { top: 0, stacked: true };
+/**
+ * Keep the whole result panel, its last button included, on the screen (its three buttons one above the other,
+ * the owner's ask, 19 November 2026, made it taller). Where it does not fit it gets smaller type and slimmer
+ * buttons (`tight`); sideways it may then rise over the scoreboard as far as it needs (never over the arena); and
+ * if it still does not fit, upright on the smallest phones, it scrolls inside itself.
+ */
+function fitResult(): void {
+  if (result.hidden) return;
+  const H = window.innerHeight;
+  const { top, stacked } = resultPlace;
+  resultCard.classList.remove('tight');
+  resultCard.style.maxHeight = '';
+  resultCard.style.overflowY = '';
+  resultCard.style.top = `${top}px`;
+  const room = (): number => H - 8 - top;
+  if (resultCard.offsetHeight <= room()) return;
+  resultCard.classList.add('tight');
+  const h = resultCard.offsetHeight;
+  const at = stacked ? top : Math.max(8, Math.min(top, H - 8 - h));
+  resultCard.style.top = `${at}px`;
+  if (h > H - 8 - at) {
+    resultCard.style.maxHeight = `${H - 8 - at}px`;
+    resultCard.style.overflowY = 'auto';
+  }
 }
 
 /**
@@ -753,11 +782,13 @@ function finish(title: string, text: string): void {
   $('again').textContent = done ? 'Rematch' : 'Next round';
   $('change').textContent = 'Lobby'; // (on this screen: Next round and Lobby, the owner's words; it was Menu)
   $('again').hidden = false;
+  $('toMatch').hidden = false;
   if (net) {
     // online the round is played out, and only the host moves everyone on
     const decided = !!world.over;
     $('again').hidden = !net.isHost || !decided;
     $('change').textContent = done && net.isHost ? 'Lobby' : 'Menu';
+    $('toMatch').hidden = !(done && net.isHost); // (mid-match, the host has it in the menu)
     if (decided && !net.isHost) {
       $('resultText').textContent = `${text ? text + ' ' : ''}${hostName()} starts the ${done ? 'rematch' : 'next round'}.`;
       $('resultText').hidden = false;
@@ -771,6 +802,7 @@ function finish(title: string, text: string): void {
     result.hidden = false;
     ($('again').hidden ? $('change') : $('again')).focus({ preventScroll: true });
   }
+  fitResult(); // (its text and buttons differ each time)
 }
 
 /** "3–1–0" in scoreboard order, for the end of a match. */
@@ -1368,7 +1400,7 @@ const lobby = createLobby(lobbyHost);
  * Open the lobby. It is only reached between matches: leaving a match for it ends the match. `fresh` when
  * arriving from the title or a match (Ready has to be pressed again); not when coming back from Settings.
  */
-function showLobby(fresh = false): void {
+function showLobby(fresh = false, page?: LobbyPage): void {
   if (siteZoomed() && !zoomTold) {
     zoomTold = true; // (once a visit)
     setTimeout(() => sayNet(ZOOM_TIP, 9000), 400);
@@ -1378,7 +1410,19 @@ function showLobby(fresh = false): void {
   mode = 'lobby';
   roundLive = false;
   document.body.classList.add('menu-open');
-  lobby.show(undefined, fresh);
+  lobby.show(page, fresh);
+}
+/**
+ * Match settings (the result panel) and Leave to match settings (the menu): the match ends and the lobby opens
+ * on its Match page, the map and the rules (the owner's ask, 19 November 2026). Online it is the host's, and the
+ * room goes back to the lobby as with End match; the host's page then opens on Match (`toMatchPage`).
+ */
+let toMatchPage = false;
+function leaveToMatch(): void {
+  if (net) {
+    toMatchPage = true;
+    net.send({ t: 'lobby' });
+  } else showLobby(true, 'match');
 }
 
 // ------------------------------------------------ rounds and the match
@@ -1422,6 +1466,7 @@ function watch(): void {
   hideScreens();
   mode = 'over';
   result.hidden = false;
+  fitResult();
 }
 
 // ------------------------------------------------ the menu during a match
@@ -1466,6 +1511,8 @@ function fillPause(): void {
   $('pauseRestart').hidden = !hosting;
   $('pauseLobby').hidden = !hosting;
   $('pauseLobby').textContent = net ? 'End match' : 'Leave to the lobby';
+  $('pauseMatch').hidden = !hosting;
+  $('pauseMatch').textContent = net ? 'End match · match settings' : 'Leave to match settings';
   $('pauseLeave').hidden = !net;
   const title = $('pauseTitle');
   title.textContent = done ? `${sideName(matchWinner)} won the match` : world.over ? `Round ${roundNo} · over` : `Round ${roundNo}`;
@@ -1683,6 +1730,15 @@ $('pauseLobby').addEventListener('click', () =>
         if (yes) showLobby(true);
       }),
 );
+$('pauseMatch').addEventListener('click', () =>
+  net
+    ? confirmFirst('Everyone back to the lobby?', 'This match ends for everyone in the room, and its score is not kept. You go to the Match page, to change the map and the rules.', 'End match', (yes) => {
+        if (yes) leaveToMatch();
+      })
+    : confirmFirst('Leave to match settings?', 'This match ends and its score is not kept. On the Match page you can change the map and the rules.', 'Leave match', (yes) => {
+        if (yes) leaveToMatch();
+      }),
+);
 $('pauseLeave').addEventListener('click', () =>
   confirmFirst('Leave the room?', 'You leave this online match. Your robot stands still until the round ends. To come back, join again with the code.', 'Leave', (yes) => {
     if (yes) leaveOnline();
@@ -1707,8 +1763,8 @@ function settleUnfinished(): boolean {
   newMatch();
   return false;
 }
-// the result panel: Next round and Lobby while the match goes on (Lobby asks first: the match would end);
-// Rematch and Lobby once it is won
+// the result panel: Next round, Match settings and Lobby while the match goes on (the last two ask first: the
+// match would end); Rematch, Match settings and Lobby once it is won
 $('again').addEventListener('click', () => {
   if (net) net.send({ t: 'next' }); // (the host's: the next round, or a rematch)
   else if (matchWinner >= 0) newMatch();
@@ -1723,6 +1779,13 @@ $('change').addEventListener('click', () => {
     confirmFirst('Leave to the lobby?', 'This match ends and its score is not kept. In the lobby you can change the players and the rules.', 'Leave match', (yes) => {
       if (yes) showLobby(true);
     }, $('resultCard')); // (where the result panel is: the owner's ask)
+});
+$('toMatch').addEventListener('click', () => {
+  if (net || matchWinner >= 0) leaveToMatch(); // (online only the host has it, once the match is won)
+  else
+    confirmFirst('Leave to match settings?', 'This match ends and its score is not kept. On the Match page you can change the map and the rules.', 'Leave match', (yes) => {
+      if (yes) leaveToMatch();
+    }, $('resultCard'));
 });
 
 
@@ -1918,9 +1981,11 @@ function onRoom(m: Extract<ServerMsg, { t: 'room' }>): void {
     return;
   }
   if (netRound && !m.playing) {
-    // the host ended the match: everyone back to the lobby, to press Ready again
+    // the host ended the match: everyone back to the lobby, to press Ready again (the host on the Match page if
+    // it asked for match settings)
     netRound = false;
-    showLobby(true);
+    showLobby(true, toMatchPage ? 'match' : undefined);
+    toMatchPage = false;
     lobby.setReady(mine.ready, true);
     return;
   }
