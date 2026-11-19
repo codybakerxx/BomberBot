@@ -21,7 +21,7 @@
  * main.ts owns the match itself; it hands this file a `LobbyHost` to read and change what it needs.
  */
 import { BOT_LEVELS, LEVELS } from './bot';
-import { COLORS, botName, colorById, drawRobot, drawStatic, drawDynamic, setMap, ROBOT } from './render';
+import { COLORS, botName, colorById, drawItemTile, drawRobot, drawStatic, drawDynamic, setMap, ROBOT } from './render';
 import { type World, createWorld, MAX_BOMBS, MAX_FIRE, MAX_LIVES, MAX_SPEED_ITEMS, START_FIRE } from './sim';
 import {
   CpuSlot,
@@ -1586,39 +1586,59 @@ export function createLobby(host: LobbyHost): {
           changed();
         },
         offText: 'The usual mix. Shields, curses and laptops are very rare.',
-        // each kind a switch (the owner's ask, 19 November 2026), and how often under it while it is on
+        // One block per power-up (the owner's asks, 19 November 2026): its picture, name and what it does, its
+        // switch (none for the extra bomb and the flame: always on), and right under it, set in under the name,
+        // How often while it is on. A line only between one power-up and the next, so each slider and switch
+        // plainly belongs to the power-up above it.
         under: ITEM_NAMES.map(([kind, name, what]) => {
-          const often = (label: string, hint?: string): Opt =>
-            slider({
-              label,
-              hint,
-              min: 1,
-              max: ITEM_AMOUNTS.length - 1,
-              normal: () => usual().items[kind],
-              get: () => s().items[kind],
-              set: (v) => {
-                s().items[kind] = v;
-                changed();
-              },
-              text: (v) => ITEM_AMOUNTS[v].name,
-            });
-          // the extra bomb and the flame are always on: no switch, only how often (the owner's ask, 19 November 2026)
-          if (ALWAYS_ON.includes(kind)) return often(name, what);
-          return toggle({
+          const icon = document.createElement('canvas');
+          let drawnAt = 0;
+          const paint = (): void => {
+            const dpr = host.density();
+            if (dpr === drawnAt) return;
+            drawnAt = dpr;
+            icon.width = icon.height = Math.round(30 * dpr); // (drawn at the size it shows, so it stays sharp)
+            drawItemTile(icon.getContext('2d')!, kind, 0, 0, icon.width);
+          };
+          const always = ALWAYS_ON.includes(kind);
+          const block = toggle({
             label: name,
             hint: what,
-            get: () => s().itemOn[kind],
+            icon,
+            cls: 'pu',
+            always: always ? 'Always on' : undefined,
+            get: () => always || s().itemOn[kind],
             set: (v) => {
               s().itemOn[kind] = v;
               changed();
             },
             offText: 'Never turns up.',
-            under: [often('How often')],
+            under: [
+              slider({
+                label: 'How often',
+                min: 1,
+                max: ITEM_AMOUNTS.length - 1,
+                normal: () => usual().items[kind],
+                get: () => s().items[kind],
+                set: (v) => {
+                  s().items[kind] = v;
+                  changed();
+                },
+                text: (v) => ITEM_AMOUNTS[v].name,
+              }),
+            ],
           });
+          return {
+            el: block.el,
+            refresh(): void {
+              paint();
+              block.refresh();
+            },
+          };
         }),
       }),
     ], groupReset('arena')),
-    group('Starting kit', BOMB_ICON, [
+    group('Start items', BOMB_ICON, [ // (the owner's name, 19 November 2026: it was Starting kit)
       toggle({
         label: 'Custom start',
         hint: 'What everyone starts each round with',
@@ -1638,7 +1658,7 @@ export function createLobby(host: LobbyHost): {
   ];
   const refreshRules = mount($('rules'), rules);
   $('rulesReset').addEventListener('click', () =>
-    confirmFirst('Reset all settings?', `Every match setting under the map (round time, winning, lives, arena and starting kit) goes back to the defaults for the ${arenaOf(s()).name} arena. The map, its size and your players stay as they are.`, 'Reset all', (yes) => {
+    confirmFirst('Reset all settings?', `Every match setting under the map (round time, winning, lives, arena and start items) goes back to the defaults for the ${arenaOf(s()).name} arena. The map, its size and your players stay as they are.`, 'Reset all', (yes) => {
       if (!yes) return;
       host.setup = defaultRules(s(), host.myColor);
       changed();

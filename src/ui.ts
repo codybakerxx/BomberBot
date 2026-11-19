@@ -203,8 +203,19 @@ export function toggle(o: {
   offText?: string | (() => string);
   /** greyed out and cannot be switched while this says so (it depends on another switch) */
   locked?: () => boolean;
+  /** a small picture before the name (a power-up under Custom power-ups) */
+  icon?: HTMLElement;
+  /**
+   * No switch: it is always on, and this short tag stands in the switch's place (the extra bomb and the flame
+   * under Custom power-ups, the owner's ask, 19 November 2026), so the row lines up with those that can be
+   * switched. `get` should say true.
+   */
+  always?: string;
+  /** a class for the group, for styling a list of them */
+  cls?: string;
 }): Opt {
   const wrap = el('div', 'opt-group');
+  if (o.cls) wrap.classList.add(o.cls);
   const row = el('div', 'opt opt-toggle');
   const { box, hintEl } = nameBlock(o.label, o.hint);
   const sw = el('button', 'switch-btn');
@@ -212,13 +223,21 @@ export function toggle(o: {
   sw.setAttribute('role', 'switch');
   sw.setAttribute('aria-label', o.label);
   sw.append(el('span', 'knob'));
-  row.append(box, sw);
+  if (o.icon) {
+    o.icon.classList.add('opt-icon');
+    o.icon.setAttribute('aria-hidden', 'true');
+    row.append(o.icon);
+  }
+  if (o.always) {
+    row.classList.add('always');
+    row.append(box, el('span', 'opt-always', o.always));
+  } else row.append(box, sw);
   const under = el('div', 'opt-under');
   for (const u of o.under ?? []) under.append(u.el);
   const offLine = el('p', 'opt-off');
   wrap.append(row, under, offLine);
   const flip = (): void => {
-    if (!o.locked?.()) o.set(!o.get());
+    if (!o.locked?.() && !o.always) o.set(!o.get());
   };
   sw.addEventListener('click', (e) => {
     e.stopPropagation();
@@ -226,6 +245,7 @@ export function toggle(o: {
   });
   // the whole row is a target, not only the small switch
   box.addEventListener('click', flip);
+  o.icon?.addEventListener('click', flip);
   return {
     el: wrap,
     refresh(): void {

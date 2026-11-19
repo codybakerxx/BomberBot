@@ -816,6 +816,22 @@
   .opt-under .opt-group { border: 0; border-radius: 0; background: transparent; }
   .opt-off { margin: 0; padding: 0 14px 12px; font: 500 12px/1.35 var(--font-body); color: var(--ink-dim); }
   .opt-off[hidden] { display: none; }
+  /* Custom power-ups (the owner's ask, 19 November 2026: clear which switch and slider belong to which power-up):
+     one block each, its picture, name and what it does with its switch (or an Always on tag) beside it, and How
+     often right under it, set in under the name; a line only between one power-up and the next */
+  .opt-icon { flex: none; width: 30px; height: 30px; cursor: pointer; }
+  .opt-under > .opt-group.pu + .opt-group.pu { border-top: 1px solid #1d2338; }
+  .pu > .opt-toggle { gap: 12px; padding: 12px 6px 6px 14px; }
+  .pu > .opt-toggle.always .opt-name { cursor: default; }
+  .pu > .opt-toggle:not(.on) .opt-icon { opacity: 0.35; filter: grayscale(1); }
+  .opt-always { flex: none; margin-right: 6px; padding: 6px 9px; border: 1px solid var(--line); border-radius: 999px; font: 700 10px/1 var(--font-display); letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-dim); white-space: nowrap; }
+  .opt-under .pu > .opt-under { border-top: 0; padding-left: 0; }
+  .pu > .opt-under > .opt-slider { gap: 2px; padding: 0 12px 12px 56px; }
+  .pu .opt-slider .opt-label { font-size: 11px; letter-spacing: 0.12em; color: var(--ink-dim); }
+  .pu .opt-slider .opt-value { font-size: 13px; }
+  .pu .opt-slider .opt-head { align-items: center; }
+  .pu > .opt-off { padding: 0 14px 12px 56px; }
+  @media (max-width: 359px) { .pu > .opt-under > .opt-slider, .pu > .opt-off { padding-left: 14px; } }
   .switch-btn { flex: 0 0 auto; width: 56px; height: 32px; margin-right: 6px; padding: 3px; border: 0; border-radius: 16px; cursor: pointer; background: var(--line); display: flex; justify-content: flex-start; transition: background 120ms; }
   .switch-btn .knob { width: 26px; height: 26px; border-radius: 50%; background: var(--ink-dim); transition: transform 120ms; }
   .switch-btn[aria-checked="true"] { background: var(--accent); }
