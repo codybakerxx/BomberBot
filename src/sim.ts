@@ -428,9 +428,11 @@ export const FALL_TICKS = 38; // a falling block is in the air, over its shadow,
 export const START_FIRE = 1; // a blast reaches one tile each way until a flame power-up is picked up (it was 2)
 export const MAX_FIRE = 8;
 /**
- * The falling blocks leave an area this many tiles across and this many down open in the middle of the arena,
- * for whoever is left to fight it out in: 7 by 5 (the owner's ask, 18 November 2026; it was a 5 by 5 square,
- * which the last four blocks used to make out of the 7 by 5 that the rings leave on the Standard arena).
+ * The falling blocks leave a rectangle open in the middle of the arena, for whoever is left to fight it out in:
+ * at least this many tiles across and down (7 by 5: the owner's ask, 18 November 2026; it was a 5 by 5 square).
+ * Its edges always run along an open row or column, never through the pillars, so what is left is a clean
+ * rectangle with the pillars inside it (the owner's ask, 20 November 2026): 7 by 5 where that already holds
+ * (Mini, Big), 9 by 7 where it does not (Standard, and Big grown for seven or eight players). See `keptSize`.
  */
 export const KEEP_OPEN_W = 7;
 export const KEEP_OPEN_H = 5;
@@ -728,11 +730,24 @@ function spiral(w: number, h: number): number[] {
   return out;
 }
 
-/** Is this tile in the area in the middle of the arena that the falling blocks leave open (7 by 5)? */
+/**
+ * How many tiles across and down the falling blocks leave open in the middle of an arena `w` by `h` (outer wall
+ * included): the smallest at least KEEP_OPEN_W by KEEP_OPEN_H whose edges are open rows and columns (odd ones;
+ * the pillars stand on even ones), so the end is always a clean rectangle. Arenas are always two wider than high,
+ * so it is 7 by 5 or 9 by 7.
+ */
+export function keptSize(w: number, h: number): [number, number] {
+  const cx = (w - 1) / 2;
+  const cy = (h - 1) / 2;
+  return [cx % 2 === 0 ? KEEP_OPEN_W : KEEP_OPEN_W + 2, cy % 2 === 1 ? KEEP_OPEN_H : KEEP_OPEN_H + 2];
+}
+
+/** Is this tile in the rectangle in the middle of the arena that the falling blocks leave open (`keptSize`)? */
 export function keptOpen(w: number, h: number, i: number): boolean {
   const x = i % w;
   const y = Math.floor(i / w);
-  return Math.abs(x - (w - 1) / 2) <= (KEEP_OPEN_W - 1) / 2 && Math.abs(y - (h - 1) / 2) <= (KEEP_OPEN_H - 1) / 2;
+  const [kw, kh] = keptSize(w, h);
+  return Math.abs(x - (w - 1) / 2) <= (kw - 1) / 2 && Math.abs(y - (h - 1) / 2) <= (kh - 1) / 2;
 }
 
 /**

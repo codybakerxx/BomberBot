@@ -238,9 +238,10 @@ for (const level of ['normal', 'hard'] as BotLevel[]) {
   const w = createWorld({ seed: 7, players: [{ colorId: 'gold' }, { colorId: 'blue' }], softDensity: 0 });
   const at = (x: number, y: number): number => y * w.w + x;
   assert.equal(blockLandsIn(w, at(1, 1)), blockLandTick(w, 0), 'the first block is due on the top-left corner');
-  assert.equal(blockLandsIn(w, at(3, 4)), ROUND_TICKS + SHRINK_TICKS, 'the last just outside the 7 by 5 that stays open, 50 seconds after the timer reaches 0');
-  assert.equal(blockLandsIn(w, at(7, 6)), Infinity, 'none in the 7 by 5');
-  assert.equal(blockLandsIn(w, at(4, 5)), Infinity, 'its side columns included (they used to close it to 5 by 5)');
+  assert.equal(blockLandsIn(w, at(2, 3)), ROUND_TICKS + SHRINK_TICKS, 'the last just outside the 9 by 7 that stays open on Standard, 50 seconds after the timer reaches 0');
+  assert.equal(blockLandsIn(w, at(7, 6)), Infinity, 'none in the 9 by 7');
+  assert.equal(blockLandsIn(w, at(3, 3)), Infinity, 'its corners included (the third ring used to close it to a 7 by 5)');
+  assert.equal(blockLandsIn(w, at(4, 5)), Infinity);
   assert.equal(blockLandsIn(w, at(5, 4)), Infinity);
   assert.equal(blockLandsIn(w, at(2, 2)), Infinity, 'none on a pillar');
   // at the start nothing is in sight; just before the timer reaches 0 the first tiles are, for a level that looks ahead
@@ -268,7 +269,7 @@ for (const level of BOT_LEVELS) {
     // (Beginner only steps aside from the block that is falling, and looks under a second ahead when it
     // picks where to stand clear of its own bomb, so it can back into a pocket the ring then closes: that is
     // part of being easy. With a 2-minute timer that happened in this open arena; with the 7 by 5 kept open
-    // (18 November 2026) it happens among the bricks: it runs from its own bomb onto the third ring as it
+    // (18 November 2026) it happened among the bricks: it runs from its own bomb onto the third ring as it
     // closes. So Beginner may be caught by a block here, but never by its own blast. How often: the `alone`
     // run of experiments/cpu-matches.ts.)
     if (level === 'beginner' && !p.alive) {

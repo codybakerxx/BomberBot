@@ -181,7 +181,7 @@ How the blocks fall:
 
 - **One at a time**, about half a second apart. The first one starts to fall the moment the timer reaches 0:00.
 - **Where:** round the edge of the arena, starting at the top-left corner and going clockwise: along the top, down the right side, back along the bottom, up the left side. Then the same again one ring further in, and once more. Pillars are skipped: they are solid already.
-- **An area in the middle is left open.** It is 7 tiles across by 5 down (columns 4 to 10, rows 4 to 8 on the Standard arena). No block ever falls in it, and whatever is in it (bricks, power-ups) is untouched. It was a 5 by 5 square until the owner had it widened (18 November 2026): the last four blocks used to close the two columns either side of it.
+- **An area in the middle is left open.** It is always a clean rectangle: its edges run along open rows and columns, never through the pillars, which stand inside it (`keptSize`; the owner's ask, 20 November 2026). That makes it 9 tiles across by 7 down on Standard (columns 3 to 11, rows 3 to 9: 51 tiles to stand on), 7 by 5 on Mini and Big (29 tiles), and on an arena grown for seven or eight players 7 by 5 on Mini and Standard, 9 by 7 on Big. On Standard it was 7 by 5 from 18 to 20 November 2026, with pillars on its edges, so it did not end as a clean rectangle. No block ever falls in it, and whatever is in it (bricks, power-ups) is untouched. It was a 5 by 5 square until the owner had it widened (18 November 2026): the last four blocks used to close the two columns either side of it.
 - **Warning:** each block is in the air for a little under two thirds of a second (0.63 s) before it lands. Its tile is marked with a red outline and a shadow that darkens as it comes down.
 - **Landing:** the tile becomes a solid block for the rest of the round. A brick there, and anything under it, is gone. So is a power-up, a blast, or a bomb (it does not go off, and its owner gets it back).
 - **A robot under a landing block is knocked out.** A shield does not help: it stops a blast, not a block.
@@ -316,7 +316,7 @@ All of these are named constants near the top of `src/sim.ts`. Changing one chan
 | `MAX_BOMBS` | 8 | Most bombs out at once |
 | `START_FIRE` | 1 | How long a blast is, in tiles each way, before any flame power-up |
 | `MAX_FIRE` | 8 | Longest blast, in tiles |
-| `KEEP_OPEN_W`, `KEEP_OPEN_H` | 7, 5 | The falling blocks leave an area this many tiles across and down open in the middle (it was a 5 by 5 square, `KEEP_OPEN`) |
+| `KEEP_OPEN_W`, `KEEP_OPEN_H` | 7, 5 | The least the falling blocks leave open in the middle; `keptSize` makes it 9 by 7 where a 7 by 5 would have pillars on its edges (it was a 5 by 5 square, `KEEP_OPEN`) |
 | `FUSE_TICKS` | 153 | Fuse of a dropped bomb (2.55 s; it was 150, 2.5 s) |
 | `FLAME_TICKS` | 27 | How long a blast and a burning brick last (0.45 s) |
 | `CHAIN_TICKS` | 5 | Delay before a bomb caught in a blast goes off |

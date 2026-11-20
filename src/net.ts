@@ -22,7 +22,7 @@ import type { BotLevel } from './bot';
  * The version of these messages. A page says it in `hello`; the server turns away a page with another (one
  * left open from before an update), telling it to reload. Raise it whenever a message changes its meaning.
  */
-export const PROTOCOL = 6; // 3: the laptop's plane (steering in the inputs, planes and falling bombs in the world); 4: the plane slower, turning less, flying longer; 5: Power-ups (itemShare in the setup), and a custom mix is only which kinds; 6: Brick density (brickShare) and a switch for each kind (itemOn)
+export const PROTOCOL = 7; // 3: the laptop's plane (steering in the inputs, planes and falling bombs in the world); 4: the plane slower, turning less, flying longer; 5: Power-ups (itemShare in the setup), and a custom mix is only which kinds; 6: Brick density (brickShare) and a switch for each kind (itemOn); 7: the area the falling blocks leave is a clean rectangle on every size (9 by 7 on Standard)
 
 /** Room codes: four letters, without the ones easily mixed up (I, O) or that spell words easily (vowels). */
 export const CODE_LETTERS = 'BCDFGHJKLMNPQRSTVWXZ';

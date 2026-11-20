@@ -22,7 +22,7 @@
  */
 import { BOT_LEVELS, LEVELS } from './bot';
 import { COLORS, botName, colorById, drawItemTile, drawRobot, drawStatic, drawDynamic, setMap, ROBOT } from './render';
-import { type World, createWorld, MAX_BOMBS, MAX_FIRE, MAX_LIVES, MAX_SPEED_ITEMS, START_FIRE } from './sim';
+import { type World, createWorld, keptSize, MAX_BOMBS, MAX_FIRE, MAX_LIVES, MAX_SPEED_ITEMS, START_FIRE } from './sim';
 import {
   CpuSlot,
   Guest,
@@ -1498,7 +1498,11 @@ export function createLobby(host: LobbyHost): {
           }),
           slider({
             label: 'Closing in',
-            hint: () => `The blocks take ${CLOSE_IN[s().closeIn].secs} seconds to fall. A 7 by 5 area in the middle stays open.`,
+            hint: () => {
+              const pw = previewWorld();
+              const [kw, kh] = keptSize(pw.w, pw.h); // (9 by 7 on Standard, 7 by 5 on Mini and Big)
+              return `The blocks take ${CLOSE_IN[s().closeIn].secs} seconds to fall. A ${kw} by ${kh} area in the middle stays open.`;
+            },
             min: 0,
             max: CLOSE_IN.length - 1,
             normal: () => usual().closeIn,

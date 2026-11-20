@@ -141,9 +141,9 @@ Four of the same level:
 
 | Level | Blasted itself | Shut in by a rival | Caught in a rival's blast | Under a block, early | Under a block, in the last 15 s of them | Won | Rounds drawn | Not decided |
 |---|---|---|---|---|---|---|---|---|
-| Beginner | 0.0% | 0.4% | 64.6% | 2.5% | 3.8% | 20.8% | 0 of 60 | 10 of 60 |
-| Normal | 0.0% | 18.3% | 46.7% | 0.8% | 10.4% | 23.8% | 3 of 60 | 0 of 60 |
-| Hard | 0.0% | 27.5% | 45.8% | 0.0% | 1.7% | 21.7% | 4 of 60 | 4 of 60 |
+| Beginner | 0.0% | 0.8% | 40.0% | 2.5% | 0.4% | 2.5% | 0 of 60 | 54 of 60 |
+| Normal | 0.0% | 31.7% | 41.7% | 0.4% | 2.5% | 22.9% | 4 of 60 | 1 of 60 |
+| Hard | 0.0% | 32.1% | 34.6% | 0.4% | 0.0% | 15.8% | 1 of 60 | 21 of 60 |
 
 The other tables are in [docs/CPU-PLAYERS.md](../docs/CPU-PLAYERS.md).
 
