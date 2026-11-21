@@ -748,8 +748,12 @@
   .bin { position: absolute; top: 6px; right: 6px; width: 36px; height: 36px; display: grid; place-items: center; padding: 0; cursor: pointer; color: #ff9a9a; background: #151a28; border: 1px solid #3a2530; border-radius: 10px; }
   .bin svg { width: 19px; height: 19px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
   .bin:disabled { opacity: 0.25; cursor: default; }
-  #teamSplit:disabled, #teamReset:disabled { opacity: 0.4; cursor: default; } /* already as even as it gets; everyone on their own already */
-  /* the line-up, Even out and Reset on one line, even on a 320-wide phone: the buttons never wrap, the line-up may */
+  #teamSplit:disabled { opacity: 0.4; cursor: default; } /* already as even as it gets */
+  /* the line-up and Even out on one line, even on a 320-wide phone: the button never wraps, the line-up may */
+  /* teams Reset: the Match page's gold chip, at the top right of the Players page, left of the count */
+  .sec-head .head-end { display: inline-flex; align-items: center; gap: 10px; }
+  #teamReset span { letter-spacing: 0.14em; text-transform: uppercase; font-weight: 700; }
+  #teamReset svg { width: 12px; height: 12px; fill: none; stroke: currentColor; stroke-width: 2.6; stroke-linecap: round; stroke-linejoin: round; }
   .opt-split .mini { white-space: nowrap; padding: 9px 9px; }
   .opt-split .opt-name { min-width: 0; }
   .opt-split .opt-label { overflow-wrap: anywhere; } /* (8 on their own, 1v1v1v1v1v1v1v1, has no spaces to wrap at) */
@@ -1150,7 +1154,7 @@
           <div class="dots" id="youDots" role="group" aria-label="Colours: under each, the player who wears it"></div>
           <button class="go ok" id="colOk" type="button" data-pad="Y">Ready</button>
         </div>
-        <div class="sec-head page-head"><span>Players</span><span id="playerCount"></span></div>
+        <div class="sec-head page-head"><span>Players</span><span class="head-end"><button class="group-reset" id="teamReset" type="button" hidden aria-label="Reset teams: everyone on their own"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4.5 12a7.5 7.5 0 1 0 2.2-5.3"/><path d="M4 3.5v4.2h4.2"/></svg><span>Reset</span></button><span id="playerCount"></span></span></div>
         <div class="slots" id="slots"></div>
         <div class="opts" id="allCpus"></div>
         <!-- at the end of the page, not always on screen (the owner's ask): lit up once you have pressed Ready -->

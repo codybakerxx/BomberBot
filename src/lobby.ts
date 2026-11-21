@@ -868,11 +868,18 @@ export function createLobby(host: LobbyHost): {
     }),
   ];
   const refreshAll = mount($('allCpus'), allCpus);
+  // Reset (the owner's ask, 21 November 2026): everyone back on a team of their own, each in a colour of its own,
+  // the cards where they are; at once, no question
+  $('teamReset').addEventListener('click', () => {
+    if (!canEdit()) return;
+    startTeams(s(), inOrder());
+    changed();
+  });
 
   /**
-   * The row under Team size: the teams as they are (2 v 2 v 1), Even out, which evens out the teams there are, and
-   * Reset, which puts everyone back on a team of their own, each in a colour of its own (both Custom only; Reset
-   * the owner's ask, 21 November 2026, after putting teams together by dragging cards).
+   * The row under Team size: the teams as they are (2 v 2 v 1), and Even out, which evens out the teams there are
+   * (Custom only). Putting everyone back on their own is the gold Reset chip at the top right of the Players page
+   * (`teamReset`).
    */
   function splitRow(): Opt {
     const row = document.createElement('div');
@@ -886,32 +893,23 @@ export function createLobby(host: LobbyHost): {
     b.className = 'mini';
     b.id = 'teamSplit';
     b.textContent = 'Even out';
-    const r = document.createElement('button');
-    r.type = 'button';
-    r.className = 'mini';
-    r.id = 'teamReset';
-    r.textContent = '↺ Reset';
-    r.setAttribute('aria-label', 'Reset teams: everyone on their own');
     box.append(label);
-    row.append(box, b, r);
+    row.append(box, b);
     b.addEventListener('click', () => {
       if (!canEdit()) return;
       evenTeams(s(), inOrder());
       changed();
     });
-    r.addEventListener('click', () => {
-      if (!canEdit()) return;
-      startTeams(s(), inOrder()); // (Custom: everyone on a team of their own, the cards where they are)
-      changed();
-    });
+
     return {
       el: row,
       refresh(): void {
         label.textContent = lineUp(s(), inOrder());
         b.hidden = !!fixedSize(s(), inOrder().length); // (teams all one size are even already)
         b.disabled = !b.hidden && !canEven(s(), inOrder()); // already as even as it gets
-        r.hidden = b.hidden;
-        r.disabled = new Set(teamsFor(s(), inOrder())).size === inOrder().length; // everyone on their own already
+        // the gold Reset chip at the top right of the Players page (the owner's design, 21 November 2026): only in
+        // Custom, and only once teams have been put together (by a drag or the Team ‹ ›)
+        $('teamReset').hidden = !s().teamsOn || !!fixedSize(s(), inOrder().length) || !canEdit() || new Set(teamsFor(s(), inOrder())).size === inOrder().length;
       },
     };
   }
