@@ -748,7 +748,10 @@
   .bin { position: absolute; top: 6px; right: 6px; width: 36px; height: 36px; display: grid; place-items: center; padding: 0; cursor: pointer; color: #ff9a9a; background: #151a28; border: 1px solid #3a2530; border-radius: 10px; }
   .bin svg { width: 19px; height: 19px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
   .bin:disabled { opacity: 0.25; cursor: default; }
-  #teamSplit:disabled { opacity: 0.4; cursor: default; } /* already as even as it gets */
+  #teamSplit:disabled, #teamReset:disabled { opacity: 0.4; cursor: default; } /* already as even as it gets; everyone on their own already */
+  /* the line-up, Even out and Reset on one line, even on a 320-wide phone: the buttons never wrap, the line-up may */
+  .opt-split .mini { white-space: nowrap; padding: 9px 9px; }
+  .opt-split .opt-name { min-width: 0; }
   .slot .edit { position: absolute; top: 8px; right: 8px; font: 700 10px/1 var(--font-display); letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-dim); }
   /* the settings rows (ui.ts) */
   .opts { display: flex; flex-direction: column; gap: 6px; }

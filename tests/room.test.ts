@@ -514,6 +514,14 @@ assert.strictEqual(back.last('room')!.host, back.last('room')!.you, 'the friend 
   evenTeams(s, four);
   assert.equal(lineUp(s, four), '2 v 2');
   assert.equal(teamsFor(s, four)[0], 0, 'the biggest team stays');
+  // Reset (the owner's ask, 21 November 2026): teams put together by hand, then everyone back on their own,
+  // each in a colour of its own; the cards stay where they are
+  s.teams = { gold: 0, black: 0, pink: 0, blue: 1 };
+  s.seats = ['blue', 'gold', 'pink', 'black'];
+  startTeams(s, four);
+  assert.equal(lineUp(s, four), '1 v 1 v 1 v 1');
+  assert.equal(new Set(teamsFor(s, four)).size, 4, 'four different colours');
+  assert.deepEqual(s.seats, ['blue', 'gold', 'pink', 'black'], 'nobody moved');
   // everyone on their own is even already
   startTeams(s, four);
   assert.ok(!canEven(s, four));

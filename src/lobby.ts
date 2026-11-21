@@ -869,7 +869,11 @@ export function createLobby(host: LobbyHost): {
   ];
   const refreshAll = mount($('allCpus'), allCpus);
 
-  /** The row under Team size: the teams as they are (2 v 2 v 1), and Even out, which evens out the teams there are (Custom only). */
+  /**
+   * The row under Team size: the teams as they are (2 v 2 v 1), Even out, which evens out the teams there are, and
+   * Reset, which puts everyone back on a team of their own, each in a colour of its own (both Custom only; Reset
+   * the owner's ask, 21 November 2026, after putting teams together by dragging cards).
+   */
   function splitRow(): Opt {
     const row = document.createElement('div');
     row.className = 'opt opt-split';
@@ -882,11 +886,22 @@ export function createLobby(host: LobbyHost): {
     b.className = 'mini';
     b.id = 'teamSplit';
     b.textContent = 'Even out';
+    const r = document.createElement('button');
+    r.type = 'button';
+    r.className = 'mini';
+    r.id = 'teamReset';
+    r.textContent = '↺ Reset';
+    r.setAttribute('aria-label', 'Reset teams: everyone on their own');
     box.append(label);
-    row.append(box, b);
+    row.append(box, b, r);
     b.addEventListener('click', () => {
       if (!canEdit()) return;
       evenTeams(s(), inOrder());
+      changed();
+    });
+    r.addEventListener('click', () => {
+      if (!canEdit()) return;
+      startTeams(s(), inOrder()); // (Custom: everyone on a team of their own, the cards where they are)
       changed();
     });
     return {
@@ -895,6 +910,8 @@ export function createLobby(host: LobbyHost): {
         label.textContent = lineUp(s(), inOrder());
         b.hidden = !!fixedSize(s(), inOrder().length); // (teams all one size are even already)
         b.disabled = !b.hidden && !canEven(s(), inOrder()); // already as even as it gets
+        r.hidden = b.hidden;
+        r.disabled = new Set(teamsFor(s(), inOrder())).size === inOrder().length; // everyone on their own already
       },
     };
   }
