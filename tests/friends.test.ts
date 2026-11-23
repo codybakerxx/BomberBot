@@ -78,6 +78,7 @@ async function main(): Promise<void> {
       assert.ok(sent, 'each friend');
       assert.strictEqual(sent.headers.get('Content-Encoding'), 'aes128gcm');
       assert.match(sent.headers.get('Authorization')!, /^vapid t=.+, k=.+$/);
+      assert.strictEqual(sent.headers.get('Topic'), null, 'no Topic header: Apple turns room-CODE away (BadWebPushTopic)');
       const n = JSON.parse(await p.open(sent.body));
       assert.strictEqual(n.title, 'Cody wants to play');
       assert.strictEqual(n.url, '/?room=BKTW');

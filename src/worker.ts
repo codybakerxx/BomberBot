@@ -322,7 +322,10 @@ export class Friends {
           'Content-Type': 'application/octet-stream',
           TTL: String(TTL),
           Urgency: 'high',
-          ...(code ? { Topic: `room-${code}` } : {}),
+          // No Topic header: Apple turned every invite away over it (BadWebPushTopic, 400, 23 November 2026),
+          // since `room-CODE` is not a valid Base64url string (9 letters). The test notification has none,
+          // which is why it got through when invites did not. Nothing is lost: a Topic only lets a newer
+          // notice replace one still waiting on the push service.
         },
         body: await encryptFor(f.p256dh, f.auth, JSON.stringify(notice)),
       });
