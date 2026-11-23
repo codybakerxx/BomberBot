@@ -77,7 +77,7 @@ Holding a **laptop** (a power-up: see [GAME-RULES.md](GAME-RULES.md), Laptop), *
 - **B** again lands the plane ("Land" on the B button). It also lands by itself after 6 seconds (16 until 23 November 2026), or half a second after its bomb.
 - Nothing shows where a bomb will land: you judge it by eye. A bomb carries on about a tile the way the plane was flying as it falls.
 - The plane always takes off heading for the middle of the arena, whichever way the robot faces (the owner's ask, 23 November 2026).
-- The plane flies at 3 tiles a second and turns at most 76.7° a second, so a swipe turns it in a gentle curve, its circle 10% wider than at 84° (the owner's ask, 23 November 2026; before that he asked for it slower and turning less, 19 November 2026: it was 4.8 tiles and 169° a second).
+- The plane flies at 3 tiles a second and turns at most 93.75° a second, so a swipe turns it in a gentle curve, its circle 10% tighter than at 84° (the owner's ask, 23 November 2026; before that he asked for it slower and turning less, 19 November 2026: it was 4.8 tiles and 169° a second).
 - While flying, the caption on the swipe pad says **Steer the plane**, and a one-line tip over the arena explains it the first time you pick a laptop up in a match.
 
 Online, your steering is sent with your presses, in 64 ways (`IN_AIM` in net.ts: see [ONLINE.md](ONLINE.md)).

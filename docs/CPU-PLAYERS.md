@@ -109,13 +109,13 @@ The laptop (see [GAME-RULES.md](GAME-RULES.md), Laptop) is worth about as much t
 
 **Seeing other players' falling bombs.** Another player's falling bomb is noticed as soon, for the 0.8 s it falls, as a bomb on the floor is for its 2.55 s fuse (`notice`): Beginner after 22 ticks of the 48, Normal after 7, Hard at once. So a Beginner sees one coming only late, and a Hard one in time to step aside.
 
-**How often a flight gets someone** (`experiments/pilot.ts`, 60 arenas each, 23 November 2026, with one bomb, 6 s flights, taking off towards the middle and turning 10% wider; the share of flights that knocked the target out):
+**How often a flight gets someone** (`experiments/pilot.ts`, 60 arenas each, 23 November 2026, with one bomb, 6 s flights, taking off towards the middle and turning 10% tighter; the share of flights that knocked the target out):
 
 | Pilot | A robot that never looks up and walks to the next wall (no bricks) | One that also turns at random every half second (no bricks) | A Normal CPU player, which dodges what it notices (some bricks) |
 |---|---|---|---|
-| Beginner | 12% | 16% | 3% |
-| Normal | 32% | 30% | 7% |
-| Hard | 68% | 17% | 7% |
+| Beginner | 12% | 21% | 5% |
+| Normal | 33% | 33% | 5% |
+| Hard | 72% | 20% | 8% |
 
 (With three bombs and 16 s flights, 19 November 2026: Beginner 41%, 39%, 6%; Normal 67%, 58%, 17%; Hard 93%, 48%, 25%. With the first plane, 4.8 tiles a second for 8 s: Beginner 46%, 30%, 16%; Normal 62%, 50%, 22%; Hard 83%, 58%, 24%. Their settings were left as they were.)
 
@@ -175,9 +175,9 @@ A round has no end of its own: the timer runs 1 minute 30, the blocks take 50 se
 
 | Level | Blasted itself | Shut in by a rival | Caught in a rival's blast | Under a block, early | Under a block, in the last 15 s of them | Won | Rounds drawn | Not decided | Decided after |
 |---|---|---|---|---|---|---|---|---|---|
-| Beginner | 0.0% | 0.4% | 45.8% | 0.4% | 2.9% | 3.3% | 0 of 60 | 52 of 60 | 111 s |
-| Normal | 0.0% | 30.8% | 40.4% | 0.8% | 2.9% | 22.5% | 3 of 60 | 3 of 60 | 156 s |
-| Hard | 0.0% | 32.5% | 32.5% | 0.0% | 1.3% | 14.6% | 2 of 60 | 23 of 60 | 177 s |
+| Beginner | 0.0% | 0.4% | 40.8% | 0.4% | 1.3% | 2.5% | 0 of 60 | 54 of 60 | 138 s |
+| Normal | 0.0% | 27.1% | 45.4% | 0.8% | 2.1% | 22.9% | 3 of 60 | 2 of 60 | 161 s |
+| Hard | 0.0% | 32.5% | 35.0% | 0.0% | 0.0% | 16.3% | 1 of 60 | 20 of 60 | 176 s |
 
 - "Shut in by a rival" and "blasted itself" are both a bot caught by its own blast. The script calls it "shut in by a rival" when, within six steps of where the bot stood, there was a tile its own bombs would not have reached that was blocked or about to be blasted by a bomb a rival dropped *after* the bomb that caught it. It looks at the arena as it was when that bomb was dropped, so a tile a block has landed on since still counts as a way out it had. A rival's bomb dropped on the very same tick counts too, and so does one a rival threw or kicked that came to rest on the way out afterwards, a rival's bomb let go from a plane (from the moment it was let go), and a rival's bomb a falling block took away after the bot dropped its own. It is also "shut in by a rival" when the bot's own bomb went off early because a rival's bomb (one from a plane too) set it off, and that rival's bomb was dropped, kicked, thrown or let go after the bot dropped its own, including when the bot's shield took a first blast and its own bomb's blast caught it half a second later. Anything else is "blasted itself".
 - With the laptop in every arena (18 November 2026) the columns moved little: the CPU players fly it now and then, and a plane's bombs add to what catches them. The slower plane with 16 s flights (19 November 2026) moved them little again, and so did power-ups at 60% of bricks rather than 61.25% (the same day), and bricks on 80% of the open floor rather than 78% (the same day: the table above; the arenas differ each time).
@@ -192,9 +192,9 @@ A round has no end of its own: the timer runs 1 minute 30, the blocks take 50 se
 
 | Level | Won | Blasted | Under a block, early | Blasted itself | Rivals it blasted |
 |---|---|---|---|---|---|
-| Beginner | 2.8% | 68.3% | 2.8% | 0.0% | 6 |
-| Normal | 29.4% | 56.1% | 0.6% | 0.0% | 70 |
-| Hard | 40.0% | 36.1% | 0.0% | 0.0% | 139 |
+| Beginner | 2.8% | 73.9% | 2.2% | 0.0% | 8 |
+| Normal | 27.8% | 55.0% | 1.1% | 0.0% | 82 |
+| Hard | 39.4% | 38.3% | 0.6% | 0.0% | 140 |
 
 8 of 180 drawn, 39 left undecided (20 November 2026, the 9 by 7 on Standard: the bigger square leaves many more rounds going; with the 7 by 5 the same morning's arenas gave 6 drawn, 6 undecided; 19 November 2026, bricks at 80%: Normal won 35.6% and Hard 60.6% with bricks at 78% the same day, nothing in the CPU players changed between the two: a different set of arenas swings this table that much; with power-ups at 60%: 1 drawn, 3 undecided; with the slower plane just before: 3 and 4; with the first plane: 7 and 3; before the laptop: 4 and 5; with the 5 by 5 and the 2.5 s fuse: 5 drawn, 2 undecided) (it was 27 before they pressed in the square). The levels are well apart: each wins far more and blasts far more rivals than the one below.
 
@@ -202,9 +202,9 @@ A round has no end of its own: the timer runs 1 minute 30, the blocks take 50 se
 
 | Three of | Blasted the player | Average time | A block got the player | The player won | Not decided | CPU players that blasted themselves |
 |---|---|---|---|---|---|---|
-| Beginner | 34 of 80 | 114 s | 2 of 80 | 5 of 80 | 70 of 80 | 0 |
-| Normal | 57 of 80 | 117 s | 12 of 80 | 3 of 80 | 11 of 80 | 0 |
-| Hard | 66 of 80 | 97 s | 4 of 80 | 3 of 80 | 24 of 80 | 0 |
+| Beginner | 32 of 80 | 118 s | 1 of 80 | 2 of 80 | 73 of 80 | 0 |
+| Normal | 58 of 80 | 122 s | 6 of 80 | 6 of 80 | 13 of 80 | 0 |
+| Hard | 65 of 80 | 100 s | 3 of 80 | 3 of 80 | 21 of 80 | 0 |
 
 (20 November 2026, the 9 by 7 on Standard. With the 7 by 5: Beginner 51 got the player, 14 not decided; Normal 51 and 0; Hard 68 and 7, and 1 under "blasted themselves" before the script saw thrown bombs in the air, replayed: a rival's doing, see below.)
 
@@ -224,9 +224,9 @@ This table is noisy, and the stand-in is not a person. Read it loosely.
 
 | Level | Blasted itself | Got the other player | Average time |
 |---|---|---|---|
-| Beginner | 0 of 40 | 24 of 40 | 125 s |
-| Normal | 0 of 40 | 39 of 40 | 100 s |
-| Hard | 0 of 40 | 40 of 40 | 74 s |
+| Beginner | 0 of 40 | 26 of 40 | 130 s |
+| Normal | 0 of 40 | 39 of 40 | 96 s |
+| Hard | 0 of 40 | 40 of 40 | 76 s |
 
 Most of that time is spent digging through bricks from one corner to the other. With the laptop (19 November 2026, the slower plane and power-ups at 60%; before the laptop: 12 of 40 in 156 s, 133 s, 113 s) it is quicker: a CPU player that finds the laptop can fly over the bricks to a player who stands still. It takes longer than it did, because a blast now starts one tile long. Beginner's figures moved since the last run (11 of 40, then 17) although Beginner was not changed: the arenas are different, because the power-up chances have changed (this run has no timer, so the 7 by 5 plays no part in it).
 

@@ -470,11 +470,11 @@ export const ZOMBIE_SAFE_TICKS = 60; // blasts leave it be for 1 s after it gets
 // some of its speed as they go, and go off where they land, with nothing on screen saying where that will be.
 // (19 November 2026, the owner, to make it easier to control: slower, turning less, and twice as long a flight.
 // It was 4.8 tiles a second, 169° a second and 8 s.) (23 November 2026, the owner: one bomb, 6 s, always taking
-// off towards the middle, and turns 10% wider: it was 3 bombs, 16 s, off the way the robot faced, 84° a second.)
+// off towards the middle, and turns 10% tighter: it was 3 bombs, 16 s, off the way the robot faced, 84° a second.)
 export const PLANE_TICKS = 6 * TICK_HZ; // a flight lasts up to 6 s
 export const PLANE_SPEED = 0.05; // tiles a tick (3 tiles a second: a little quicker than a robot with no speed power-ups)
-export const TURN_STEPS = 11264; // the plane's heading is kept in 11264ths of a turn (1024 × 11, so a tenth wider is a whole number) ...
-export const PLANE_TURN = 40; // ... and turns at most this many a tick (76.7° a second, a full circle in about 4.7 s; its circle 10% wider than at 84°): it sweeps round, never on the spot
+export const TURN_STEPS = 9216; // the plane's heading is kept in 9216ths of a turn (1024 × 9, so a tenth tighter is a whole number) ...
+export const PLANE_TURN = 40; // ... and turns at most this many a tick (93.75° a second, a full circle in about 3.8 s; its circle 10% tighter than at 84°): it sweeps round, never on the spot
 export const AIM_STEPS = 64; // the way it is steered (PlayerInput.aim) comes in 64ths of a turn
 export const PLANE_BOMBS = 1; // bombs a plane can drop (it was 3)
 export const PLANE_FIRST_GAP = 30; // none in its first half second, so the first cannot land on the robot it took off from

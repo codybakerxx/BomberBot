@@ -141,9 +141,9 @@ Four of the same level:
 
 | Level | Blasted itself | Shut in by a rival | Caught in a rival's blast | Under a block, early | Under a block, in the last 15 s of them | Won | Rounds drawn | Not decided |
 |---|---|---|---|---|---|---|---|---|
-| Beginner | 0.0% | 0.4% | 45.8% | 0.4% | 2.9% | 3.3% | 0 of 60 | 52 of 60 |
-| Normal | 0.0% | 30.8% | 40.4% | 0.8% | 2.9% | 22.5% | 3 of 60 | 3 of 60 |
-| Hard | 0.0% | 32.5% | 32.5% | 0.0% | 1.3% | 14.6% | 2 of 60 | 23 of 60 |
+| Beginner | 0.0% | 0.4% | 40.8% | 0.4% | 1.3% | 2.5% | 0 of 60 | 54 of 60 |
+| Normal | 0.0% | 27.1% | 45.4% | 0.8% | 2.1% | 22.9% | 3 of 60 | 2 of 60 |
+| Hard | 0.0% | 32.5% | 35.0% | 0.0% | 0.0% | 16.3% | 1 of 60 | 20 of 60 |
 
 The other tables are in [docs/CPU-PLAYERS.md](../docs/CPU-PLAYERS.md).
 
@@ -160,13 +160,13 @@ What it cannot show is how they feel to play against. That needs a phone.
 
 ## `pilot.ts`: how often does a CPU player's plane get someone?
 
-One CPU pilot of each level, handed a laptop, against one target: a robot that never looks up and walks to the next wall, one that also turns at random every half second (both in an arena with no bricks), and a Normal CPU player that dodges what it notices. It counts the share of flights that knocked the target out. Recorded on 23 November 2026 with one bomb, 6 s flights, taking off towards the middle, 76.7° a second, 60 arenas each:
+One CPU pilot of each level, handed a laptop, against one target: a robot that never looks up and walks to the next wall, one that also turns at random every half second (both in an arena with no bricks), and a Normal CPU player that dodges what it notices. It counts the share of flights that knocked the target out. Recorded on 23 November 2026 with one bomb, 6 s flights, taking off towards the middle, 93.75° a second, 60 arenas each:
 
 | Pilot | Never looks up | Turns at random too | Normal CPU player |
 |---|---|---|---|
-| Beginner | 12% | 16% | 3% |
-| Normal | 32% | 30% | 7% |
-| Hard | 68% | 17% | 7% |
+| Beginner | 12% | 21% | 5% |
+| Normal | 33% | 33% | 5% |
+| Hard | 72% | 20% | 8% |
 
 With three bombs, 84° a second and 16 s (19 November 2026): Beginner 41%, 39%, 6%; Normal 67%, 58%, 17%; Hard 93%, 48%, 25%. With the first plane (4.8 tiles a second, 169° a second, 8 s), 18 November 2026: Beginner 46%, 30%, 16%; Normal 62%, 50%, 22%; Hard 83%, 58%, 24%.
 
