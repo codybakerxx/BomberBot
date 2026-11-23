@@ -17,6 +17,7 @@ npx tsx experiments/cpu-matches.ts          # about fifteen minutes
 npx tsx experiments/cpu-matches.ts solo
 npx tsx experiments/cpu-matches.ts versus
 npx tsx experiments/cpu-matches.ts alone
+npx tsx experiments/cpu-matches.ts duel 60
 npx tsx experiments/pilot.ts
 npx tsx experiments/item-rarity.ts
 ```
@@ -134,6 +135,7 @@ Unlike the scripts above this is a measurement, not a model: it plays whole roun
 | `versus` | Three of one level against one Beginner CPU player standing in for a slow, careless person, 80 rounds |
 | `alone` | Each level alone for a whole round: does it reach the square the blocks leave open |
 | `solo` | Each level alone with a player who stands still, 40 arenas of 3 minutes, with the timer off |
+| `duel [N]` | One against one: Hard against each level, and Normal against Beginner, N rounds each (60), the two taking each corner in turn: who wins, how soon, and how often the first-named dropped, kicked, threw and flew |
 
 A round goes on until someone wins, so these runs give up 2 minutes after the blocks stop (4 minutes 20 in, now that the timer is 1 minute 30 and the blocks take 50 seconds) and count the round as not decided.
 
@@ -143,7 +145,9 @@ Four of the same level:
 |---|---|---|---|---|---|---|---|---|
 | Beginner | 0.0% | 0.4% | 40.8% | 0.4% | 1.3% | 2.5% | 0 of 60 | 54 of 60 |
 | Normal | 0.0% | 27.1% | 45.4% | 0.8% | 2.1% | 22.9% | 3 of 60 | 2 of 60 |
-| Hard | 0.0% | 32.5% | 35.0% | 0.0% | 0.0% | 16.3% | 1 of 60 | 20 of 60 |
+| Hard | 0.0% | 20.0% | 52.5% | 0.0% | 0.0% | 21.7% | 1 of 60 | 7 of 60 |
+
+(The Hard row: 23 November 2026, after Hard was made more aggressive; it was 32.5%, 35.0%, 16.3% won and 20 of 60 not decided.)
 
 The other tables are in [docs/CPU-PLAYERS.md](../docs/CPU-PLAYERS.md).
 
@@ -155,6 +159,8 @@ The other tables are in [docs/CPU-PLAYERS.md](../docs/CPU-PLAYERS.md).
 - "Shut in by a rival" and "blasted itself" are both a bot caught by its own blast. What separates them is in `shutIn` in the script, and it was drawn up from replays. Each time a case has landed under "blasted itself" it has been replayed. Some were the test being too narrow (a rival's bomb dropped on the same tick, one thrown onto the way out, a rival's kicked bomb setting the bot's own off early; with the laptop, a rival's bomb falling from a plane, a rival's bomb a falling block took away, and a bot whose shield kept it alive half a second into its own blast; most lately a rival's bomb thrown after the bot dropped its own, still in the air and coming down on its way out: see docs/CPU-PLAYERS.md). Two were real faults in the CPU players (standing still after a shield was used up; refusing a safe tile because a block was due on it later) and were fixed. Replay any case that lands there before believing either column.
 - Before the timer, CPU players seldom finished each other off. The first timer closed the whole arena by 0:00, and about half of rounds were draws: the bots left all reached the last tile and went under the same block. Now a 5 by 5 square is left open and the round goes on in it. The blocks now start when the timer reaches 0:00 rather than a minute before. Draws are rare and most rounds are settled in the square, but at first between a sixth and a half were still going 2 minutes after the blocks stopped (Normal 32 of 60).
 - Normal and Hard now press once they are in the square after 0:00 (`squareBold`). Not decided fell to 0 of 60 for Normal and 2 of 60 for Hard, and "shut in by a rival" rose (Normal 3.8% to about 20%), which is the risk they now take. Beginner does not press and still leaves about a third of rounds undecided.
+
+- `duel` was added on 23 November 2026, after the owner watched a Hard CPU player fail to knock out a Beginner one. One against one, Hard then won 23 of 40, 7 of them before the timer ran out, and 17 were still going 2 minutes after the blocks stopped; it never kicked or threw. After the changes (docs/CPU-PLAYERS.md, The three levels) it won 59 of 60, 48 before the timer ran out, in 71 s on average, throwing about ten bombs a round. The script also counts a bomb a rival has kicked or thrown since it was dropped as moved (`rivalMoved`): one kicked away and kicked back ends where it was dropped.
 
 What it cannot show is how they feel to play against. That needs a phone.
 

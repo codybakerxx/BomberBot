@@ -57,7 +57,10 @@ When a bot is boxed in with no route out, Normal and Hard will kick a bomb out o
 - **Bombing a player in line.** If a player is in its blast line and close enough, it drops a bomb (after the safety checks). How close, and how often it takes the chance, depends on the level.
 - **Hunting.** Spots it could bomb a player from are goals, alongside power-ups and bricks. Higher levels weigh them more, so they come looking for you sooner.
 - **Traps (Hard).** It works out whether one bomb would leave a player no way out at all, always takes that shot, and looks for nearby spots where it would be true.
-- **Kicking bombs at players (Hard).** With the boot, a bomb lying next to it with a player further down the lane gets kicked at them.
+- **Bombs that work together (Hard, `combos`).** Running from a blast, it checks each tile it crosses: would a bomb dropped here leave a player no way out? Often it would, because the blast it is running from sets the new bomb off early, chained, long before its own fuse. And when a player is already in a blast's way, it looks for the bomb that closes that player's last way out (on the way out, or covering where it leads), not only bombs that reach the player.
+- **Kicking bombs at players (Hard).** With the boot, a bomb lying next to it with a player further down the lane gets kicked at them, also on the run, and the spot behind such a bomb is a goal worth walking to while there is time. A player down an open lane beyond its blast's reach gets a bomb dropped, stepped back from and kicked down the lane at them (`dropKick`).
+- **Throwing bombs at players (Hard, `throwAttack`).** With the glove, it drops a bomb, lifts it and throws it three tiles, over blocks and bricks: where the throw would leave a player no way out, or onto a player a bomb where it stands would not reach.
+- **Hunting before shopping (Hard, `kitSense`, `tunnel`).** A power-up it already has plenty of is worth little, one it cannot use any more nothing; the boot, the glove and the laptop are worth more than another bomb. A spot to blast bricks from counts for more the nearer it is to a player, counting the way through bricks, so it bores a way through to you.
 - **Not being trapped (Hard).** If a nearby player could box it in with one bomb, it moves somewhere that is not true before doing anything else.
 
 ## The shield and the curse
@@ -136,13 +139,17 @@ All of these are in the `LEVELS` table at the top of `src/bot.ts`. Times are in 
 | Notices another player's bomb after (`notice`) | 70 ticks | 22 | at once |
 | Time kept spare when dodging (`margin`) | 14 ticks | 9 | 4 |
 | Bombs out at once (`maxBombs`) | 1 | 2 | all it has |
-| Pull toward players (`hunt`) | 0.12 | 0.55 | 1.6 |
+| Pull toward players (`hunt`) | 0.12 | 0.55 | 4 (1.6 until 23 November 2026) |
 | Bombs a player in line (`attack`) | 20% of chances | 50% | always |
 | From how far (`attackReach`) | 2 tiles | 4 | 8 |
 | Sets traps (`killShot`) | no | no | yes |
 | Watches for players who could shut it in (`guard`) | within 3 tiles | 5 | whole arena |
 | Kicks a bomb to escape (`kickEscape`) | no | yes | yes |
 | Kicks bombs at players (`kickAttack`) | no | no | yes |
+| Throws bombs at players (`throwAttack`) | no | no | yes |
+| Bombs on the run and two-bomb traps (`combos`) | no | no | yes |
+| Knows what it has enough of (`kitSense`) | no | no | yes |
+| Bores through bricks towards players (`tunnel`) | no | no | up to 3 times the worth |
 | Throws a bomb to escape (`throwEscape`) | no | no | yes |
 | Moves out of spots it could be trapped in (`evade`) | no | no | yes |
 | Leaves power-ups unburnt (`spareItems`) | no | no | yes |
@@ -159,7 +166,9 @@ In short:
 
 - **Beginner** is slow to react, carries one bomb, and mostly digs for power-ups. It will sometimes bomb you if you stand next to it, and it will blunder over a curse lying in its way.
 - **Normal** collects power-ups and comes after you once it can reach you.
-- **Hard** reacts at once, hunts you, sets traps, uses the boot and the glove, and will not let itself be cornered.
+- **Hard** reacts at once, comes for you from the start, sets traps with several bombs at once, kicks and throws bombs at you, flies the laptop's plane, and will not let itself be cornered.
+
+Hard was made more aggressive on 23 November 2026, after the owner watched a Hard CPU player fail to knock out a Beginner one: one against one it won 23 of 40 rounds, 7 of them before the timer ran out, and 17 were still going 2 minutes after the blocks stopped; it never kicked or threw. With `hunt` 4, `kitSense`, `tunnel`, `combos`, `throwAttack` and the kicks above it won 59 of 60, 48 before the timer ran out (the one-against-one table below). Beginner and Normal were not changed.
 
 There were four levels at first. On 11 November 2026 they were cut to three after play-testing: what was called Extreme is now Hard, the old Hard (which sat between the two) was dropped, and Normal was eased a little (it thinks every 16 ticks instead of 14, pauses 6 to 26 ticks before setting off instead of 0 to 14, notices bombs after 22 ticks instead of 16, `hunt` 0.55 from 0.7, `attack` 50% from 60%). Beginner was not changed. A phone that had Extreme saved now gets Hard.
 
@@ -177,14 +186,15 @@ A round has no end of its own: the timer runs 1 minute 30, the blocks take 50 se
 |---|---|---|---|---|---|---|---|---|---|
 | Beginner | 0.0% | 0.4% | 40.8% | 0.4% | 1.3% | 2.5% | 0 of 60 | 54 of 60 | 138 s |
 | Normal | 0.0% | 27.1% | 45.4% | 0.8% | 2.1% | 22.9% | 3 of 60 | 2 of 60 | 161 s |
-| Hard | 0.0% | 32.5% | 35.0% | 0.0% | 0.0% | 16.3% | 1 of 60 | 20 of 60 | 176 s |
+| Hard | 0.0% | 20.0% | 52.5% | 0.0% | 0.0% | 21.7% | 1 of 60 | 7 of 60 | 122 s |
 
 - "Shut in by a rival" and "blasted itself" are both a bot caught by its own blast. The script calls it "shut in by a rival" when, within six steps of where the bot stood, there was a tile its own bombs would not have reached that was blocked or about to be blasted by a bomb a rival dropped *after* the bomb that caught it. It looks at the arena as it was when that bomb was dropped, so a tile a block has landed on since still counts as a way out it had. A rival's bomb dropped on the very same tick counts too, and so does one a rival threw or kicked that came to rest on the way out afterwards, a rival's bomb let go from a plane (from the moment it was let go), and a rival's bomb a falling block took away after the bot dropped its own. It is also "shut in by a rival" when the bot's own bomb went off early because a rival's bomb (one from a plane too) set it off, and that rival's bomb was dropped, kicked, thrown or let go after the bot dropped its own, including when the bot's shield took a first blast and its own bomb's blast caught it half a second later. Anything else is "blasted itself".
 - With the laptop in every arena (18 November 2026) the columns moved little: the CPU players fly it now and then, and a plane's bombs add to what catches them. The slower plane with 16 s flights (19 November 2026) moved them little again, and so did power-ups at 60% of bricks rather than 61.25% (the same day), and bricks on 80% of the open floor rather than 78% (the same day: the table above; the arenas differ each time).
 - Before Normal and Hard pressed in the square, Normal left 32 of 60 rounds not decided and Hard 9. Now it is none and 2. The price shows in "shut in by a rival": Normal went from 3.8% to about 20%, Hard from 27.5% to about 34%. That is the risk they now take on purpose. Beginner does not press, and its 20 of 60 is the old figure give or take (it was 15).
 - "Decided after" is the average length of the rounds that were decided. The blocks stop at 140 s, so most are settled in the square.
 - With the shorter timer and faster blocks, rounds are settled about 35 seconds sooner than before, and the other columns moved little. One thing did move: four Hards drew 9 rounds of 60 (it was 2). Why was not looked into; with the 7 by 5 it is back to 2.
-- With the plane's one bomb and 6 s, and the blocks 20% faster (23 November 2026, the tables here): every column within noise of 20 November; blasted itself still 0 everywhere.
+- With Hard made more aggressive (23 November 2026, the Hard row here): four Hards settle their rounds about a minute sooner (122 s, was 176 s), only 7 of 60 still going 2 minutes after the blocks stop (20), and more of them go out to a rival's blast. The Beginner and Normal rows are the run before; they were not changed.
+- With the plane's one bomb and 6 s, and the blocks 20% faster (23 November 2026): every column within noise of 20 November; blasted itself still 0 everywhere.
 - With the 9 by 7 on Standard (20 November 2026): far more rounds still going 2 minutes after the blocks stop, Beginner 54 of 60 (10 before), Hard 21 (4), Normal still 1. The square has 51 tiles to stand on rather than 23, so careful players have room to keep out of each other's way; Beginner does not press in the square at all. Watch for rounds dragging on in play; the CPU players' pressing in the square (`squareBold`) is what would be tuned, if it shows with people too.
 - With the 7 by 5 and the 2.55 s fuse (18 November 2026): about where it was. Four Beginners left 12 of 60 not decided with the 7 by 5 alone and 17 with the longer fuse too (20 before either): noise, mostly. Four Hards draw 2 of 60 again.
 
@@ -192,11 +202,22 @@ A round has no end of its own: the timer runs 1 minute 30, the blocks take 50 se
 
 | Level | Won | Blasted | Under a block, early | Blasted itself | Rivals it blasted |
 |---|---|---|---|---|---|
-| Beginner | 2.8% | 73.9% | 2.2% | 0.0% | 8 |
-| Normal | 27.8% | 55.0% | 1.1% | 0.0% | 82 |
-| Hard | 39.4% | 38.3% | 0.6% | 0.0% | 140 |
+| Beginner | 1.1% | 92.2% | 0.6% | 0.0% | 2 |
+| Normal | 11.7% | 83.3% | 0.0% | 0.0% | 25 |
+| Hard | 77.2% | 17.2% | 0.0% | 0.0% | 262 |
 
-8 of 180 drawn, 39 left undecided (20 November 2026, the 9 by 7 on Standard: the bigger square leaves many more rounds going; with the 7 by 5 the same morning's arenas gave 6 drawn, 6 undecided; 19 November 2026, bricks at 80%: Normal won 35.6% and Hard 60.6% with bricks at 78% the same day, nothing in the CPU players changed between the two: a different set of arenas swings this table that much; with power-ups at 60%: 1 drawn, 3 undecided; with the slower plane just before: 3 and 4; with the first plane: 7 and 3; before the laptop: 4 and 5; with the 5 by 5 and the 2.5 s fuse: 5 drawn, 2 undecided) (it was 27 before they pressed in the square). The levels are well apart: each wins far more and blasts far more rivals than the one below.
+4 of 180 drawn, 14 left undecided (23 November 2026, Hard made more aggressive: it wins 77% of these rounds, was 39%; the run before gave 8 drawn, 39 undecided; 20 November 2026, the 9 by 7 on Standard: the bigger square leaves many more rounds going; with the 7 by 5 the same morning's arenas gave 6 drawn, 6 undecided; 19 November 2026, bricks at 80%: Normal won 35.6% and Hard 60.6% with bricks at 78% the same day, nothing in the CPU players changed between the two: a different set of arenas swings this table that much; with power-ups at 60%: 1 drawn, 3 undecided; with the slower plane just before: 3 and 4; with the first plane: 7 and 3; before the laptop: 4 and 5; with the 5 by 5 and the 2.5 s fuse: 5 drawn, 2 undecided) (it was 27 before they pressed in the square). The levels are well apart: each wins far more and blasts far more rivals than the one below.
+
+**One against one** (`cpu-matches.ts duel`, 60 rounds each, the two taking each corner in turn, the whole round with the timer and the falling blocks; the last columns are what the first-named player did with its kit, a round on average):
+
+| Pairing | Won | Lost | Won by a blast | Before 0:00 | Time to win | Drawn | Not decided | Blasted itself | Bombs | Most out at once | Kicks | Throws | Flights |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| Hard v Beginner | 59 | 0 | 58 | 48 | 71 s | 0 | 1 | 0 | 43 | 5.6 | 0.6 | 10.5 | 0.5 |
+| Hard v Normal | 52 | 8 | 44 | 30 | 87 s | 0 | 0 | 0 | 59 | 5.5 | 1.7 | 24.9 | 0.5 |
+| Hard v Hard | 29 | 31 | 20 | 7 | 103 s | 0 | 0 | 0 | 60 | 5.0 | 2.0 | 29.6 | 0.5 |
+| Normal v Beginner | 40 | 6 | 38 | 7 | 136 s | 0 | 14 | 0 | 64 | 3.1 | 0 | 0 | 0.7 |
+
+Before Hard was made more aggressive (23 November 2026, 40 rounds each): Hard v Beginner won 23 of 40, 7 before 0:00, in 125 s on average, 17 still going 2 minutes after the blocks stopped, and it never kicked or threw; Hard v Normal won 23 and lost 11. A kick is rarer than a throw: it needs the boot and a lane, the glove only a rival three tiles off.
 
 **Three of one level against a slow, careless player** (a Beginner CPU player standing in for a person, 80 rounds):
 
@@ -204,7 +225,9 @@ A round has no end of its own: the timer runs 1 minute 30, the blocks take 50 se
 |---|---|---|---|---|---|---|
 | Beginner | 32 of 80 | 118 s | 1 of 80 | 2 of 80 | 73 of 80 | 0 |
 | Normal | 58 of 80 | 122 s | 6 of 80 | 6 of 80 | 13 of 80 | 0 |
-| Hard | 65 of 80 | 100 s | 3 of 80 | 3 of 80 | 21 of 80 | 0 |
+| Hard | 80 of 80 | 50 s | 0 of 80 | 0 of 80 | 3 of 80 | 0 |
+
+(23 November 2026, Hard made more aggressive: three Hards got the player every time, in 50 s on average; they took 100 s and missed 15 of 80 before.)
 
 (20 November 2026, the 9 by 7 on Standard. With the 7 by 5: Beginner 51 got the player, 14 not decided; Normal 51 and 0; Hard 68 and 7, and 1 under "blasted themselves" before the script saw thrown bombs in the air, replayed: a rival's doing, see below.)
 
@@ -226,7 +249,7 @@ This table is noisy, and the stand-in is not a person. Read it loosely.
 |---|---|---|---|
 | Beginner | 0 of 40 | 26 of 40 | 130 s |
 | Normal | 0 of 40 | 39 of 40 | 96 s |
-| Hard | 0 of 40 | 40 of 40 | 76 s |
+| Hard | 0 of 40 | 40 of 40 | 54 s (76 s before 23 November 2026) |
 
 Most of that time is spent digging through bricks from one corner to the other. With the laptop (19 November 2026, the slower plane and power-ups at 60%; before the laptop: 12 of 40 in 156 s, 133 s, 113 s) it is quicker: a CPU player that finds the laptop can fly over the bricks to a player who stands still. It takes longer than it did, because a blast now starts one tile long. Beginner's figures moved since the last run (11 of 40, then 17) although Beginner was not changed: the arenas are different, because the power-up chances have changed (this run has no timer, so the 7 by 5 plays no part in it).
 
@@ -248,6 +271,8 @@ The "blasted itself" column is only worth anything because every case that lands
 - **The square fight test (tests/bot.test.ts, 18 November 2026).** With the 2.55 s fuse, the one arena where two Normals had to settle the fight in the square within 90 s stalled instead (it took 27 s with the 2.5 s fuse). Over 40 arenas the share settled within 90 s was the same with either fuse (22 and 21 of 40; 22 with the old 5 by 5 too): two Normals in the open area settle about half their fights within 90 s, and a few never. The test now plays 24 arenas and asks for at least 8 (Normal) and 18 (Hard) of them.
 
 - **The laptop (18 November 2026).** The first run with it put three bots under "blasted itself" (four Normals, seed 4, player 1; one of each level, seed 54, the Hard in seat 0, and seed 197, the Normal in seat 2). Replayed, all three were a rival's doing that the script could not see. Seed 54: a rival's bomb let go from a plane, after the Hard had dropped its own, was coming down on its way out; it stood still, shut in, and its own blast caught it a moment before the plane's bomb landed. Seed 197: a rival's plane bomb landed right on the Normal's own bomb with the Normal standing on it; its shield took that blast, and its own bomb, set off by the plane's, burned on past the half second of safety. Seed 4 (late in the falling blocks): a rival dropped a bomb whose blast covered both its ways out, then a falling block took that bomb away; by then the blocks were coming up the same column. The script now counts a rival's bomb from a plane like one dropped when it was let go, a rival's bomb a block took away like one still there, and its own bomb set off early by a rival even when the bot's shield made it go out a moment later. All three now read "shut in by a rival", and the column is back at zero.
+
+- **Kicked away and back (23 November 2026, Hard made more aggressive).** The run with one of each level put one Hard under "blasted itself" (seed 468, Beginner, Normal, Hard, the Hard 21 s in). Replayed: the Hard dropped a bomb and kicked it down a column at the Normal, then dropped another to break a brick, its way out down that column. The Normal, boxed in by the bomb that had stopped in front of it, kicked it back up the column (`kickEscape`), and it stopped on the very tile it was first dropped on, in the Hard's way out. The script took a bomb lying where it was dropped as never moved; it now counts a bomb a rival has kicked or thrown since it was dropped as moved (`rivalMoved`), wherever it ends up. A rival's doing.
 
 - **A throw still in the air (19 November 2026, bricks at 80%).** The run against the stand-in put one Hard bot under "blasted itself" (seed 35, the stand-in in seat 3, player 1, 221 s in, in the 7 by 5). Replayed: it dropped a bomb in a dead end at the top right of the 7 by 5 with a clear way out down its column; two ticks later a rival Hard with the glove threw a bomb along the row, coming down (after bouncing off the bot's other bomb) on the very tile of its way out. The bot saw it coming, had no other way, and stood still (`trapped`) until its own earlier bomb went off. The script only counted rival bombs lying on the ground; it now counts a rival's bomb in the air, thrown after the bot dropped its own, as shutting the tile it is coming down on (`flying`, `thrownOn`, `lands` in `shutIn`). The bot's own doing it was not.
 

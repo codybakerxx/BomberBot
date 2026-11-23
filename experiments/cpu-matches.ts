@@ -9,6 +9,7 @@
  *   npx tsx experiments/cpu-matches.ts solo       each level alone with a target that stands still
  *   npx tsx experiments/cpu-matches.ts versus     three of each level against one slow, careless player
  *   npx tsx experiments/cpu-matches.ts alone      each level alone for a whole round: does it reach the square the blocks leave open
+ *   npx tsx experiments/cpu-matches.ts duel [N]   one against one (Hard against each level, Normal against Beginner): who wins, how soon, and what it used
  *
  * These are the real CPU players and the real rules, so unlike the thumb
  * experiments this is a measurement, not a model. What it cannot tell you is
@@ -34,6 +35,17 @@ export interface Outcome {
   ticks: number;
   /** who put each player out, or -1 */
   by: number[];
+  /** what each player did with its kit: bombs dropped, most out at once, kicks, throws, flights, bombs from a plane */
+  use: Use[];
+}
+
+export interface Use {
+  placed: number;
+  most: number;
+  kicks: number;
+  throws: number;
+  flights: number;
+  drops: number;
 }
 
 /**
@@ -64,6 +76,10 @@ export function playMatch(seed: number, levels: (BotLevel | null)[], maxTicks: n
   // so a robot whose shield took the first blast and that is caught in this one half a second later still counts
   const setOff: { owner: number; cx: number; cy: number; range: number; tick: number }[] = [];
   const thrownOn = new Map<number, number>(); // bomb id -> the tick it was thrown, while it is in the air
+  const use: Use[] = levels.map(() => ({ placed: 0, most: 0, kicks: 0, throws: 0, flights: 0, drops: 0 }));
+  // bombs a rival has kicked or thrown at some time since they were dropped (one kicked away and back again
+  // ends on the tile it was dropped on, so where it lies does not tell)
+  const rivalMoved = new Set<number>();
   let t = 0;
   for (; t < maxTicks; t++) {
     for (let i = 0; i < bots.length; i++) inputs[i] = bots[i] ? botInput(world, bots[i]!) : undefined;
@@ -78,8 +94,34 @@ export function playMatch(seed: number, levels: (BotLevel | null)[], maxTicks: n
       .filter((d) => d.t === 1)
       .map((d, i) => ({ id: -1 - i, owner: d.owner, range: DROP_FIRE, let: t - DROP_TICKS + 1, ...dropLanding(world, d.x, d.y, d.vx, d.vy, 1) }))
       .filter((d) => tileAt(world, d.cx, d.cy) !== SOFT);
+    const was = new Map(world.bombs.map((b) => [b.id, { slide: b.slide, state: b.state, heldBy: b.heldBy }]));
     step(world, inputs);
     for (const d of landing) cause.set(d.id, { tick: d.let, owner: d.owner });
+    for (const b of world.bombs) {
+      const o = was.get(b.id);
+      if (!o) {
+        if (b.state === 'ground' && use[b.owner]) use[b.owner].placed++;
+        continue;
+      }
+      if (o.state === 'held' && b.state === 'air' && use[o.heldBy]) use[o.heldBy].throws++;
+      if (o.state === 'held' && b.state === 'air' && o.heldBy !== b.owner) rivalMoved.add(b.id);
+      if (!o.slide && b.slide) {
+        // (the kicker: the robot right behind it, the way it is sliding)
+        let near = -1;
+        let nd = Infinity;
+        for (const p of world.players) {
+          const d = Math.abs(p.x - (b.x - DX[b.slide])) + Math.abs(p.y - (b.y - DY[b.slide]));
+          if (p.alive && d < nd) { nd = d; near = p.id; }
+        }
+        if (near >= 0 && use[near]) use[near].kicks++;
+        if (near >= 0 && near !== b.owner) rivalMoved.add(b.id);
+      }
+    }
+    for (const e of world.events) {
+      if (e.type === 'launch' && use[e.player]) use[e.player].flights++;
+      if (e.type === 'drop' && use[e.player]) use[e.player].drops++;
+    }
+    for (const p of world.players) if (use[p.id]) use[p.id].most = Math.max(use[p.id].most, p.activeBombs);
     const gone = before.filter((b) => !world.bombs.some((x) => x.id === b.id));
     // (a bomb under a block that has just landed did not go off: the block took it)
     const crushedBombs = gone.filter((b) => world.events.some((e) => e.type === 'block' && e.cx === b.cx && e.cy === b.cy));
@@ -141,7 +183,7 @@ export function playMatch(seed: number, levels: (BotLevel | null)[], maxTicks: n
       // (a rival's bomb in the air, thrown since, comes down where it is going: it blocks that tile and will blast)
       const landing = flying.map((b) => ({ owner: b.owner, cx: b.cx, cy: b.cy, range: b.range, since: thrownOn.get(b.id) ?? t, lands: true }));
       const boxed = shutIn(world, before, e.player, px, py, (id) => droppedOn.get(id) ?? 0, (id) => restingAt.get(id)?.since ?? 0, (i) => landedOn.get(i) ?? -1, [...threats, ...landing]);
-      const moved = before.some((b) => b.owner === e.player && droppedAt.has(b.id) && droppedAt.get(b.id) !== b.cy * world.w + b.cx);
+      const moved = before.some((b) => b.owner === e.player && droppedAt.has(b.id) && (droppedAt.get(b.id) !== b.cy * world.w + b.cx || (rivalMoved.has(b.id) && inBlast(world, b, px, py))));
       // Set off early: the bomb that caught it went off before its fuse ran out, because a rival's bomb reached
       // it, and that rival's bomb was dropped, kicked or thrown after this one was dropped. (A rival's bomb that
       // was lying there already, and went off when its own fuse said, it should have allowed for.)
@@ -156,7 +198,7 @@ export function playMatch(seed: number, levels: (BotLevel | null)[], maxTicks: n
     }
     if (stopWhenDecided && world.over) break;
   }
-  return { fate, when, winner: world.over ? world.over.winner : -2, ticks: t, by };
+  return { fate, when, winner: world.over ? world.over.winner : -2, ticks: t, by, use };
 }
 
 /** Would a bomb at (b.cx, b.cy) reach tile (x, y)? Blocks and bricks stop a blast. */
@@ -242,7 +284,40 @@ if (process.argv[1] && process.argv[1].endsWith('cpu-matches.ts')) {
   const EARLY = 15 * TICK_HZ;
   const early = (o: Outcome, i: number): boolean => o.fate[i] === 'crushed' && STOP - o.when[i] > EARLY;
   const secs = (ticks: number): string => `${(ticks / TICK_HZ).toFixed(0)} s`;
-  if (process.argv[2] === 'versus') {
+  if (process.argv[2] === 'duel') {
+    // One against one, each pairing of a level against one below or level with it, the two taking each corner
+    // in turn: how often does the better one knock the other out, and how, and what does it use to do it?
+    const N = Number(process.argv[3] ?? 60);
+    const pairs: [BotLevel, BotLevel][] = [['hard', 'beginner'], ['hard', 'normal'], ['hard', 'hard'], ['normal', 'beginner']];
+    console.log(`One against one, ${N} rounds each, a whole round with the timer and the falling blocks:\n`);
+    console.log('pairing'.padEnd(20) + 'won'.padStart(10) + 'lost'.padStart(10) + 'by a blast'.padStart(12) + 'before 0:00'.padStart(13) + 'time to win'.padStart(13) + 'draw'.padStart(6) + 'open'.padStart(6) + 'blasted itself'.padStart(16) + '  first player: bombs, most out, kicks, throws, flights, drops (per round)');
+    for (const [a, b] of pairs) {
+      let won = 0, lost = 0, blast = 0, early0 = 0, time = 0, draw = 0, open = 0, self = 0;
+      const u: Use = { placed: 0, most: 0, kicks: 0, throws: 0, flights: 0, drops: 0 };
+      for (let s = 1; s <= N; s++) {
+        const me = s % 2;
+        const o = playMatch(s, me === 0 ? [a, b] : [b, a], MAX);
+        const them = 1 - me;
+        if (o.winner === me) {
+          won++;
+          time += o.ticks;
+          if (o.fate[them] === 'other') blast++;
+          if (o.fate[them] === 'other' && o.when[them] < ROUND_TICKS) early0++;
+        } else if (o.winner === them) lost++;
+        else if (o.winner === -1) draw++;
+        else open++;
+        if (o.fate[me] === 'self') self++;
+        u.placed += o.use[me].placed;
+        u.most += o.use[me].most;
+        u.kicks += o.use[me].kicks;
+        u.throws += o.use[me].throws;
+        u.flights += o.use[me].flights;
+        u.drops += o.use[me].drops;
+      }
+      const per = (n: number): string => (n / N).toFixed(1);
+      console.log(`${LEVELS[a].label} v ${LEVELS[b].label}`.padEnd(20) + `${won}`.padStart(10) + `${lost}`.padStart(10) + `${blast}`.padStart(12) + `${early0}`.padStart(13) + (won ? secs(time / won) : '-').padStart(13) + `${draw}`.padStart(6) + `${open}`.padStart(6) + `${self}`.padStart(16) + `  ${per(u.placed)}, ${per(u.most)}, ${per(u.kicks)}, ${per(u.throws)}, ${per(u.flights)}, ${per(u.drops)}`);
+    }
+  } else if (process.argv[2] === 'versus') {
     // The stand-in for a casual human is the Beginner CPU player: slow to notice bombs and slow to act.
     const N = 80;
     console.log(`Three CPU players of one level against one slow, careless player (a Beginner CPU player), ${N} rounds:\n`);

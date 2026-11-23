@@ -155,8 +155,12 @@ for (const level of BOT_LEVELS) {
 for (const level of BOT_LEVELS) {
   const w = createWorld({ roundTicks: 0, seed: 4, players: [0, 1, 2, 3].map((i) => ({ colorId: String(i) })) });
   const bots = [0, 1, 2, 3].map((i) => createBot(i, level, 4));
-  for (let t = 0; t < 20 * TICK_HZ; t++) step(w, bots.map((b) => botInput(w, b)));
-  assert.ok(w.players.every((p) => p.alive), `${level}: all four still in after 20 seconds`);
+  for (let t = 0; t < 20 * TICK_HZ; t++) {
+    step(w, bots.map((b) => botInput(w, b)));
+    // (Hard comes for the others from the start since 23 November 2026, so one may well be out by now: by a rival)
+    for (const e of w.events) if (e.type === 'death') assert.notEqual(e.by, e.player, `${level}: player ${e.player} blasted itself at ${(t / TICK_HZ).toFixed(1)} s`);
+  }
+  if (level !== 'hard') assert.ok(w.players.every((p) => p.alive), `${level}: all four still in after 20 seconds`);
 }
 
 // 12. a cloned world is a separate world
@@ -358,5 +362,64 @@ for (const level of ['hard'] as BotLevel[]) {
       step(w, bots.map((bot) => botInput(w, bot)));
       for (const e of w.events) if (e.type === 'death') assert.notEqual(e.by, e.player, 'nobody is caught by its own bomb');
     }
+  }
+}
+
+// 13. Hard uses its kit on a rival (23 November 2026). Each in an open arena, against a rival who stands still.
+{
+  /** player 0 (Hard) and player 1 put where wanted, with the kit given */
+  const setUp = (me: [number, number], them: [number, number], kit: (w: World) => void): World => {
+    const w = mk();
+    const [a, b] = w.players;
+    [a.x, a.y] = me;
+    [b.x, b.y] = them;
+    kit(w);
+    return w;
+  };
+  const play = (w: World, seconds: number, seen: (w: World) => void): void => {
+    const bot = createBot(0, 'hard', 5);
+    for (let t = 0; t < seconds * TICK_HZ && !w.over; t++) {
+      step(w, [botInput(w, bot)]);
+      seen(w);
+    }
+  };
+
+  // with the glove: a rival three tiles away, that a bomb dropped where it stands would not reach, gets one thrown onto them
+  {
+    const w = setUp([3, 3], [3, 6], (w) => (w.players[0].canGrab = true));
+    let thrown = false;
+    play(w, 6, (w) => {
+      if (w.events.some((e) => e.type === 'throw')) thrown = true;
+    });
+    assert.ok(thrown, 'Hard throws a bomb at a rival it cannot bomb from where it stands');
+    assert.ok(w.players[0].alive, 'and is still in afterwards');
+    assert.ok(!w.players[1].alive, 'and it got them');
+  }
+
+  // with the boot: a rival far down an open lane gets a bomb dropped and kicked down the lane at them
+  {
+    const w = setUp([1, 1], [9, 1], (w) => (w.players[0].canKick = true));
+    let kicked = false;
+    play(w, 6, (w) => {
+      if (w.events.some((e) => e.type === 'kick')) kicked = true;
+    });
+    assert.ok(kicked, 'Hard kicks a bomb down the lane at a rival beyond its blast');
+    assert.ok(w.players[0].alive, 'and is still in afterwards');
+    assert.ok(!w.players[1].alive, 'and it got them');
+  }
+
+  // knows what it has enough of: a blast power-up is worth walking to with a short blast, not with the longest
+  for (const [fire, wanted] of [[1, true], [8, false]] as const) {
+    const w = setUp([1, 1], [13, 11], (w) => {
+      w.players[0].fire = fire;
+      w.items.push({ cx: 3, cy: 1, kind: 'fire', age: 0 });
+    });
+    const bot = createBot(0, 'hard', 5);
+    let went = false;
+    for (let t = 0; t < 2 * TICK_HZ; t++) {
+      step(w, [botInput(w, bot)]);
+      if (bot.goal === 'item') went = true;
+    }
+    assert.equal(went, wanted, `blast ${fire}: ${wanted ? 'goes for' : 'leaves'} a blast power-up`);
   }
 }

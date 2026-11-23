@@ -69,6 +69,11 @@ import {
   AIM_STEPS,
   planeTurn,
   dropLanding,
+  CARRY_FUSE_TICKS,
+  THROW_TILES,
+  MAX_FIRE,
+  MAX_BOMBS,
+  MAX_SPEED_ITEMS,
 } from './sim';
 
 // ---------------------------------------------------------------- levels
@@ -147,6 +152,28 @@ export interface LevelSpec {
    * has to (there is nothing on screen saying where a bomb will land)
    */
   carry: number;
+  /**
+   * knows what it has enough of: a power-up it already has plenty of is worth less, one it cannot use any more
+   * (blast or speed at the most there is, bombs at eight) nothing, so it spends the round on rivals, not shopping
+   */
+  kitSense: boolean;
+  /**
+   * bores its way to its rivals: a spot to blast bricks from is worth up to this much more (as a share) the
+   * nearer it is to the nearest rival than where it stands, counting the way through bricks (0: bricks are
+   * bricks wherever they are)
+   */
+  tunnel: number;
+  /**
+   * plays bombs together: keeps looking for a bomb that would shut a rival in while it is running from a
+   * blast itself (one dropped on the way out, set off early by the blast it is running from), and looks for
+   * the bomb that closes a rival's last way out of bombs already lying there, not only bombs that reach them
+   */
+  combos: boolean;
+  /**
+   * with the glove: drops a bomb, lifts it and throws it (it lands THROW_TILES on, over anything in the way)
+   * where it would leave a rival no way out, or onto a rival it cannot reach with a bomb where it stands
+   */
+  throwAttack: boolean;
 }
 
 export const LEVELS: Record<BotLevel, LevelSpec> = {
@@ -176,6 +203,10 @@ export const LEVELS: Record<BotLevel, LevelSpec> = {
     lead: 0,
     slop: 3,
     carry: 0.9,
+    kitSense: false,
+    tunnel: 0,
+    combos: false,
+    throwAttack: false,
   },
   normal: {
     label: 'Normal',
@@ -203,16 +234,20 @@ export const LEVELS: Record<BotLevel, LevelSpec> = {
     lead: 0.4,
     slop: 2,
     carry: 0.85,
+    kitSense: false,
+    tunnel: 0,
+    combos: false,
+    throwAttack: false,
   },
   hard: {
     label: 'Hard',
-    blurb: 'Reacts at once, hunts you, sets traps, and will not let itself be cornered.',
+    blurb: 'Comes for you from the start, kicks and throws bombs at you, sets traps, and will not let itself be cornered.',
     think: 4,
     hesitate: [0, 0],
     notice: 0,
     margin: 4,
     maxBombs: 8,
-    hunt: 1.6,
+    hunt: 4,
     attack: 1,
     attackReach: 8,
     killShot: true,
@@ -230,12 +265,16 @@ export const LEVELS: Record<BotLevel, LevelSpec> = {
     lead: 1,
     slop: 0.8,
     carry: 0.6,
+    kitSense: true,
+    tunnel: 3,
+    combos: true,
+    throwAttack: true,
   },
 };
 
 // ---------------------------------------------------------------- the bot's memory
 
-export type GoalKind = 'none' | 'item' | 'brick' | 'hunt' | 'evade' | 'retreat';
+export type GoalKind = 'none' | 'item' | 'brick' | 'hunt' | 'kick' | 'evade' | 'retreat';
 
 export interface Bot {
   /** which player it controls */
@@ -268,6 +307,8 @@ export interface Bot {
   aimOff: [number, number];
   aimCarry: number;
   aimFor: number;
+  /** running from a blast: the tile it last looked for a bomb to drop on the way out from (combos), -1 none */
+  shotFrom: number;
 }
 
 export function createBot(id: number, level: BotLevel, seed: number): Bot {
@@ -278,6 +319,7 @@ export function createBot(id: number, level: BotLevel, seed: number): Bot {
     path: [],
     goal: 'none',
     goalTile: -1,
+    shotFrom: -1,
     thinkIn: 0,
     wait: 0,
     script: [],
@@ -817,8 +859,18 @@ function bombEffect(world: World, D: Danger, cx: number, cy: number, range: numb
 }
 
 /** How much each power-up is worth going out of the way for. */
-function itemWorth(p: Player, kind: ItemKind): number {
+function itemWorth(p: Player, kind: ItemKind, spec: LevelSpec): number {
   if (kind === 'curse' || p.zombie) return 0; // never worth walking to (and a zombie cannot pick power-ups up)
+  if (spec.kitSense) {
+    // enough of a thing: a little worth having, the most there is: nothing (it would walk to it for nothing)
+    if (kind === 'fire') return p.fire >= MAX_FIRE ? 0 : p.fire >= 4 ? 0.8 : 3;
+    if (kind === 'bomb') return p.bombsMax >= MAX_BOMBS ? 0 : p.bombsMax >= 4 ? 0.8 : 3;
+    if (kind === 'speed') return p.speed >= MAX_SPEED_ITEMS ? 0 : p.speed >= 3 ? 0.6 : 2.6;
+    // the tools it fights with: worth more than one more bomb
+    if (kind === 'kick') return p.canKick ? 0.1 : 3.5;
+    if (kind === 'grab') return p.canGrab ? 0.1 : 3.2;
+    if (kind === 'laptop') return p.laptop ? 0.1 : 3.5;
+  }
   if (kind === 'shield') return p.shieldTicks > 10 * TICK_HZ ? 0.5 : 3.4;
   if (kind === 'kick') return p.canKick ? 0.2 : 2;
   if (kind === 'grab') return p.canGrab ? 0.2 : 1.6;
@@ -928,6 +980,15 @@ export function botInput(world: World, bot: Bot): PlayerInput {
 /** Its own tile is going to be blasted: get off it. */
 function flee(c: Ctx): PlayerInput {
   const { world, me, bot, spec, D, walls, own } = c;
+  // on the way out, a bomb here might shut a rival in (looked for once on each tile it crosses)
+  if ((spec.combos || spec.kickAttack) && bot.shotFrom !== c.S) {
+    bot.shotFrom = c.S;
+    // (a bomb next door with a rival down the lane beyond it, about to go off: kick it at them on the way)
+    const kick = spec.kickAttack ? kickShot(c) : null;
+    if (kick) return kick;
+    const act = spec.combos ? runShot(c) : null;
+    if (act) return act;
+  }
   advance(world, me, bot.path);
   if (!bot.path.length || bot.doing !== 'flee' || !pathOk(world, me, D, bot.path, Math.min(spec.margin, 2), own, true)) {
     bot.path = [];
@@ -973,6 +1034,149 @@ function flee(c: Ctx): PlayerInput {
     return NONE;
   }
   return go(d);
+}
+
+/** A bomb lying next to it with a rival further along the lane: kick it at them, if that plays out safely. */
+function kickShot(c: Ctx): PlayerInput | null {
+  const { world, me, bot, S } = c;
+  if (!me.canKick || me.carrying) return null;
+  const sx = S % world.w;
+  const sy = (S - sx) / world.w;
+  const enemies = world.players.filter((p) => p.alive && p.id !== me.id && !(me.zombie && p.zombie) && !allies(me, p));
+  for (const d of shuffled(bot.rng)) {
+    const b = groundBombAt(world, sx + DX[d], sy + DY[d]);
+    if (!b || b.slide || !enemyAlong(c, enemies, sx + DX[d], sy + DY[d], d)) continue;
+    const prefix = tryOut(c, kickDriver(c, d));
+    if (prefix) {
+      bot.script = prefix;
+      bot.doing = 'script';
+      return bot.script.shift()!;
+    }
+  }
+  return null;
+}
+
+/**
+ * With the boot: a rival down an open lane from here, beyond its blast's reach. Drop a bomb, step back off
+ * it the other way and walk into it, kicking it down the lane. Carried out only if it plays out safely.
+ */
+function dropKick(c: Ctx, enemies: Player[]): PlayerInput | null {
+  const { world, me, bot, D, S } = c;
+  const sx = S % world.w;
+  const sy = (S - sx) / world.w;
+  const here = bombEffect(world, D, sx, sy, me.fire).tiles;
+  for (const d of shuffled(bot.rng)) {
+    const back = ((d + 1) ^ 1) - 1; // (1 up <-> 2 down, 3 left <-> 4 right)
+    if (tile(world, sx + DX[back], sy + DY[back]) !== FLOOR || groundBombAt(world, sx + DX[back], sy + DY[back])) continue;
+    if (!enemyAlong(c, enemies, sx, sy, d as Dir)) continue;
+    if (enemies.some((e) => here.includes(tileOf(world, e)))) continue; // (a bomb dropped here does it: no need)
+    let stepped = false;
+    let id = -1;
+    const prefix = tryOut(c, (w, m, t) => {
+      if (t === 0) return NONE;
+      if (t === 1) return { dir: 0, a: true, b: false };
+      if (id < 0) {
+        const mine = w.bombs.find((o) => o.owner === me.id && o.cx === sx && o.cy === sy && o.state === 'ground');
+        if (!mine) return 'fail';
+        id = mine.id;
+      }
+      const b = w.bombs.find((o) => o.id === id);
+      if (!b) return 'fail';
+      if (b.slide) return 'done';
+      if (!stepped && tileOf(w, m) !== S) stepped = true;
+      return go((stepped ? d : back) as Dir);
+    });
+    if (prefix) {
+      bot.script = prefix;
+      bot.doing = 'script';
+      bot.path = [];
+      return bot.script.shift()!;
+    }
+  }
+  return null;
+}
+
+/**
+ * Where a bomb thrown from (sx, sy) the way d comes down: THROW_TILES on, bouncing on a tile at a time while
+ * the tile is taken (the same rule as moveBombs in sim.ts). -1 if nowhere.
+ */
+function throwLanding(world: World, sx: number, sy: number, d: Dir): number {
+  for (let dist = THROW_TILES; dist < THROW_TILES + world.w + world.h; dist++) {
+    const lx = wrap(sx + DX[d] * dist, world.w);
+    const ly = wrap(sy + DY[d] * dist, world.h);
+    if (tile(world, lx, ly) === FLOOR && !groundBombAt(world, lx, ly)) return ly * world.w + lx;
+  }
+  return -1;
+}
+
+/**
+ * With the glove: a bomb dropped, lifted and thrown (it lands THROW_TILES on, over blocks and bricks).
+ * First a throw that would leave a rival no way out; failing that, one whose blast would catch a rival this
+ * spot's own bomb could not. Carried out only if it plays out safely on a copy of the world.
+ */
+function throwShot(c: Ctx, enemies: Player[]): PlayerInput | null {
+  const { world, me, bot, D, S } = c;
+  const sx = S % world.w;
+  const sy = (S - sx) / world.w;
+  const here = bombEffect(world, D, sx, sy, me.fire).tiles;
+  const kills: Dir[] = [];
+  const hits: Dir[] = [];
+  for (const d of shuffled(bot.rng)) {
+    const L = throwLanding(world, sx, sy, d);
+    if (L < 0) continue;
+    const lx = L % world.w;
+    const ly = (L - lx) / world.w;
+    const fx = bombEffect(world, D, lx, ly, me.fire).tiles;
+    const what = [{ cx: lx, cy: ly, range: me.fire, fuse: CARRY_FUSE_TICKS - 3 }];
+    for (const e of enemies) {
+      const at = tileOf(world, e);
+      if (!fx.includes(at)) continue;
+      if (boxedIn(c, e, what, L)) kills.push(d);
+      else if (!here.includes(at)) hits.push(d);
+    }
+  }
+  for (const d of [...kills, ...hits]) {
+    const prefix = tryOut(c, (_w, m, t) => {
+      if (t === 0) return NONE; // (let go of everything, so the presses below are fresh)
+      if (t === 1) return { dir: 0, a: true, b: false };
+      if (t === 2) return m.activeBombs > me.activeBombs ? { dir: 0, a: false, b: true } : 'fail';
+      if (t === 3) return m.carrying ? go(d) : 'fail';
+      if (t === 4) return m.carrying ? { dir: 0, a: false, b: true } : 'fail';
+      return 'done';
+    });
+    if (prefix) {
+      bot.script = prefix;
+      bot.doing = 'script';
+      bot.path = [];
+      return bot.script.shift()!;
+    }
+  }
+  return null;
+}
+
+/**
+ * Running from a blast, with bombs to spare: would one dropped here leave a rival no way out? (Often it would
+ * go off with the blast it is running from, chained, long before its own fuse: there is no time to get clear
+ * of it.) Dropped only if placeBomb finds it a way out of both and plays it forward on a copy of the world.
+ */
+function runShot(c: Ctx): PlayerInput | null {
+  const { world, me, bot, spec, S } = c;
+  const sx = S % world.w;
+  const sy = (S - sx) / world.w;
+  if (me.carrying || me.activeBombs >= Math.min(me.bombsMax, spec.maxBombs) || groundBombAt(world, sx, sy)) return null;
+  if ((bot.avoid.get(S) ?? 0) > world.tick) return null;
+  const what = [{ cx: sx, cy: sy, range: me.fire, fuse: FUSE_TICKS }];
+  for (const e of world.players) {
+    if (!e.alive || e.id === me.id || allies(me, e) || (me.zombie && e.zombie)) continue;
+    if (Math.abs(Math.round(e.x) - sx) + Math.abs(Math.round(e.y) - sy) > me.fire + 3) continue;
+    if (!boxedIn(c, e, what, S)) continue;
+    const keep = bot.path;
+    const act = placeBomb(c);
+    if (act) return act;
+    bot.path = keep;
+    return null;
+  }
+  return null;
 }
 
 /** Nothing is about to hit its tile: follow the plan, or make one. */
@@ -1163,6 +1367,19 @@ function decide(c: Ctx): PlayerInput | null {
     }
   }
 
+  // with the boot: a rival down an open lane, further than its blast reaches: drop a bomb, step back off it and
+  // kick it down the lane at them (it slides until it stops, right in front of them)
+  if (spec.kickAttack && me.canKick && canBomb && bot.rng() < spec.attack) {
+    const act = dropKick(c, enemies);
+    if (act) return act;
+  }
+
+  // with the glove: throw a bomb where it shuts a rival in, or onto one out of reach of a bomb dropped here
+  if (spec.throwAttack && canBomb && me.canGrab && !me.laptop && bot.rng() < spec.attack) {
+    const act = throwShot(c, enemies);
+    if (act) return act;
+  }
+
   if (canBomb) {
     const fx = bombEffect(world, D, sx, sy, me.fire);
     let want = false;
@@ -1276,7 +1493,7 @@ function chooseGoal(c: Ctx, reach: Reach, enemies: Player[]): Goal | null {
     if (!best || score > best.score) best = { kind, tile: t, score };
   };
 
-  for (const it of world.items) if (it.kind !== 'curse') offer('item', it.cy * world.w + it.cx, itemWorth(me, it.kind) * 4);
+  for (const it of world.items) if (it.kind !== 'curse') offer('item', it.cy * world.w + it.cx, itemWorth(me, it.kind, spec) * 4);
 
   // a block is due on its own tile (not soon enough to run from): the nearest tile that will last longer is worth going to
   if (hasDanger(D, S)) {
@@ -1289,6 +1506,9 @@ function chooseGoal(c: Ctx, reach: Reach, enemies: Player[]): Goal | null {
   }
 
   const mayBomb = !((bot.avoid.get(S) ?? 0) > world.tick);
+  // (boring through to a rival: how far each tile is from the nearest one, bricks counted as slow going)
+  const toRival = spec.tunnel > 0 && enemies.length ? rivalDistance(world, enemies) : null;
+  const here = toRival ? toRival[S] : 0;
   for (let t = 0; t < reach.time.length; t++) {
     if (reach.time[t] === Infinity) continue;
     if ((bot.avoid.get(t) ?? 0) > world.tick || (t === S && !mayBomb)) continue;
@@ -1296,7 +1516,8 @@ function chooseGoal(c: Ctx, reach: Reach, enemies: Player[]): Goal | null {
     const fx = bombEffect(world, D, x, (t - x) / world.w, me.fire);
     if (!fx.bricks) continue;
     if (spec.spareItems && fx.items) continue;
-    offer('brick', t, 0.8 + 0.4 * fx.bricks);
+    const nearer = toRival && here > 0 && here < Infinity ? Math.max(0, (here - toRival[t]) / here) : 0;
+    offer('brick', t, (0.8 + 0.4 * fx.bricks) * (1 + spec.tunnel * nearer));
   }
 
   // spots from which a bomb would reach a player; far more if it would leave them no way out
@@ -1314,7 +1535,66 @@ function chooseGoal(c: Ctx, reach: Reach, enemies: Player[]): Goal | null {
     }
   }
   for (const t of trapTiles(c, reach, enemies)) if (!ruledOut(t)) offer('hunt', t, hunt * 14);
+
+  // with the boot: the spot behind a bomb lying in line with a rival, to kick it at them. That spot is in the
+  // bomb's own blast, so the usual check is not the one: it must get there in good time before the bomb
+  // goes off, with nothing else due on it meanwhile (the kick itself is played out before it is made)
+  if (spec.kickAttack && me.canKick) {
+    for (const b of world.bombs) {
+      if (b.state !== 'ground' || b.slide) continue;
+      for (let d = 1 as Dir; d <= 4; d++) {
+        const x = b.cx - DX[d];
+        const y = b.cy - DY[d];
+        if (tile(world, x, y) !== FLOOR || groundBombAt(world, x, y)) continue;
+        const t = y * world.w + x;
+        const time = reach.time[t];
+        if (!(time + 25 < b.fuse) || overlaps(D, t, time - 5, time + 15)) continue;
+        if (!enemyAlong(c, enemies, b.cx, b.cy, d)) continue;
+        const score = ((hunt * 6) / (time + SOON)) * (1 + spec.wobble * (bot.rng() - 0.5));
+        if (!best || score > best.score) best = { kind: 'kick', tile: t, score };
+      }
+    }
+  }
   return best;
+}
+
+/** a brick on the way counts as this many steps (the time it takes to blast it) */
+const BRICK_STEPS = 4;
+
+/**
+ * For every tile, how far it is from the nearest of these players, in steps, a brick on the way counting as
+ * BRICK_STEPS (Infinity behind solid blocks). Infinity where nothing leads.
+ */
+function rivalDistance(world: World, rivals: Player[]): number[] {
+  const n = world.w * world.h;
+  const dist: number[] = new Array(n).fill(Infinity);
+  // (buckets by distance: every step costs 1 or BRICK_STEPS, so this is a plain shortest-path search)
+  const buckets: number[][] = [[]];
+  for (const r of rivals) {
+    const i = tileOf(world, r);
+    if (dist[i] === 0) continue;
+    dist[i] = 0;
+    buckets[0].push(i);
+  }
+  for (let d = 0; d < buckets.length; d++) {
+    for (const i of buckets[d] ?? []) {
+      if (dist[i] !== d) continue;
+      const x = i % world.w;
+      const y = (i - x) / world.w;
+      for (let k = 1; k <= 4; k++) {
+        const nx = x + DX[k];
+        const ny = y + DY[k];
+        const kind = tile(world, nx, ny);
+        if (kind === HARD) continue;
+        const j = ny * world.w + nx;
+        const nd = d + (kind === SOFT ? BRICK_STEPS : 1);
+        if (nd >= dist[j]) continue;
+        dist[j] = nd;
+        (buckets[nd] ??= []).push(j);
+      }
+    }
+  }
+  return dist;
 }
 
 /**
@@ -1327,8 +1607,26 @@ function trapTiles(c: Ctx, reach: Reach, enemies: Player[]): number[] {
   const out: number[] = [];
   if (spec.killShot && !me.carrying && me.activeBombs < Math.min(me.bombsMax, spec.maxBombs)) {
     for (const e of enemies) {
+      const at = tileOf(world, e);
       const fx = bombEffect(world, D, Math.round(e.x), Math.round(e.y), me.fire);
       const near = fx.tiles.filter((t) => t !== S && reach.time[t] < 80 && !c.walls[t]).sort((a, b) => reach.time[a] - reach.time[b]).slice(0, 5);
+      // (combos: a rival already in a blast's way, with a way out, can be shut in by a bomb on that way out,
+      // or one whose blast covers where it leads: the spots from which that could be done are tried too)
+      if (spec.combos && hasDanger(D, at)) {
+        const theirs = explore(world, e, D, 2, c.walls);
+        const tried = new Set(near);
+        for (const g of escapeTargets(D, theirs, 2, 4)) {
+          const route = pathTo(theirs, g);
+          const fromG = bombEffect(world, D, g % world.w, (g - (g % world.w)) / world.w, me.fire).tiles;
+          for (const t of [...route, ...fromG]) {
+            if (tried.has(t) || t === S || t === at || !(reach.time[t] < 70) || c.walls[t]) continue;
+            tried.add(t);
+            near.push(t);
+          }
+        }
+        near.sort((a, b) => reach.time[a] - reach.time[b]);
+        near.length = Math.min(near.length, 12);
+      }
       for (const t of near) {
         const x = t % world.w;
         if (boxedIn(c, e, [{ cx: x, cy: (t - x) / world.w, range: me.fire, fuse: FUSE_TICKS }], t)) out.push(t);
