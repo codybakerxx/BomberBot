@@ -38,9 +38,19 @@ The picture's tick is read off a clock (`frame` in `predict.ts`). Frames come on
   to the lobby). Everyone has **Leave the room**.
 - **Rounds are played out.** Nobody gets a round at random, as in solo play. When a round is decided, only the
   host has **Next round** (or **Rematch** and **Lobby** once the match is won). The others see who starts it.
-- **Dropped connections**: the page tries again for a minute, with a "Reconnecting…" line at the top. The
-  robot stands still meanwhile and comes back where it is. Reloading the page goes straight back into the room.
-  A host gone for 12 seconds hands the room to the next person still in it.
+- **Dropped connections**: the page tries again, with a "Reconnecting…" line at the top, for 5 minutes of the
+  game being in view (time in another app does not count: a phone stops the page there). Coming back into view
+  it tries at once, and a connection that looks open but stays silent for 2.5 s is made again (`wake` in
+  online.ts). The robot stands still meanwhile and comes back where it is. Reloading the page goes straight back
+  into the room. A person away keeps their place in the lobby for 10 minutes (`AWAY_MS`; in a match, until it
+  ends, and across its end), with a grey dot on their card instead of the green one; a host gone 2 minutes
+  (`HOST_AWAY_MS`) hands the room to the next person still in it. While everyone is away the room wakes itself
+  every 20 s (`AWAKE_MS`, a Durable Object alarm) so it is still there when they come back. (The owner, 23
+  November 2026: leaving the app for a while disconnected you; it was 45 s in the lobby, 12 s for the host, the
+  page gave up after a minute counted from the drop, and anyone away when a match ended was let go.)
+- **The plane online** (fixed 23 November 2026): the server masked every input with `IN_ALL`, which was
+  2079, not a mask (31 + 32 × 64); it wiped the plane's steering, so a plane could not be steered online.
+  `IN_ALL` is now 4095 (`tests/room.test.ts` sends every aim through), `PROTOCOL` 9.
 - **Someone joining during a match** waits in the lobby (read-only) and plays from the next match.
 - The page opened as a file (as when it is sent to a phone) still plays online: it connects to the address above.
 

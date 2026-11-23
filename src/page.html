@@ -491,6 +491,9 @@
   .size-pick button[aria-pressed="true"] { color: #05060b; border-color: var(--accent); background: var(--accent); box-shadow: 0 2px 10px rgba(255, 197, 106, 0.3); }
   .size-pick button[aria-pressed="true"] small { color: rgba(5, 6, 11, 0.72); }
   #lobbyMatch.readonly .size-pick button { pointer-events: none; }
+  /* the Mode bubbles, under the map's panel: the same bubbles as the sizes, on the page's own background */
+  .mode-pick { margin: 2px 0 4px; }
+  .mode-pick small { white-space: nowrap; font-size: clamp(10px, 3.1vw, 11.5px); }
   #lobbyMatch.readonly .size-pick button:not([aria-pressed="true"]) { opacity: 0.45; }
   /* the lobby's top bar: back on the left, the mode in the very middle, the buttons on the right, all on one line */
   #lobby > .bar { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; }
@@ -703,6 +706,14 @@
   .slot.add svg { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; }
   .slot.add b { font-size: 14px; }
   .slot.guest { cursor: default; border-color: #4a6a9a; }
+  /* online: a dot at the card's top left, green while the person is connected, grey while away (the owner's ask) */
+  .slot .presence { position: absolute; top: 7px; left: 7px; width: 11px; height: 11px; border-radius: 50%; pointer-events: none; }
+  .slot .presence.on { background: #3ddc6b; box-shadow: 0 0 0 2px var(--panel), 0 0 8px rgba(61, 220, 107, 0.8); }
+  .slot .presence.away { background: #6b7280; box-shadow: 0 0 0 2px var(--panel); }
+  .slot .presence.pop { animation: dot-pop 0.5s cubic-bezier(0.3, 1.6, 0.5, 1) both; }
+  @keyframes dot-pop { from { transform: scale(0); } 60% { transform: scale(1.35); } to { transform: scale(1); } }
+  body.calm .slot .presence.pop { animation: none; }
+  @media (prefers-reduced-motion: reduce) { .slot .presence.pop { animation: none; } }
   .slot.join { grid-template-columns: 1fr; justify-items: center; align-content: center; gap: 6px; cursor: default; text-align: center; color: var(--ink-dim); background: transparent; border: 1.5px dashed #34405c; }
   .slot.join b { font: 600 13px/1.3 var(--font-body); letter-spacing: 0; }
   .slot.join .pada { width: 28px; height: 28px; display: grid; place-items: center; border-radius: 50%; font: 700 14px/1 var(--font-display); color: #0b1020; background: #7fd47f; }
@@ -1175,6 +1186,9 @@
           <div class="size-pick" id="sizePick" role="group" aria-label="Size"></div>
           <button class="go arena-start" id="arenaStart" type="button" data-pad="≡">Start</button>
         </div>
+        <!-- ready-made rules (the owner's ask, 23 November 2026): Classic, Hardcore, Random; a rule changed by hand: Custom -->
+        <div class="sec-head page-head"><span>Mode</span><span id="modeNow"></span></div>
+        <div class="size-pick mode-pick" id="modePick" role="group" aria-label="Mode"></div>
         <div class="sec-head page-head"><span>Rules</span><span class="host-tag">Host</span></div>
         <div class="opts" id="rules"></div>
         <button class="mini wide" id="rulesReset" type="button">Reset all settings to default</button>

@@ -22,7 +22,7 @@ import type { BotLevel } from './bot';
  * The version of these messages. A page says it in `hello`; the server turns away a page with another (one
  * left open from before an update), telling it to reload. Raise it whenever a message changes its meaning.
  */
-export const PROTOCOL = 8; // 3: the laptop's plane (steering in the inputs, planes and falling bombs in the world); 4: the plane slower, turning less, flying longer; 5: Power-ups (itemShare in the setup), and a custom mix is only which kinds; 6: Brick density (brickShare) and a switch for each kind (itemOn); 7: the area the falling blocks leave is a clean rectangle on every size (9 by 7 on Standard); 8: the plane with one bomb, 6 s, off towards the middle, turning tighter, and the blocks falling faster
+export const PROTOCOL = 9; // 3: the laptop's plane (steering in the inputs, planes and falling bombs in the world); 4: the plane slower, turning less, flying longer; 5: Power-ups (itemShare in the setup), and a custom mix is only which kinds; 6: Brick density (brickShare) and a switch for each kind (itemOn); 7: the area the falling blocks leave is a clean rectangle on every size (9 by 7 on Standard); 8: the plane with one bomb, 6 s, off towards the middle, turning tighter, and the blocks falling faster; 9: the input mask keeps the plane's steering (it was wiped), and the Mode bubbles (randomRules, rolledKey in the setup)
 
 /** Room codes: four letters, without the ones easily mixed up (I, O) or that spell words easily (vowels). */
 export const CODE_LETTERS = 'BCDFGHJKLMNPQRSTVWXZ';
@@ -60,8 +60,12 @@ export function readName(raw: unknown): string {
 export const IN_A = 8;
 export const IN_B = 16;
 export const IN_AIM = 32;
-/** Every bit an input can have. */
-export const IN_ALL = 31 + IN_AIM * AIM_STEPS;
+/**
+ * Every bit an input can have: the five low bits and the seven above them for the aim (plus one: 1 to 64). A
+ * mask, so all of its bits must be set: it was 31 + IN_AIM * AIM_STEPS (2079), which is not one, and the
+ * server's `& IN_ALL` wiped every aim but one; the plane could not be steered online (the owner, 23 November 2026).
+ */
+export const IN_ALL = IN_AIM * 128 - 1;
 export function packInput(p: PlayerInput | undefined): number {
   if (!p) return 0;
   const aim = p.aim !== undefined && Number.isInteger(p.aim) && p.aim >= 0 && p.aim < AIM_STEPS ? (p.aim + 1) * IN_AIM : 0;

@@ -7,11 +7,15 @@
  */
 import assert from 'node:assert';
 import { COLORS } from '../src/render';
-import { createWorld, ITEM_CHANCE, SOFT, step } from '../src/sim';
-import { Room, COLOR_IDS, LEAD_MS, TICK_MS, type Conn, type Member } from '../src/room';
+import { createWorld, ITEM_CHANCE, SOFT, step, AIM_STEPS, MAX_BOMBS, MAX_FIRE, MAX_SPEED_ITEMS } from '../src/sim';
+import { Room, COLOR_IDS, LEAD_MS, TICK_MS, AWAY_MS, HOST_AWAY_MS, type Conn, type Member } from '../src/room';
 import {
   decodeWorld,
   packInput,
+  IN_ALL,
+  newQueue,
+  takeInput,
+  tickText,
   readCode,
   roundWorld,
   tickCodes,
@@ -23,7 +27,7 @@ import {
   type ServerMsg,
 } from '../src/net';
 import { makeRng } from '../src/sim';
-import { ARENAS, MAPS, ITEM_SHARE_STEP, type MatchSetup, defaultRules, itemChances, defaultSetup, dropOnto, fixedSize, lineUp, pickTeam, readSetup, recolour, rollCpus, seatLast, seating, setTeamSize, settleTeams, evenTeams, startTeams, summary, swapTeams, canEven, RULE_GROUPS, resetGroup, groupIsDefault, groupValues, SOUND_GROUPS, SOUND_NAMES, teamChoices, teamSizes, teamsFor, wholeTile, worldConfig } from '../src/setup';
+import { ARENAS, MAPS, ITEM_SHARE_STEP, type MatchSetup, defaultRules, itemChances, defaultSetup, dropOnto, fixedSize, lineUp, pickTeam, readSetup, recolour, rollCpus, seatLast, seating, setTeamSize, settleTeams, evenTeams, startTeams, summary, swapTeams, canEven, RULE_GROUPS, resetGroup, groupIsDefault, groupValues, modeOf, hardcoreRules, rollRules, rulesKey, settleMode, ROUND_STEP, SOUND_GROUPS, SOUND_NAMES, teamChoices, teamSizes, teamsFor, wholeTile, worldConfig } from '../src/setup';
 import { BOT_LEVELS } from '../src/bot';
 import { DANCE_IDS } from '../src/dances';
 import type { World } from '../src/sim';
@@ -176,6 +180,16 @@ for (let i = 0; i < 4; i++) assert.ok(readCode(makeCode(rng)), 'a made code is a
 
 // inputs
 for (let v = 0; v < 32; v++) if ((v & 7) <= 4) assert.strictEqual(packInput(unpackInput(v)), v);
+// a plane's steering gets through every step to the server's world: packed, masked, queued, taken, sent on
+// as a tick's text (the mask once wiped every aim but one: the plane could not be steered online)
+for (let aim = 0; aim < AIM_STEPS; aim++) {
+  const v = packInput({ dir: 4, a: false, b: true, aim });
+  assert.strictEqual(v & IN_ALL, v, `aim ${aim} survives the mask`);
+  const q = newQueue();
+  q.pending.push({ k: 5, v: v & IN_ALL, n: 1 });
+  const taken = takeInput(q, 5);
+  assert.strictEqual(unpackInput(tickCodes(tickText([0, taken]))[1]).aim, aim, `aim ${aim} reaches the world`);
+}
 
 /** A page: its connection, what it was sent, and its own copy of the round. */
 class Page {
@@ -265,6 +279,9 @@ const me = info.members.find((m) => m.id === info.you)!;
 assert.notStrictEqual(me.colorId, 'blue', 'two people never wear the same robot');
 assert.strictEqual(me.name, 'bSam/b', 'names lose anything that could be markup');
 assert.notStrictEqual(info.host, info.you);
+// (the robot they got was a CPU player's: it moved to a colour nobody had. Never two of one robot)
+const worn = [...info.members.map((m) => m.colorId), ...info.setup.cpus.map((c) => c.colorId)];
+assert.strictEqual(new Set(worn).size, worn.length, `every robot in the room differs: ${worn.join(' ')}`);
 
 // the friend takes a CPU player's robot: the CPU player gets the friend's
 const cpuColour = info.setup.cpus[0].colorId;
@@ -386,7 +403,13 @@ assert.ok(!info.playing && info.members.every((m) => !m.ready));
 // a host gone for a while hands the room on
 room.disconnect(host.member!, host.conn, now);
 room.housekeep(now + 20_000);
+assert.notStrictEqual(back.last('room')!.host, back.last('room')!.you, 'a host away for a short while (another app) is still the host');
+assert.ok(back.last('room')!.members.some((m) => !m.on), 'and is shown as away');
+room.housekeep(now + HOST_AWAY_MS + 1000);
 assert.strictEqual(back.last('room')!.host, back.last('room')!.you, 'the friend hosts now');
+assert.strictEqual(back.last('room')!.members.length, 2, 'the old host keeps their place for a good while yet');
+room.housekeep(now + AWAY_MS + 1000);
+assert.strictEqual(back.last('room')!.members.length, 1, 'and is let go in the end');
 
 // Randomize CPUs online, on the Wild West map: the server picks, the seats tell every page, the lobby's cards stay
 {
@@ -715,4 +738,55 @@ console.log('room checks passed');
   assert.equal(s.roundSecs, ARENAS.find((a) => a.id === 'compact')!.roundSecs);
   for (const g of groups) resetGroup(s, g, me);
   assert.deepStrictEqual(s, all, 'all five resets together are Reset all');
+}
+
+// The Match page's modes (the owner's ask, 23 November 2026): Classic, Hardcore and Random; a rule changed by
+// hand makes it Custom; Random's rules are picked again for every new match, on this screen and online
+{
+  const me = COLORS[0].id;
+  const s = defaultSetup(me);
+  assert.equal(modeOf(s, me), 'classic', 'a new setup is Classic');
+  s.firstTo = 3;
+  assert.equal(modeOf(s, me), 'classic', 'Rounds to win is not part of a mode');
+  const hard = hardcoreRules(s, me);
+  assert.equal(modeOf(hard, me), 'hardcore');
+  assert.ok(hard.startOn && hard.startBombs === MAX_BOMBS && hard.startFire === MAX_FIRE && hard.startSpeed === MAX_SPEED_ITEMS, 'Hardcore: everything maxed');
+  assert.equal(hard.firstTo, 3, 'and Rounds to win kept');
+  hard.lives = 2;
+  assert.equal(modeOf(hard, me), 'custom', 'a rule changed by hand: Custom');
+  // Random: picked, shown (the rules themselves, not a word), and different each time
+  const rng = makeRng(11);
+  const keys = new Set<string>();
+  for (let i = 0; i < 30; i++) {
+    const r = rollRules(s, rng);
+    assert.equal(modeOf(r, me), 'random');
+    assert.equal(r.firstTo, 3, 'Random keeps Rounds to win');
+    assert.ok(r.roundSecs >= 45 && r.roundSecs <= 180 && r.roundSecs % ROUND_STEP === 0, `round length ${r.roundSecs}`);
+    assert.ok(r.brickShare % 5 === 0 && r.itemShare % 5 === 0 && r.lives >= 1 && r.lives <= 3);
+    // it reads back the same, as a saved setup or one sent to the server would be
+    const back = readSetup(JSON.parse(JSON.stringify(r)), me, COLORS.map((c) => c.id));
+    assert.equal(modeOf(back, me), 'random', 'Random survives being saved and sent');
+    assert.equal(rulesKey(back), rulesKey(r));
+    keys.add(rulesKey(r));
+  }
+  assert.ok(keys.size > 25, 'different rules each time');
+  const r = rollRules(s, rng);
+  r.brickShare = r.brickShare === 100 ? 95 : r.brickShare + 5;
+  settleMode(r);
+  assert.ok(!r.randomRules && modeOf(r, me) === 'custom', 'a rule changed by hand after a roll: Custom, and no more rolling');
+  // online: a rematch and going back to the lobby pick new rules; the host's Start plays the ones shown
+  const room3 = new Room('KLMN', makeRng(5));
+  const h = new Page('h3');
+  h.member = room3.hello(h.conn, { t: 'hello', id: 'h3', name: 'Cody', colorId: 'gold', dance: 'party', create: true, pv: PROTOCOL }, now);
+  const shown = rollRules(h.last('room')!.setup, makeRng(9));
+  room3.message(h.member!, { t: 'setup', setup: shown }, now);
+  assert.equal(rulesKey(h.last('room')!.setup), rulesKey(shown), 'the room keeps the rules picked');
+  room3.message(h.member!, { t: 'start' }, now);
+  assert.equal(rulesKey(h.last('room')!.setup), rulesKey(shown), 'Start plays the rules shown');
+  room3.message(h.member!, { t: 'restart' }, now);
+  const second = h.last('room')!.setup;
+  assert.ok(second.randomRules && rulesKey(second) !== rulesKey(shown), 'Restart: new rules, shown to everyone');
+  room3.message(h.member!, { t: 'lobby' }, now);
+  const third = h.last('room')!.setup;
+  assert.ok(third.randomRules && rulesKey(third) !== rulesKey(second), 'back in the lobby: new rules for the next match');
 }

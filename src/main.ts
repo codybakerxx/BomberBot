@@ -21,7 +21,7 @@ import { readDance, type DanceId } from './dances';
 import { createPadNav } from './padnav';
 import { PAD } from './bindings';
 import { createRemap } from './remap';
-import { CpuSlot, Guest, ITEM_NAMES, MatchSetup, Prefs, SHARPNESS, SOUND_GROUPS, SOUND_NAMES, TEAMS, arenaOf, clockText, defaultPrefs, defaultSetup, load, readPrefs, readSetup, rollCpus, save, wholeTile, worldConfig } from './setup';
+import { CpuSlot, Guest, ITEM_NAMES, MatchSetup, Prefs, SHARPNESS, SOUND_GROUPS, SOUND_NAMES, TEAMS, arenaOf, clockText, defaultPrefs, defaultSetup, load, readPrefs, readSetup, rollCpus, rollRules, save, wholeTile, worldConfig } from './setup';
 import { BOMB_ICON, Opt, answerConfirm, choice, confirmFirst, confirmOpen, group, heading, mount, note, slider, toggle, wireConfirm, wireFlash } from './ui';
 import { Hand, DEFAULT_SENS, OLD_SENS, SENS_DEG, SENS_MAX, STRAIGHT, sensTilt, standardAims } from './swipe';
 import { Online } from './online';
@@ -1385,7 +1385,7 @@ const lobbyHost: LobbyHost = {
   guests,
   controllers: () => (navigator.getGamepads?.() ?? []).filter((g) => g && g.connected).length,
   density,
-  start: () => (net ? net.send({ t: 'start' }) : newMatch()),
+  start: () => (net ? net.send({ t: 'start' }) : newMatch(false)),
   back: () => {
     if (!net) return showTitle();
     confirmFirst('Leave the room?', 'You leave this online room. To come back, join again with its code.', 'Leave', (yes) => {
@@ -1406,6 +1406,11 @@ function showLobby(fresh = false, page?: LobbyPage): void {
     setTimeout(() => sayNet(ZOOM_TIP, 9000), 400);
   }
   rolled = null; // (the match is over: the lobby's CPU players are the ones on their cards)
+  // Random mode: new rules for the next match, shown on the Match page before it starts (online the server picks)
+  if (fresh && !net && setup.randomRules) {
+    setup = rollRules(setup, Math.random);
+    save('matchSetup', setup);
+  }
   hideScreens();
   mode = 'lobby';
   roundLive = false;
@@ -1427,8 +1432,15 @@ function leaveToMatch(): void {
 
 // ------------------------------------------------ rounds and the match
 
-/** Start a match with the lobby's setup: everyone's score back to 0, then round 1. */
-function newMatch(): void {
+/**
+ * Start a match with the lobby's setup: everyone's score back to 0, then round 1. `again` for a new match
+ * started from the round (Rematch, Restart): in Random mode it gets new rules (from the lobby, the ones shown).
+ */
+function newMatch(again = true): void {
+  if (again && setup.randomRules) {
+    setup = rollRules(setup, Math.random);
+    save('matchSetup', setup);
+  }
   rolled = setup.randEmotes || setup.randLevels ? rollCpus(setup, Math.random) : null;
   wins.fill(0);
   leader = -1;
@@ -2768,6 +2780,7 @@ document.addEventListener('visibilitychange', () => {
     last = performance.now();
     sharpTries = 0;
     sharpAt = 0;
+    net?.wake(); // online: make sure the room's connection is alive, or make it again at once
   }
 });
 for (const ev of ['pointerdown', 'touchend', 'keydown']) document.addEventListener(ev, wakeAudio, { capture: true, passive: true });
@@ -2776,6 +2789,7 @@ window.visualViewport?.addEventListener('scroll', () => (sharpAt = 0)); // (the 
 window.addEventListener('pageshow', () => {
   unshift();
   sharpAt = 0;
+  net?.wake();
 });
 // the keyboard closing (a name, a room code) can leave the page shifted up: put it back once it has gone
 document.addEventListener('focusout', () => setTimeout(() => {

@@ -45,8 +45,14 @@ export interface OnlineHooks {
 const ROUND_PING_MS = 500;
 const FIRST_PINGS = 5;
 const FIRST_PING_MS = 110;
-/** Give up trying to reconnect after this long. */
-const RETRY_FOR_MS = 60_000;
+/**
+ * Give up trying to reconnect after this long, counted while the game is in view: a phone stops the page
+ * altogether while another app is open, so time away is not held against it (the owner, 23 November 2026:
+ * leaving the app for a while should not lose the room; it was 60 s, counted from the drop).
+ */
+const RETRY_FOR_MS = 5 * 60_000;
+/** Back in view with what looks like a live connection: if the server says nothing within this long of a ping, it is dead. */
+const PROBE_MS = 2500;
 /** A message every so often keeps the connection from being closed as idle, and measures the delay. */
 const PING_MS = 15_000;
 
@@ -87,6 +93,9 @@ export class Online {
   private lostAt = 0;
   private retry = 0;
   private pinger = 0;
+  private probe = 0;
+  /** when the server last said anything (Date.now()) */
+  private lastHeard = 0;
   /** the round on this page (predict.ts), while one is being played */
   private pred: Predictor | null = null;
   /** asked for the whole world and waiting for it */
@@ -144,6 +153,7 @@ export class Online {
       this.send({ t: 'hello', id: this.key, ...this.you, create: this.creating && !this.joined, pv: PROTOCOL });
     };
     ws.onmessage = (e) => {
+      if (this.ws === ws) this.lastHeard = Date.now();
       const m = parseMsg<ServerMsg>(e.data);
       if (m && this.ws === ws) this.take(m);
     };
@@ -162,7 +172,7 @@ export class Online {
       return;
     }
     if (!this.lostAt) this.lostAt = Date.now();
-    if (Date.now() - this.lostAt > RETRY_FOR_MS) {
+    if (!document.hidden && Date.now() - this.lostAt > RETRY_FOR_MS) {
       this.joined = false;
       this.hooks.error('The connection to the room was lost.', true);
       return;
@@ -170,6 +180,39 @@ export class Online {
     this.hooks.status('lost');
     clearTimeout(this.retry);
     this.retry = window.setTimeout(() => this.open(), Math.min(4000, 500 + (Date.now() - this.lostAt) / 4));
+  }
+
+  /**
+   * The game is back in view (another app, a call, the screen locked: a phone closes the connection, or leaves
+   * one that looks open but is dead). Try again at once, with the time away not counted; and an open-looking
+   * connection is asked for a sign of life, and dropped and made again if none comes. Your place in the room is
+   * kept on the server meanwhile (room.ts, AWAY_MS).
+   */
+  wake(): void {
+    if (this.leaving || !this.joined) return;
+    if (this.lostAt) this.lostAt = Date.now();
+    const ws = this.ws;
+    if (!ws || ws.readyState === WebSocket.CLOSING || ws.readyState === WebSocket.CLOSED) {
+      if (ws) ws.onclose = null;
+      this.ws = null;
+      clearTimeout(this.retry);
+      this.open();
+      return;
+    }
+    if (ws.readyState !== WebSocket.OPEN) return; // (already connecting)
+    const asked = Date.now();
+    this.send({ t: 'ping', c: performance.now() });
+    clearTimeout(this.probe);
+    this.probe = window.setTimeout(() => {
+      if (this.ws !== ws || this.lastHeard >= asked) return;
+      ws.onclose = null;
+      try {
+        ws.close();
+      } catch {
+        /* already gone */
+      }
+      this.dropped();
+    }, PROBE_MS);
   }
 
   private take(m: ServerMsg): void {
@@ -324,6 +367,7 @@ export class Online {
     this.leaving = true;
     clearInterval(this.pinger);
     clearTimeout(this.retry);
+    clearTimeout(this.probe);
     this.send({ t: 'bye' });
     const ws = this.ws;
     this.ws = null;

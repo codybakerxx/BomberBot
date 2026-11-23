@@ -15,7 +15,7 @@
  */
 import { MAX_PLAYERS, TICK_HZ, step, winnersOf, type World, type WorldConfig } from './sim';
 import { BOT_LEVELS, botInput, createBot, type Bot, type BotLevel } from './bot';
-import { MAX_CPUS, problem, readSetup, rollCpus, swapTeams, worldConfig, type CpuSlot, type MatchSetup } from './setup';
+import { MAX_CPUS, copyRules, problem, readSetup, rollCpus, rollRules, swapTeams, worldConfig, type CpuSlot, type MatchSetup } from './setup';
 import { readDance, type DanceId } from './dances';
 import {
   CHECK_EVERY,
@@ -48,10 +48,15 @@ export const TICK_MS = 1000 / TICK_HZ;
 export const AFTER_TICKS = 10 * TICK_HZ;
 /** A page that falls this far behind (a slow server moment) catches up at most this many ticks at once. */
 export const CATCH_UP = 30;
-/** Someone whose connection dropped keeps their place this long in the lobby. In a match, until it ends. */
-export const AWAY_MS = 45_000;
-/** A host who has been gone this long hands the room to the next person still here. */
-export const HOST_AWAY_MS = 12_000;
+/**
+ * Someone whose connection dropped keeps their place this long in the lobby, and across the end of a match.
+ * In a match, until it ends. (A phone drops its connection as soon as the app is left for another; the owner
+ * asked that leaving the app for a while not lose your place, 23 November 2026: it was 45 s, and anyone away
+ * when a match ended was let go at once.)
+ */
+export const AWAY_MS = 10 * 60_000;
+/** A host who has been gone this long hands the room to the next person still here (it was 12 s). */
+export const HOST_AWAY_MS = 2 * 60_000;
 
 /** A connection to one page. */
 export interface Conn {
@@ -126,6 +131,10 @@ export class Room {
   empty(): boolean {
     return this.members.length === 0;
   }
+  /** Is anyone connected just now? (Everyone may be away for a while, each keeping their place.) */
+  anyoneOn(): boolean {
+    return this.members.some((m) => m.conn);
+  }
   /** Does the round need stepping (the fast clock)? */
   busy(): boolean {
     return this.playing && !!this.world && (this.overTick < 0 || this.world.tick < this.overTick + AFTER_TICKS);
@@ -198,8 +207,18 @@ export class Room {
       this.hostId = m.id;
     }
     this.members.push(m);
-    m.colorId = this.freeColour(typeof msg.colorId === 'string' ? msg.colorId : 'gold', m, false);
-    this.takeColour(m, m.colorId);
+    // the robot they asked for, or the first nobody else here has; a CPU player wearing it moves to a colour
+    // nobody has (it used to keep it, so a friend joining could play the same robot as a CPU player)
+    const want = this.freeColour(typeof msg.colorId === 'string' ? msg.colorId : 'gold', m, false);
+    const cpu = this.setup.cpus.find((c) => c.colorId === want);
+    if (cpu) {
+      const spare = COLOR_IDS.find((id) => id !== want && !this.members.some((x) => x !== m && x.colorId === id) && !this.setup.cpus.some((c) => c.colorId === id));
+      if (spare) {
+        swapTeams(this.setup, want, spare); // (it keeps its side in a teams match)
+        cpu.colorId = spare;
+      } else this.setup.cpus = this.setup.cpus.filter((c) => c !== cpu); // (no colour left: it makes room)
+    }
+    m.colorId = want;
     if (msg.create) {
       for (const colorId of ['black', 'pink', 'blue', 'red', 'orange', 'white', 'green', 'purple', 'gold'].filter((c) => c !== m!.colorId).slice(0, 3))
         this.setup.cpus.push({ colorId, level: 'normal' });
@@ -341,20 +360,20 @@ export class Room {
           ...this.members.filter((x) => x.playing).map((x) => ({ member: x.id, name: x.name, colorId: x.colorId, dance: x.dance })),
           ...this.match.cpus.map((c) => ({ member: null, name: '', colorId: c.colorId, dance: c.dance ?? 'party', level: c.level })),
         ];
-        this.newScore();
+        this.newScore(false);
         this.sendRoom();
         this.startRound(now);
         return;
       }
       case 'next': {
         if (!isHost || !this.playing || !this.world?.over) return;
-        if (this.score.matchWinner >= 0) this.newScore();
+        if (this.score.matchWinner >= 0) this.newScore(true);
         this.startRound(now);
         return;
       }
       case 'restart': {
         if (!isHost || !this.playing) return;
-        this.newScore();
+        this.newScore(true);
         this.startRound(now);
         return;
       }
@@ -380,12 +399,16 @@ export class Room {
     }
   }
 
-  /** Back to the lobby: the match ends, and everyone presses Ready again. Those who left are let go. */
+  /**
+   * Back to the lobby: the match ends, and everyone presses Ready again. Those away keep their place in the
+   * lobby as usual (housekeep lets them go after AWAY_MS); those who left are already gone.
+   */
   private toLobby(): void {
     this.playing = false;
     this.world = null;
     this.match = null;
-    this.members = this.members.filter((m) => m.conn || m.awaySince < 0);
+    // Random mode: new rules for the next match, shown in the lobby before it starts
+    if (this.setup.randomRules) copyRules(rollRules(this.setup, this.random), this.setup);
     for (const m of this.members) {
       m.playing = false;
       m.ready = false;
@@ -402,10 +425,18 @@ export class Room {
    * A match starts (or starts again: Rematch, Restart): the score back to 0, and, with Randomize CPUs on,
    * each CPU player's emote and level picked afresh. The seats say what each got, so every page knows.
    */
-  private newScore(): void {
+  private newScore(again: boolean): void {
     this.score = { wins: this.seats.map(() => 0), leader: -1, matchWinner: -1, roundNo: 0 };
     const match = this.match;
     if (!match) return;
+    // Random mode: a new match from the round (Rematch, Restart) gets new rules, the room's setup too, so the
+    // lobby shows them; from the lobby, the ones shown there
+    if (again && match.randomRules) {
+      const r = rollRules(match, this.random);
+      copyRules(r, match);
+      copyRules(r, this.setup);
+      this.sendRoom();
+    }
     match.cpus = rollCpus(match, this.random);
     const people = this.seats.length - match.cpus.length;
     match.cpus.forEach((c, i) => {

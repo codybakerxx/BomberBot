@@ -75,6 +75,13 @@ import {
   type RuleGroup,
   groupIsDefault,
   resetGroup,
+  MODES,
+  classicRules,
+  hardcoreRules,
+  rollRules,
+  modeOf,
+  settleMode,
+  type ModeId,
 } from './setup';
 import { DANCES, danceFrame, danceOf, stepDance, type DanceId } from './dances';
 import { BOMB_ICON, type GroupReset, Opt, choice, confirmFirst, group, heading, mount, note, slider, swipeable, toggle } from './ui';
@@ -187,6 +194,7 @@ export function createLobby(host: LobbyHost): {
     // in a teams match, everyone's seat and team written down as they are, so they stay put as players come
     // and go, and the server (online) works them out the same
     if (s().teamsOn && canEdit()) settleTeams(s(), inOrder());
+    if (canEdit()) settleMode(s()); // (a rule changed by hand: no longer Random)
     host.save();
     refresh();
   }
@@ -1101,7 +1109,25 @@ export function createLobby(host: LobbyHost): {
   }
 
   /** A card: the robot and its name (`top`), the rows along its foot, and the bin if it has one. */
-  function card(who: string, cls: string, label: string, nameHtml: (t: HTMLElement) => void, opts: { cpu?: number; bin?: HTMLButtonElement; dance: [boolean, boolean] }): HTMLElement {
+  /** online: the people whose dot has been shown, so it pops in only when someone first joins (or comes back) */
+  const dotShown = new Set<string>();
+  /**
+   * Online, a person's card has a dot at its top left (the owner's ask, 23 November 2026): green while they are
+   * connected, grey while their connection is away (another app, a call: they keep their place). It pops in
+   * the first time it is shown for them.
+   */
+  function presence(slot: HTMLElement, key: string, on: boolean): void {
+    const dot = document.createElement('span');
+    dot.className = `presence ${on ? 'on' : 'away'}`;
+    dot.setAttribute('aria-hidden', 'true');
+    const seen = `${key}:${on}`;
+    if (on && !dotShown.has(seen)) dot.classList.add('pop');
+    dotShown.add(seen);
+    if (!on) dotShown.delete(`${key}:true`);
+    slot.append(dot);
+  }
+
+  function card(who: string, cls: string, label: string, nameHtml: (t: HTMLElement) => void, opts: { cpu?: number; bin?: HTMLButtonElement; dance: [boolean, boolean]; online?: [string, boolean] }): HTMLElement {
     const colour = colourOf(who);
     const teamed = s().teamsOn;
     const wrap = document.createElement('div');
@@ -1139,6 +1165,7 @@ export function createLobby(host: LobbyHost): {
     }
     nameHtml(t);
     slot.append(pic, t);
+    if (opts.online) presence(slot, opts.online[0], opts.online[1]);
     wrap.append(slot);
     if (opts.bin) wrap.append(opts.bin);
     const rows: HTMLElement[] = [];
@@ -1174,7 +1201,7 @@ export function createLobby(host: LobbyHost): {
       card('me', 'me', `${host.myName || 'You'}, P${myP()}, playing as ${botName(colorById(host.myColor))}, ${ready ? 'ready' : 'not ready'}`, (t) => {
         t.innerHTML = `<b></b><small>P${myP()} · you${net()?.host ? ' · host' : ''}</small><span class="rdy${ready ? ' on' : ''}">${ready ? '✓ Ready' : 'Not ready'}</span>`;
         t.querySelector('b')!.textContent = host.myName || 'You'; // typed by the player: set as text, never as markup
-      }, { dance: [false, false] }),
+      }, { dance: [false, false], online: net() ? ['me', true] : undefined }),
       host.myColor,
     );
     // the other players here, or online
@@ -1199,7 +1226,7 @@ export function createLobby(host: LobbyHost): {
         // (a name typed by another person: set as text, never as markup)
         t.querySelector('b')!.textContent = g.remote ? g.remote.name || looking : looking;
         t.querySelector('small')!.textContent = g.remote ? `P${n} · ${g.remote.host ? 'host' : 'online'}${g.remote.on ? '' : ' · away'}` : `P${n} · controller ${g.pad + 1}`;
-      }, { bin, dance: [!!g.remote, false] });
+      }, { bin, dance: [!!g.remote, false], online: g.remote ? [`p${g.remote.p}`, g.remote.on] : undefined });
       made.push([g.colorId, wrap]);
       cvs.push([wrap.querySelector('canvas')!, g.pick]);
     });
@@ -1443,10 +1470,35 @@ export function createLobby(host: LobbyHost): {
     b.querySelector('span')!.textContent = a.name;
     b.addEventListener('click', () => {
       if (!canEdit() || s().arena === a.id) return;
-      pickArena(s(), a.id);
+      const was = modeOf(s(), host.myColor);
+      pickArena(s(), a.id); // (the arena's own round length and closing in: Classic stays Classic)
+      if (was === 'hardcore') host.setup = hardcoreRules(s(), host.myColor);
+      if (was === 'random') host.setup = rollRules(s(), Math.random);
       changed();
     });
     $('sizePick').append(b);
+  }
+  // the modes (the owner's ask, 23 November 2026): a bubble each, between the map and the rules. A tap puts in
+  // that mode's rules at once (the rules' cards glow); Random picks rules at random, and again on another tap
+  for (const m of MODES) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.dataset.mode = m.id;
+    b.id = `mode-${m.id}`;
+    b.innerHTML = `<span></span><small></small>`;
+    b.querySelector('span')!.textContent = m.name;
+    b.addEventListener('click', () => {
+      if (!canEdit()) return;
+      if (m.id !== 'random' && modeOf(s(), host.myColor) === m.id) return;
+      host.setup = m.id === 'classic' ? classicRules(s(), host.myColor) : m.id === 'hardcore' ? hardcoreRules(s(), host.myColor) : rollRules(s(), Math.random);
+      changed();
+      for (const box of $('rules').querySelectorAll<HTMLElement>('.set-group')) {
+        box.classList.remove('was-reset');
+        void box.offsetWidth; // (so the glow starts again)
+        box.classList.add('was-reset');
+      }
+    });
+    $('modePick').append(b);
   }
   /** The arena picture: a real arena built with the setup's size and bricks, with everyone in their corners. */
   // the arena picture is drawn again whenever the room for it changes: shown, turned sideways, resized
@@ -1912,6 +1964,16 @@ export function createLobby(host: LobbyHost): {
       b.setAttribute('aria-label', `${ARENAS.find((x) => x.id === id)!.name} size, ${size.cols} by ${size.rows} blocks${size.grown ? `, grown for more than ${GROW_AFTER} players` : ''}`);
     }
     if (!$('lobbyMatch').hidden || window.matchMedia('(min-width: 820px) and (min-height: 480px)').matches) drawArena();
+    // the mode bubbles: the one the rules are lit; none, and Custom beside the heading, once a rule is changed
+    const mode = modeOf(s(), host.myColor);
+    $('modeNow').textContent = mode === 'custom' ? 'Custom' : '';
+    for (const b of $('modePick').querySelectorAll<HTMLButtonElement>('button')) {
+      const m = MODES.find((x) => x.id === b.dataset.mode)!;
+      const on = m.id === mode;
+      b.setAttribute('aria-pressed', String(on));
+      b.querySelector('small')!.textContent = on && m.id === 'random' && canEdit() ? 'Tap to reroll' : m.line;
+      b.setAttribute('aria-label', `${m.name} mode: ${m.line}${on ? ', on' : ''}${on && m.id === 'random' && canEdit() ? '. Tap for new rules' : ''}`);
+    }
     refreshRules();
     // whether Start can be pressed
     // Start at the end of the Match page, Next › at the end of the Players page (lit once you are ready;

@@ -128,7 +128,7 @@ export const ITEM_NAMES: [ItemKind, string, string][] = [
   ['grab', 'Glove', 'Lift and throw bombs with B'],
   ['shield', 'Shield', 'Survive one blast'],
   ['curse', 'Curse', 'Slows you down for 8 seconds'],
-  ['laptop', 'Laptop', 'B flies a plane: steer it, A drops 3 bombs'],
+  ['laptop', 'Laptop', 'B flies a plane: steer it, A drops its bomb'],
 ];
 
 /** Round lengths the timer can be set to: 30 seconds to 5 minutes, in steps of 15 seconds. */
@@ -246,6 +246,13 @@ export interface MatchSetup {
   teamSize: number;
   /** in a teams match, can a teammate's blast knock you out? */
   friendlyFire: boolean;
+  /**
+   * The Random mode (the Match page's Mode bubbles; the owner's ask, 23 November 2026): the rules are picked at
+   * random, shown on the Match page, and picked again for every new match (`rollRules`). `rolledKey` is the rules
+   * as they were picked (`rulesKey`): a rule changed by hand since, and it is no longer Random (`settleMode`).
+   */
+  randomRules: boolean;
+  rolledKey: string;
 }
 
 /** The colours a team can have. A team is known by its colour: the Red team, the Green team... */
@@ -628,6 +635,8 @@ export function defaultSetup(myColor: string): MatchSetup {
     ownTeams: {},
     teamSize: 0, // Custom (the owner's call)
     friendlyFire: false, // teammates are safe from each other's blasts unless it is switched on
+    randomRules: false,
+    rolledKey: '',
   };
 }
 
@@ -677,6 +686,112 @@ export function groupIsDefault(s: MatchSetup, group: RuleGroup, myColor: string)
   const d = defaultRules(s, myColor) as unknown as Record<string, unknown>;
   const now = s as unknown as Record<string, unknown>;
   return RULE_GROUPS[group].every((k) => JSON.stringify(now[k]) === JSON.stringify(d[k]));
+}
+
+// ---------------------------------------------------------------- modes
+
+/**
+ * The ready-made rules on the Match page, between the map and the rules (the owner's ask, 23 November 2026):
+ * Classic, the default; Hardcore, everything maxed out; Random, rules picked at random for every match and
+ * shown. Any rule changed by hand makes it Custom (no bubble lit). A mode sets every rule but Rounds to win,
+ * which is how long the match is, not how it is played.
+ */
+export const MODES = [
+  { id: 'classic', name: 'Classic', line: 'Usual rules' },
+  { id: 'hardcore', name: 'Hardcore', line: 'All maxed out' },
+  { id: 'random', name: 'Random', line: 'New each match' },
+] as const;
+export type ModeId = (typeof MODES)[number]['id'];
+const MODE_KEYS = (Object.keys(RULE_GROUPS) as RuleGroup[]).filter((g) => g !== 'winning').flatMap((g) => [...RULE_GROUPS[g]]);
+
+/** The rules a mode sets, as text, to tell whether two setups play the same. */
+export function rulesKey(s: MatchSetup): string {
+  const r = s as unknown as Record<string, unknown>;
+  return JSON.stringify(MODE_KEYS.map((k) => r[k]));
+}
+
+/** Classic: the usual rules for the arena picked (Rounds to win kept). */
+export function classicRules(s: MatchSetup, myColor: string): MatchSetup {
+  return { ...defaultRules(s, myColor), firstTo: s.firstTo, randomRules: false, rolledKey: '' };
+}
+
+/**
+ * Hardcore: everything maxed out (the owner's words). Every robot starts with all the bombs, the longest blast
+ * and the top speed; the arena is packed with bricks and every brick hides a power-up, mostly the boot, the
+ * glove, the laptop and the shield (the others would do nothing for a robot already at the top); the blocks
+ * close in fast.
+ */
+export function hardcoreRules(s: MatchSetup, myColor: string): MatchSetup {
+  const out = classicRules(s, myColor);
+  out.startOn = true;
+  out.startBombs = MAX_BOMBS;
+  out.startFire = MAX_FIRE;
+  out.startSpeed = MAX_SPEED_ITEMS;
+  out.brickShare = BRICK_SHARE_MAX;
+  out.itemShare = 100;
+  out.itemsOn = true;
+  out.itemOn = { bomb: true, fire: true, speed: true, kick: true, grab: true, shield: true, curse: true, laptop: true };
+  out.items = { bomb: 1, fire: 1, speed: 1, kick: 3, grab: 3, shield: 3, curse: 2, laptop: 3 };
+  out.closeIn = CLOSE_IN.length - 1;
+  return out;
+}
+
+/**
+ * Random: every rule a mode sets picked at random, within what plays well (rounds of 45 s to 3 minutes, up to
+ * three lives, a start of up to 5 bombs and a blast of 5...). `random` gives a number from 0 up to 1 (the
+ * page's Math.random, or the server's). Marked as Random, with the rules as picked.
+ */
+export function rollRules(s: MatchSetup, random: () => number): MatchSetup {
+  const int = (lo: number, hi: number, step = 1): number => lo + step * Math.min(Math.floor((hi - lo) / step), Math.floor(random() * ((hi - lo) / step + 1)));
+  const yes = (p: number): boolean => random() < p;
+  const out: MatchSetup = structuredClone(s);
+  out.timerOn = yes(0.85);
+  out.roundSecs = int(45, 180, ROUND_STEP);
+  out.closeIn = int(0, CLOSE_IN.length - 1);
+  out.lives = yes(0.6) ? 1 : yes(0.6) ? 2 : 3;
+  out.postMortem = yes(0.35);
+  out.afterlife = out.postMortem ? (yes(0.5) ? 'angel' : 'zombie') : 'watch';
+  out.angelsBack = out.afterlife === 'angel' && yes(0.5);
+  out.brickShare = int(40, BRICK_SHARE_MAX, BRICK_SHARE_STEP);
+  out.itemShare = int(30, 100, ITEM_SHARE_STEP);
+  out.itemsOn = yes(0.4);
+  for (const [k] of ITEM_CHANCE) {
+    out.itemOn[k] = ALWAYS_ON.includes(k) || !out.itemsOn || yes(0.85);
+    out.items[k] = out.itemsOn ? int(1, ITEM_AMOUNTS.length - 1) : 2;
+  }
+  out.startOn = yes(0.4);
+  out.startBombs = out.startOn ? int(1, 5) : 1;
+  out.startFire = out.startOn ? int(START_FIRE, 5) : START_FIRE;
+  out.startSpeed = out.startOn ? int(0, 3) : 0;
+  out.randomRules = true;
+  out.rolledKey = rulesKey(out);
+  return out;
+}
+
+/** Which mode a setup's rules are: the bubble lit on the Match page, or 'custom' for none. */
+export function modeOf(s: MatchSetup, myColor: string): ModeId | 'custom' {
+  if (s.randomRules && rulesKey(s) === s.rolledKey) return 'random';
+  const k = rulesKey(s);
+  if (k === rulesKey(classicRules(s, myColor))) return 'classic';
+  if (k === rulesKey(hardcoreRules(s, myColor))) return 'hardcore';
+  return 'custom';
+}
+
+/** The rules a mode sets, and whether they are Random, copied from one setup into another (the rest left alone). */
+export function copyRules(from: MatchSetup, to: MatchSetup): void {
+  const f = from as unknown as Record<string, unknown>;
+  const t = to as unknown as Record<string, unknown>;
+  for (const k of MODE_KEYS) t[k] = structuredClone(f[k]);
+  to.randomRules = from.randomRules;
+  to.rolledKey = from.rolledKey;
+}
+
+/** After a change by hand: a rule changed since the rules were picked at random, and it is no longer Random. */
+export function settleMode(s: MatchSetup): void {
+  if (s.randomRules && rulesKey(s) !== s.rolledKey) {
+    s.randomRules = false;
+    s.rolledKey = '';
+  }
 }
 
 /** The settings of one group, to put back with Undo after its reset. */
@@ -760,6 +875,9 @@ export function summary(s: MatchSetup, guests = 0): string {
     s.timerOn ? `${clockText(s.roundSecs)} rounds` : 'No timer',
     `First to ${s.firstTo}`,
   ];
+  const mode = modeOf(s, ''); // (the players play no part in it)
+  if (mode === 'hardcore') parts.splice(2, 0, 'Hardcore');
+  if (mode === 'random') parts.splice(2, 0, 'Random rules');
   if (s.teamsOn) parts.push(s.friendlyFire ? 'Teams, friendly fire' : 'Teams');
   if (s.lives > 1) parts.push(`${s.lives} lives`);
   if (afterlifeOf(s) === 'angel') parts.push(s.angelsBack ? 'Angels come back' : 'Angels');
@@ -858,6 +976,11 @@ export function readSetup(raw: unknown, myColor: string, colorIds: string[]): Ma
   }
   out.teamSize = clampInt(r.teamSize, 0, 4, d.teamSize);
   if (out.teamSize % 2) out.teamSize = 0; // (whole rows of two: Teams of 2 or 4)
+  if (r.randomRules === true && typeof r.rolledKey === 'string' && r.rolledKey.length < 4000) {
+    out.randomRules = true;
+    out.rolledKey = r.rolledKey;
+    settleMode(out); // (anything read differently from how it was picked: not Random any more)
+  }
   return out;
 }
 

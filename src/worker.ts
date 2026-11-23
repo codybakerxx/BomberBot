@@ -39,6 +39,7 @@ interface Storage {
   put(key: string, value: unknown): Promise<void>;
   delete(key: string): Promise<boolean>;
   list<T>(o: { prefix: string; limit?: number }): Promise<Map<string, T>>;
+  setAlarm?(at: number): Promise<void>;
 }
 interface DOState {
   storage: Storage;
@@ -48,6 +49,11 @@ interface DOState {
 const FAST_MS = 8;
 /** How often a room tidies itself up (people gone too long, a host gone). */
 const SLOW_MS = 4000;
+/**
+ * While everyone in a room is away (each phone in another app), it wakes itself this often, so Cloudflare does
+ * not put it away and the room is still there when they come back (it is kept only in memory).
+ */
+const AWAKE_MS = 20_000;
 
 export default {
   async fetch(req: Request, env: Env): Promise<Response> {
@@ -71,9 +77,15 @@ export class RoomDO {
   private slow = 0;
 
   constructor(
-    _state: DOState,
+    private state: DOState,
     private env: Env,
   ) {}
+
+  /** Woken while everyone is away (AWAKE_MS): tidy up, and stay awake while anyone keeps a place. */
+  async alarm(): Promise<void> {
+    this.room?.housekeep(Date.now());
+    this.clocks();
+  }
 
   async fetch(req: Request): Promise<Response> {
     const code = readCode(new URL(req.url).pathname.split('/').pop());
@@ -164,6 +176,7 @@ export class RoomDO {
         this.clocks();
       }, SLOW_MS) as unknown as number;
     }
+    if (!room.anyoneOn()) void this.state.storage.setAlarm?.(Date.now() + AWAKE_MS)?.catch(() => undefined);
   }
 }
 
