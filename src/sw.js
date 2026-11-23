@@ -119,6 +119,25 @@ self.addEventListener('push', (event) => {
   );
 });
 
+// The phone replaced this game's sign-up (it can, now and then, on its own): sign up again with the same key and
+// tell the server, so invites keep reaching this phone. The page does the same each time the game opens.
+self.addEventListener('pushsubscriptionchange', (event) => {
+  event.waitUntil(
+    (async () => {
+      const old = event.oldSubscription;
+      let sub = event.newSubscription;
+      if (!sub) {
+        const r = await fetch('/api/push/key', { cache: 'no-store' });
+        const { key } = await r.json();
+        const raw = atob(key.replace(/-/g, '+').replace(/_/g, '/') + '==='.slice((key.length + 3) % 4));
+        sub = await self.registration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: Uint8Array.from(raw, (c) => c.charCodeAt(0)) });
+      }
+      await fetch('/api/push/subscribe', { method: 'POST', body: JSON.stringify({ sub: sub.toJSON() }) });
+      if (old && old.endpoint !== sub.endpoint) await fetch('/api/push/unsubscribe', { method: 'POST', body: JSON.stringify({ endpoint: old.endpoint }) });
+    })().catch(() => {}),
+  );
+});
+
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
   const url = new URL((event.notification.data && event.notification.data.url) || '/', location.origin).href;

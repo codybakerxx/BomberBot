@@ -1096,8 +1096,10 @@ function pilot(c: Ctx): PlayerInput {
     // where it judges the bomb would land, by eye: its feel for how far bombs carry on is off by its level's
     // `carry` for this flight. It lets go when that is right on the rival, not just near enough for the blast
     const feel = 1 + bot.aimCarry;
-    const gx = Math.round(Math.min(world.w - 2, Math.max(1, nx + across(nx, at.x, world.w) * feel)));
-    const gy = Math.round(Math.min(world.h - 2, Math.max(1, ny + across(ny, at.y, world.h) * feel)));
+    // (not held inside the walls: a bomb judged to land on the outer wall is not judged to land beside it,
+    // which let it go too soon over the edge with its one bomb)
+    const gx = Math.round(nx + across(nx, at.x, world.w) * feel);
+    const gy = Math.round(ny + across(ny, at.y, world.h) * feel);
     if (gx === Math.round(tx) && gy === Math.round(ty)) {
       const teammate = world.friendlyFire && world.players.some((p) => p.alive && allies(me, p) && tiles.includes(tileOf(world, p)));
       // its own robot, standing still, clear of the blast and of anything the blast sets off: nothing about

@@ -185,8 +185,17 @@ const CONTACT = 'https://bomberbot.bomberbot.workers.dev';
 /** At most this many phones on the list, and a notification goes to at most this many (a Worker's limit on requests). */
 const MAX_FRIENDS = 400;
 const SEND_TO = 45;
-/** One Tell friends per room this often, and this many in an hour for the whole game. */
-const ROOM_GAP_MS = 60_000;
+/** One Tell friends per room this often (the owner's ask, 23 November 2026: it was a minute), and this many in an hour for the whole game. */
+const ROOM_GAP_MS = 10_000;
+/** A phone's own test notification (Settings › App) at most this often. */
+const TEST_GAP_MS = 10_000;
+/**
+ * The signing token is kept and used again for this long: Apple asks that it not be made afresh more than once
+ * an hour (it was made for every send). It is good for 12 hours (`vapidHeader`).
+ */
+const TOKEN_KEEP_S = 6 * 3600;
+/** The last this many sends are kept, with what the push service answered (`/api/push/log`). */
+const LOG_KEEP = 30;
 const HOURLY = 30;
 /** A notification still worth showing this long after it was sent (seconds). */
 const TTL = 900;
@@ -253,6 +262,8 @@ export class Friends {
     const path = new URL(req.url).pathname;
     const store = this.state.storage;
     if (path === '/api/push/key') return reply({ key: (await this.keys()).publicKey });
+    // what the push services answered to the last sends (no phone's address: only the service and a short key)
+    if (path === '/api/push/log') return reply({ log: (await store.get<LogLine[]>('log')) ?? [], phones: (await store.list({ prefix: 'f:', limit: MAX_FRIENDS })).size });
     if (req.method !== 'POST') return reply({ why: 'Expected POST' }, 405);
     let body: Record<string, unknown>;
     try {
@@ -274,7 +285,65 @@ export class Friends {
       return reply({ ok: true });
     }
     if (path === '/invite') return reply(await this.invite(body));
+    if (path === '/api/push/test') return reply(await this.test(body));
     return reply({ why: 'Not found' }, 404);
+  }
+
+  /** The signing token for a push service (its origin), kept for TOKEN_KEEP_S and then made again. */
+  private tokens = new Map<string, { header: string; made: number }>();
+  private async authFor(endpoint: string, secs: number): Promise<string> {
+    const aud = new URL(endpoint).origin;
+    const kept = this.tokens.get(aud) ?? (await this.state.storage.get<{ header: string; made: number }>('jwt:' + aud));
+    if (kept && secs - kept.made < TOKEN_KEEP_S) {
+      this.tokens.set(aud, kept);
+      return kept.header;
+    }
+    const fresh = { header: await vapidHeader(endpoint, await this.keys(), CONTACT, secs), made: secs };
+    this.tokens.set(aud, fresh);
+    await this.state.storage.put('jwt:' + aud, fresh);
+    return fresh.header;
+  }
+
+  /**
+   * Send one notification to one phone. Says what the push service answered: its status, and its reason when
+   * it turned it down (Apple and Google answer with a line of JSON or text saying why). A phone that is gone
+   * (404, 410) is taken off the list. Every send is written in the log.
+   */
+  private async push(key: string, f: Friend, notice: Notice, kind: string, code: string): Promise<Sent> {
+    const store = this.state.storage;
+    const secs = Math.floor(Date.now() / 1000);
+    let out: Sent;
+    try {
+      const r = await fetch(f.endpoint, {
+        method: 'POST',
+        headers: {
+          Authorization: await this.authFor(f.endpoint, secs),
+          'Content-Encoding': 'aes128gcm',
+          'Content-Type': 'application/octet-stream',
+          TTL: String(TTL),
+          Urgency: 'high',
+          ...(code ? { Topic: `room-${code}` } : {}),
+        },
+        body: await encryptFor(f.p256dh, f.auth, JSON.stringify(notice)),
+      });
+      let reason = '';
+      if (!r.ok) {
+        const t = (await r.text().catch(() => '')).slice(0, 300);
+        try {
+          reason = String((JSON.parse(t) as { reason?: string }).reason ?? t);
+        } catch {
+          reason = t;
+        }
+      }
+      if (r.status === 404 || r.status === 410) await store.delete(key);
+      out = { ok: r.ok, status: r.status, reason };
+    } catch (e) {
+      out = { ok: false, status: 0, reason: String((e as Error)?.message ?? e).slice(0, 200) };
+    }
+    const log = (await store.get<LogLine[]>('log')) ?? [];
+    log.push({ at: Date.now(), kind, to: new URL(f.endpoint).hostname, phone: key.slice(2, 8), ...out });
+    await store.put('log', log.slice(-LOG_KEEP));
+    return out;
   }
 
   /** Tell everyone on the list (but the host) that a room is open. Says how it went, with a line for the host. */
@@ -284,7 +353,7 @@ export class Friends {
     if (!code) return { bell: 'fail', why: 'No room to tell anyone about.', n: 0 };
     const now = Date.now();
     const last = (await store.get<number>('room:' + code)) ?? 0;
-    if (now - last < ROOM_GAP_MS) return { bell: 'wait', why: 'Friends were just told. Try again in a minute.', n: 0 };
+    if (now - last < ROOM_GAP_MS) return { bell: 'wait', why: `Friends were just told. Try again in ${Math.ceil((ROOM_GAP_MS - (now - last)) / 1000)} seconds.`, n: 0 };
     const hour = ((await store.get<number[]>('sent')) ?? []).filter((t) => now - t < 3_600_000);
     if (hour.length >= HOURLY) return { bell: 'busy', why: 'Lots of notifications have gone out this hour. Try again later.', n: 0 };
     const me = typeof body.me === 'string' && body.me ? await keyOf(body.me) : '';
@@ -297,35 +366,62 @@ export class Friends {
     await store.put('sent', [...hour, now]);
     const name = (typeof body.name === 'string' && body.name.trim().slice(0, 12)) || 'A friend';
     const notice: Notice = { title: `${name} wants to play`, body: `Room ${code} is open. Tap to join.`, code, url: `/?room=${code}`, at: now };
-    const text = JSON.stringify(notice);
-    const keys = await this.keys();
-    const secs = Math.floor(now / 1000);
-    const results = await Promise.all(
-      list.slice(0, SEND_TO).map(async ([key, f]) => {
-        try {
-          const r = await fetch(f.endpoint, {
-            method: 'POST',
-            headers: {
-              Authorization: await vapidHeader(f.endpoint, keys, CONTACT, secs),
-              'Content-Encoding': 'aes128gcm',
-              'Content-Type': 'application/octet-stream',
-              TTL: String(TTL),
-              Urgency: 'high',
-              Topic: `room-${code}`,
-            },
-            body: await encryptFor(f.p256dh, f.auth, text),
-          });
-          // gone: the phone turned them off or the app was removed
-          if (r.status === 404 || r.status === 410) await store.delete(key);
-          return r.ok;
-        } catch {
-          return false;
-        }
-      }),
-    );
-    const n = results.filter(Boolean).length;
+    await this.authFor(list[0][1].endpoint, Math.floor(now / 1000)); // (made once, before the sends, not by each at once)
+    const results = await Promise.all(list.slice(0, SEND_TO).map(([key, f]) => this.push(key, f, notice, 'bell', code)));
+    const n = results.filter((r) => r.ok).length;
+    const failed = results.filter((r) => !r.ok);
+    // (gone: the phone turned them off or the app was removed, and has been taken off the list)
+    const gone = failed.filter((r) => r.status === 404 || r.status === 410).length;
+    const other = failed.find((r) => r.status !== 404 && r.status !== 410);
+    const tail = [gone ? `${gone} phone${gone === 1 ? ' had' : 's had'} switched invites off or removed the app` : '', other ? `the push service said: ${refusal(other)}` : '']
+      .filter(Boolean)
+      .join('; ');
     return n
-      ? { bell: 'sent', why: `Told ${n} friend${n === 1 ? '' : 's'} that room ${code} is open.`, n }
-      : { bell: 'fail', why: 'The notifications did not go through. Try again in a minute.', n: 0 };
+      ? { bell: 'sent', why: `Told ${n} friend${n === 1 ? '' : 's'} that room ${code} is open.${tail ? ` (${tail}.)` : ''}`, n }
+      : { bell: 'fail', why: `The notifications did not go through: ${tail || 'no answer'}.`, n: 0 };
   }
+
+  /**
+   * A test notification to the phone asking (Settings › App), so a player can see that theirs work, and if not,
+   * what the push service said. The phone signs up again just before (app.ts), so it is on the list.
+   */
+  private async test(body: Record<string, unknown>): Promise<{ ok: boolean; why: string }> {
+    const store = this.state.storage;
+    if (typeof body.endpoint !== 'string') return { ok: false, why: 'This phone has not turned invites on.' };
+    const key = await keyOf(body.endpoint);
+    const f = await store.get<Friend>(key);
+    if (!f) return { ok: false, why: 'This phone is not on the server’s list. Switch Get room invites off and on again.' };
+    const now = Date.now();
+    const last = (await store.get<number>('test:' + key)) ?? 0;
+    if (now - last < TEST_GAP_MS) return { ok: false, why: 'One was just sent. Wait a few seconds.' };
+    await store.put('test:' + key, now);
+    const notice: Notice = { title: 'BomberBot', body: 'Room invites work on this phone.', code: '', url: '/', at: now };
+    const r = await this.push(key, f, notice, 'test', '');
+    return r.ok
+      ? { ok: true, why: 'Sent. It should show on this phone in a moment (with the app closed, it shows on the lock screen).' }
+      : { ok: false, why: `It did not go through: ${refusal(r)}.` };
+  }
+}
+
+/** One send's result, as the push service answered it. */
+interface Sent {
+  ok: boolean;
+  /** the push service's HTTP status (201 is sent); 0 if it could not be reached */
+  status: number;
+  /** why it was turned down, in the push service's own words (Apple: BadJwtToken, VapidPkHashMismatch...) */
+  reason: string;
+}
+interface LogLine extends Sent {
+  at: number;
+  kind: string;
+  /** the push service (web.push.apple.com, fcm.googleapis.com...) */
+  to: string;
+  /** a few letters of the phone's key on the list, to tell phones apart without keeping who they are */
+  phone: string;
+}
+/** A refusal in words: the push service's reason and status. */
+function refusal(r: Sent): string {
+  if (r.status === 0) return `could not reach it (${r.reason || 'no answer'})`;
+  if (r.status === 404 || r.status === 410) return 'this phone’s sign-up has expired; switch Get room invites off and on again';
+  return `${r.reason || 'no reason given'} (${r.status})`;
 }

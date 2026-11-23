@@ -34,6 +34,7 @@ import {
   dropLanding,
   tileAt,
   ItemKind,
+  headingTo,
 } from '../src/sim';
 import { packInput, tickCodes, tickText, unpackInput, worldHash } from '../src/net';
 import { botInput, createBot } from '../src/bot';
@@ -53,10 +54,11 @@ function holding(facing: 1 | 2 | 3 | 4 = 4): World {
 const run = (w: World, n: number, inp: PlayerInput = none): void => {
   for (let i = 0; i < n; i++) step(w, [inp]);
 };
-/** the tick B is pressed: the plane takes off */
+/** the tick B is pressed: the plane takes off (then, for the steering checks, set flying right) */
 function takeOff(w: World): void {
   step(w, [press({ b: true })]);
   step(w, [none]);
+  w.players[0].planeDir = 0;
 }
 
 // the plane's moves: a table of headings made with + - * / only, matching cosine and sine to the last bit or two
@@ -108,12 +110,41 @@ function takeOff(w: World): void {
   assert.equal(p.flying, PLANE_TICKS);
   assert.equal(p.planeBombs, PLANE_BOMBS);
   assert.ok(p.planeX === 1 && p.planeY === 1, 'from the robot');
+  const mid = headingTo(1, 1, (w.w - 1) / 2, (w.h - 1) / 2, 0);
+  assert.equal(p.planeDir, mid, 'it takes off towards the middle of the arena, whichever way the robot faced');
+  assert.ok(mid > 0 && mid < TURN_STEPS / 4, 'from the top-left corner: down and to the right');
+  const [sx, sy] = PLANE_STEP[mid];
   run(w, 30, press({ dir: 2 }));
   assert.equal(p.x, 1);
   assert.equal(p.y, 1, 'the robot does not walk while it flies');
   assert.equal(p.moving, false);
-  assert.ok(Math.abs(p.planeX - (1 + 30 * PLANE_SPEED)) < 1e-9 && p.planeY === 1, 'no aim: it flies straight on, the way the robot faced');
+  let ex = 1;
+  let ey = 1;
+  for (let i = 0; i < 30; i++) {
+    ex += sx;
+    ey += sy;
+  }
+  assert.ok(Math.abs(p.planeX - ex) < 1e-9 && Math.abs(p.planeY - ey) < 1e-9, 'no aim: it flies straight on, towards the middle');
   assert.equal(p.flying, PLANE_TICKS - 30);
+}
+
+// the way to the middle: the heading that points most nearly there, from anywhere; already there, as it faced
+{
+  const at = (x: number, y: number): number => headingTo(x, y, 6, 5, 7);
+  assert.equal(at(1, 5), 0, 'from the left: right');
+  assert.equal(at(6, 1), TURN_STEPS / 4, 'from the top: down');
+  assert.equal(at(11, 5), TURN_STEPS / 2, 'from the right: left');
+  assert.equal(at(6, 9), (TURN_STEPS * 3) / 4, 'from the bottom: up');
+  assert.equal(at(2, 1), at(2, 1), 'the same every time');
+  const h = at(1, 1);
+  const [vx, vy] = PLANE_STEP[h];
+  assert.ok(Math.abs(vy / vx - 4 / 5) < 0.001, 'from a corner: straight at the middle');
+  assert.equal(at(6, 5), 7, 'already there: the way it faced');
+  for (const facing of [1, 2, 3, 4] as const) {
+    const w = holding(facing);
+    step(w, [press({ b: true })]);
+    assert.equal(w.players[0].planeDir, headingTo(1, 1, (w.w - 1) / 2, (w.h - 1) / 2, 0), 'whichever way it faced');
+  }
 }
 
 // steering: it turns towards the aim a little each tick, the short way round, then flies that way
@@ -124,7 +155,7 @@ function takeOff(w: World): void {
   const down = AIM_STEPS / 4;
   step(w, [press({ aim: down })]);
   assert.equal(p.planeDir, PLANE_TURN, 'one tick: a little way round, clockwise');
-  run(w, TURN_STEPS / 4 / PLANE_TURN, press({ aim: down }));
+  run(w, Math.ceil((TURN_STEPS / 4 - PLANE_TURN) / PLANE_TURN), press({ aim: down }));
   assert.equal(p.planeDir, TURN_STEPS / 4, 'then pointing down');
   const y = p.planeY;
   run(w, 5, press({ aim: down }));
@@ -147,13 +178,16 @@ function takeOff(w: World): void {
 {
   const w = holding(3);
   takeOff(w);
+  w.players[0].planeDir = TURN_STEPS / 2; // flying left
   run(w, 40);
   const p = w.players[0];
   assert.ok(p.planeX > w.w - 3, `came round from the left edge to the right (${p.planeX})`);
 }
 
-// bombs: not in the first half second, then one per press of A, a third of a second apart; three in all
+// bombs: not in the first half second, then one press of A drops the plane's one bomb, and it comes home
 {
+  assert.equal(PLANE_BOMBS, 1, 'one bomb a flight');
+  assert.equal(PLANE_TICKS, 6 * 60, 'a flight lasts 6 s at most');
   const w = holding(4);
   takeOff(w);
   const p = w.players[0];
@@ -166,17 +200,22 @@ function takeOff(w: World): void {
   assert.equal(tap(), false, 'too soon after taking off');
   run(w, PLANE_FIRST_GAP);
   assert.equal(tap(), true);
-  assert.equal(p.planeBombs, PLANE_BOMBS - 1);
-  assert.equal(tap(), false, 'too soon after the last');
-  run(w, PLANE_DROP_GAP);
-  assert.equal(tap(), true);
-  run(w, PLANE_DROP_GAP);
-  assert.equal(tap(), true);
   assert.equal(p.planeBombs, 0);
-  assert.ok(p.flying <= PLANE_AFTER, 'last bomb away: home soon');
+  assert.ok(p.flying <= PLANE_AFTER, 'its bomb away: home soon');
+  assert.equal(tap(), false, 'no second bomb');
   run(w, PLANE_AFTER);
   assert.equal(p.flying, 0);
   assert.equal(p.laptop, false, 'the laptop is used up');
+}
+
+// with no bomb dropped, it comes home by itself after PLANE_TICKS
+{
+  const w = holding(4);
+  step(w, [press({ b: true })]);
+  run(w, PLANE_TICKS - 1);
+  assert.ok(w.players[0].flying > 0, 'still up just before 6 s');
+  run(w, 1);
+  assert.equal(w.players[0].flying, 0, 'home at 6 s');
 }
 
 // a dropped bomb falls DROP_TICKS, drifting on and slowing, and goes off where it lands
@@ -390,15 +429,14 @@ for (const level of ['hard', 'normal', 'beginner'] as const) {
       step(w, [botInput(w, bot)]);
       if (me.flying) flew = true;
       for (const e of w.events) if (e.type === 'death' && e.player === 0) selfHit = true;
-      if (!me.laptop && !me.flying && !rival.alive) break;
-      if (!me.laptop && !me.flying) break; // its one flight is over
+      if (!me.laptop && !me.flying && !w.drops.length && !w.flames.length) break; // its one flight is over, and its bomb has landed
     }
     assert.ok(flew, `${level} ${seed}: it flew`);
     assert.ok(!selfHit, `${level} ${seed}: never itself`);
     if (!rival.alive) hits++;
   }
-  // the rival stands in its corner all along: the better levels get it most times, Beginner now and then
-  if (level === 'hard') assert.ok(hits >= 4, `hard got a still rival ${hits} times in 6`);
+  // the rival stands in its corner all along: with its one bomb the better levels get it half the time or more
+  if (level === 'hard') assert.ok(hits >= 3, `hard got a still rival ${hits} times in 6`);
   if (level === 'normal') assert.ok(hits >= 2, `normal got a still rival ${hits} times in 6`);
 }
 

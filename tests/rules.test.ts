@@ -912,12 +912,12 @@ for (let seed = 1; seed <= 40; seed++) {
   const at = (w: World, x: number, y: number): number => y * w.w + x;
   const hard = (w: World): number => w.tiles.filter((t) => t === HARD).length;
 
-  // the defaults: the timer counts down 1 minute 30, then the blocks take 50 seconds to fall, each 0.63 s in the air
+  // the defaults: the timer counts down 1 minute 30, then the blocks take 50 seconds to fall, each 0.53 s in the air
   {
     const w = timed();
     assert.equal(ROUND_TICKS, 90 * TICK_HZ);
     assert.equal(SHRINK_TICKS, 50 * TICK_HZ);
-    assert.equal(FALL_TICKS, 38);
+    assert.equal(FALL_TICKS, 32);
     assert.equal(w.roundTicks, ROUND_TICKS);
     assert.equal(w.shrinkTicks, SHRINK_TICKS);
     assert.equal(ticksLeft(w), ROUND_TICKS);

@@ -346,11 +346,22 @@ export function createLobby(host: LobbyHost): {
     let trail: { t: number; x: number; y: number }[] = [];
     let tx0 = 0;
     let ty0 = 0;
-    // (a finger's own way of going up and down is the page's: pan-y. A drag the map takes, at whatever angle,
-    // is kept from scrolling it by its touches, below; pointer events cannot stop a scroll)
-    area.style.touchAction = 'pan-y';
+    // A finger on the map panel never lets the browser scroll the page by itself (the owner's report, 23 November
+    // 2026: a flick well under 55° still scrolled the page down). The browser starts a scroll in the first few
+    // pixels, before a move can be told apart, and once it has, it cannot be stopped; so every move of a touch
+    // here is held, and a move steeper than 55° from level scrolls the page by hand instead, following the
+    // finger, and coasting on when it lets go as a scroll does. Pointer events keep coming either way.
+    area.style.touchAction = 'none';
     /** a move from where it started: still too small to say (0), the map's (1), or the page's to scroll (-1) */
     const way = (dx: number, dy: number): number => (Math.max(Math.abs(dx), Math.abs(dy)) < SLOP ? 0 : Math.abs(dy) > Math.abs(dx) * STEEP ? -1 : 1);
+    /** what scrolls the page round the map: the nearest box that scrolls, or the page itself */
+    const scroller = (): HTMLElement => {
+      for (let el = area.parentElement; el; el = el.parentElement) {
+        const o = getComputedStyle(el).overflowY;
+        if ((o === 'auto' || o === 'scroll') && el.scrollHeight > el.clientHeight) return el;
+      }
+      return (document.scrollingElement as HTMLElement) ?? document.documentElement;
+    };
     const cv = $<HTMLCanvasElement>('arenaPic');
     const name = $('arenaName');
     const target = (d: number): MapId => {
@@ -366,26 +377,68 @@ export function createLobby(host: LobbyHost): {
       held = false;
       trail = [{ t: e.timeStamp, x: e.clientX, y: e.clientY }];
     });
-    // A touch: the moment a move is the map's, it is kept from scrolling the page (this has to be decided
-    // before the browser starts to scroll, a few pixels on: so at SLOP, as below). Touch events come with
-    // pointer events, in either order, so both decide the same way from the same start.
+    // the touch's own way, decided as the pointer's is (same start, same rule): 0 not yet, 1 the map's, -1 a scroll
+    let tOn = false;
+    let tWay = 0;
+    let tBox: HTMLElement | null = null;
+    let tLastY = 0;
+    let tLastT = 0;
+    let tV = 0; // page pixels a millisecond, + when the finger goes down
+    let coast = 0;
     area.addEventListener(
       'touchstart',
       (e) => {
-        if (e.touches.length !== 1) return;
+        cancelAnimationFrame(coast);
+        // (read-only, online: the page scrolls as usual)
+        tOn = e.touches.length === 1 && canEdit() && cv.width >= 2;
+        if (!tOn) return;
         tx0 = e.touches[0].clientX;
         ty0 = e.touches[0].clientY;
+        tWay = 0;
+        tBox = null;
+        tLastY = ty0;
+        tLastT = e.timeStamp;
+        tV = 0;
       },
       { passive: true },
     );
     area.addEventListener(
       'touchmove',
       (e) => {
-        if (!e.cancelable || e.touches.length !== 1) return;
-        if (held || (id !== -1 && way(e.touches[0].clientX - tx0, e.touches[0].clientY - ty0) === 1)) e.preventDefault();
+        if (!tOn || e.touches.length !== 1) return;
+        if (e.cancelable) e.preventDefault();
+        const t = e.touches[0];
+        if (tWay === 0) tWay = way(t.clientX - tx0, t.clientY - ty0);
+        if (tWay === -1) {
+          tBox ??= scroller();
+          const dy = t.clientY - tLastY;
+          tBox.scrollTop -= dy;
+          const dt = Math.max(1, e.timeStamp - tLastT);
+          tV = tV * 0.4 + (dy / dt) * 0.6;
+        }
+        tLastY = t.clientY;
+        tLastT = e.timeStamp;
       },
       { passive: false },
     );
+    area.addEventListener('touchend', (e) => {
+      if (!tOn || e.touches.length) return;
+      tOn = false;
+      if (tWay !== -1 || !tBox || Math.abs(tV) < 0.05 || e.timeStamp - tLastT > 80) return;
+      // coasting on, slowing as a scroll does
+      const box = tBox;
+      let v = tV;
+      let last = performance.now();
+      const step = (now: number): void => {
+        const dt = Math.min(32, now - last);
+        last = now;
+        box.scrollTop -= v * dt;
+        v *= Math.pow(0.95, dt / 16);
+        if (Math.abs(v) > 0.02) coast = requestAnimationFrame(step);
+      };
+      coast = requestAnimationFrame(step);
+    });
+    area.addEventListener('touchcancel', () => (tOn = false));
     const hold = (): void => {
       held = true;
       quietUntil = Infinity;

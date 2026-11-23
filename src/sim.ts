@@ -424,7 +424,7 @@ export const CURSE_TICKS = 8 * TICK_HZ; // a curse lasts 8 s
 export const CURSE_SPEED = 0.85; // while cursed a robot walks at 85% of the starting speed, whatever speed power-ups it has
 export const ROUND_TICKS = 90 * TICK_HZ; // the timer counts down 1 minute 30 unless told otherwise; then the blocks start to fall (it was 2 minutes)
 export const SHRINK_TICKS = 50 * TICK_HZ; // once the timer reaches 0 the blocks take 50 seconds to fall (a minute at first; made 20% faster)
-export const FALL_TICKS = 38; // a falling block is in the air, over its shadow, for 0.63 s before it lands (0.75 s at first; made 20% faster)
+export const FALL_TICKS = 32; // a falling block is in the air, over its shadow, for 0.53 s before it lands (0.75 s at first; made 20% faster to 0.63 s, then 20% faster again, 23 November 2026)
 export const START_FIRE = 1; // a blast reaches one tile each way until a flame power-up is picked up (it was 2)
 export const MAX_FIRE = 8;
 /**
@@ -469,13 +469,14 @@ export const ZOMBIE_SAFE_TICKS = 60; // blasts leave it be for 1 s after it gets
 // stands at its laptop while the plane is up. The plane is steered smoothly at any angle; its bombs fall, keep
 // some of its speed as they go, and go off where they land, with nothing on screen saying where that will be.
 // (19 November 2026, the owner, to make it easier to control: slower, turning less, and twice as long a flight.
-// It was 4.8 tiles a second, 169° a second and 8 s.)
-export const PLANE_TICKS = 16 * TICK_HZ; // a flight lasts up to 16 s
+// It was 4.8 tiles a second, 169° a second and 8 s.) (23 November 2026, the owner: one bomb, 6 s, always taking
+// off towards the middle, and turns 10% wider: it was 3 bombs, 16 s, off the way the robot faced, 84° a second.)
+export const PLANE_TICKS = 6 * TICK_HZ; // a flight lasts up to 6 s
 export const PLANE_SPEED = 0.05; // tiles a tick (3 tiles a second: a little quicker than a robot with no speed power-ups)
-export const TURN_STEPS = 1024; // the plane's heading is kept in 1024ths of a turn ...
-export const PLANE_TURN = 4; // ... and turns at most this many a tick (84° a second, a full circle in about 4.3 s): it sweeps round, never on the spot
+export const TURN_STEPS = 11264; // the plane's heading is kept in 11264ths of a turn (1024 × 11, so a tenth wider is a whole number) ...
+export const PLANE_TURN = 40; // ... and turns at most this many a tick (76.7° a second, a full circle in about 4.7 s; its circle 10% wider than at 84°): it sweeps round, never on the spot
 export const AIM_STEPS = 64; // the way it is steered (PlayerInput.aim) comes in 64ths of a turn
-export const PLANE_BOMBS = 3; // bombs a plane can drop
+export const PLANE_BOMBS = 1; // bombs a plane can drop (it was 3)
 export const PLANE_FIRST_GAP = 30; // none in its first half second, so the first cannot land on the robot it took off from
 export const PLANE_DROP_GAP = 20; // and at least a third of a second between two
 export const PLANE_AFTER = 30; // once its last bomb is away it flies on half a second, then home
@@ -1324,18 +1325,39 @@ function applyItem(p: Player, kind: ItemKind): void {
 
 // ---------------------------------------------------------------- the laptop's plane
 
-/** B with a laptop: the plane takes off from the robot, the way it faces, with PLANE_BOMBS bombs. */
+/** B with a laptop: the plane takes off from the robot, towards the middle of the arena, with PLANE_BOMBS bombs. */
 function launch(world: World, p: Player): void {
   p.flying = PLANE_TICKS;
   p.planeX = p.x;
   p.planeY = p.y;
-  p.planeDir = FACING_HEADING[p.facing];
+  p.planeDir = headingTo(p.x, p.y, (world.w - 1) / 2, (world.h - 1) / 2, FACING_HEADING[p.facing]);
   p.planeBombs = PLANE_BOMBS;
   p.planeCool = PLANE_FIRST_GAP;
   p.moving = false;
   p.askDir = 0;
   p.askTicks = 0;
   world.events.push({ type: 'launch', player: p.id });
+}
+
+/**
+ * The heading (TURN_STEPS) from (x, y) most nearly towards (tx, ty): the one of PLANE_STEP's that points
+ * most along the way there (sums only, no Math.atan2; the first of equals wins, so every copy agrees).
+ * `none` when already there.
+ */
+export function headingTo(x: number, y: number, tx: number, ty: number, none: number): number {
+  const dx = tx - x;
+  const dy = ty - y;
+  if (dx === 0 && dy === 0) return none;
+  let best = none;
+  let most = -Infinity;
+  for (let h = 0; h < TURN_STEPS; h++) {
+    const along = PLANE_STEP[h][0] * dx + PLANE_STEP[h][1] * dy;
+    if (along > most) {
+      most = along;
+      best = h;
+    }
+  }
+  return best;
 }
 
 /** The flight is over: the plane is gone, and the laptop is used up (B lifts bombs again, with the glove). */

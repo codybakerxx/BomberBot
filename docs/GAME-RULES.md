@@ -80,7 +80,7 @@ Each brick hides at most one power-up. You pick one up by standing on its tile. 
 | Glove | Lets you lift and throw bombs | |
 | Shield | The next blast does not knock you out. Wears off after 30 seconds if not used. | One at a time |
 | Curse (skull) | A penalty: you walk at 85% of the starting speed for 8 seconds | |
-| Laptop | Held in your robot's hands. **B** flies a plane: steer it anywhere, and **A** drops up to 3 bombs that go off where they land. See Laptop below | One flight |
+| Laptop | Held in your robot's hands. **B** flies a plane: steer it anywhere, and **A** drops its one bomb, which goes off where it lands. See Laptop below | One flight |
 
 <img src="screenshots/power-ups.png" width="560" alt="The eight power-ups in a row: bomb, flame, speed, boot, glove, shield, curse and laptop. Below them, a robot inside a shield ring, a cursed robot with a small skull over its head, a robot with both, and a ring flying outward from a robot whose shield has just taken a blast">
 
@@ -133,12 +133,12 @@ Each brick hides at most one power-up. You pick one up by standing on its tile. 
 *`useAction`, `launch`, `flyPlane` and `moveDrops` in sim.ts (the owner's design, 18 November 2026)*
 
 - Picked up like any power-up. The robot holds it in its hands. While it does, **B** is the laptop, so it cannot lift bombs, glove or not (a bomb it was already carrying is still thrown first).
-- **B** flies a plane, in the robot's colours, from the robot, the way it faces. The robot **stands still** until the plane lands, and can be blasted where it stands. Signal waves over its helmet say it is flying.
-- The plane never stops. It flies at 3 tiles a second, a little quicker than a robot with no speed power-ups, and turns smoothly towards the way it is steered, at most 84° a second (a full circle takes about 4 seconds), so it sweeps round in a gentle curve rather than turning on the spot. (It was 4.8 tiles and 169° a second until 19 November 2026, when the owner asked for it slower and turning less, to be easier to control.) By default (Settings › Controls › Inverse plane controls, on: the owner's ask, 19 November 2026) it is steered like a pilot: left and right turn it to its own left and right, whichever way it is flying, at that full turning speed while held, and up, down or nothing fly it straight on. The page turns that into an aim a quarter turn to that side of the plane's heading (`pilotAim` in input.ts), so the rules and what is sent online are the same either way. With the setting off it goes the way it is pointed. It can be steered any way at all (in 64ths of a turn), not just the four ways a robot walks: with the swipe pad the way the thumb points from where its stroke began (a stroke that curves steers round with it), with a stick the way it leans, with the D-pad or the keys in eight ways. Off one edge of the arena it comes back in on the other.
-- **A** drops a bomb, **3** in all: none in the first half second (so the first cannot come down on the robot it took off from), and at least a third of a second between two.
+- **B** flies a plane, in the robot's colours, from the robot, always heading for the middle of the arena to start with, whichever way the robot faces (`headingTo`; the owner's ask, 23 November 2026: it took off the way the robot faced). A robot standing right in the middle takes off the way it faces. The robot **stands still** until the plane lands, and can be blasted where it stands. Signal waves over its helmet say it is flying.
+- The plane never stops. It flies at 3 tiles a second, a little quicker than a robot with no speed power-ups, and turns smoothly towards the way it is steered, at most 76.7° a second (a full circle takes about 4.7 seconds), so it sweeps round in a gentle curve rather than turning on the spot. (It was 4.8 tiles and 169° a second until 19 November 2026, when the owner asked for it slower and turning less, to be easier to control; then 84° a second until 23 November 2026, when he asked for its turning circle 10% wider.) By default (Settings › Controls › Inverse plane controls, on: the owner's ask, 19 November 2026) it is steered like a pilot: left and right turn it to its own left and right, whichever way it is flying, at that full turning speed while held, and up, down or nothing fly it straight on. The page turns that into an aim a quarter turn to that side of the plane's heading (`pilotAim` in input.ts), so the rules and what is sent online are the same either way. With the setting off it goes the way it is pointed. It can be steered any way at all (in 64ths of a turn), not just the four ways a robot walks: with the swipe pad the way the thumb points from where its stroke began (a stroke that curves steers round with it), with a stick the way it leans, with the D-pad or the keys in eight ways. Off one edge of the arena it comes back in on the other.
+- **A** drops its bomb, **one** a flight (3 until the owner's ask, 23 November 2026): not in the first half second, so it cannot come down on the robot it took off from.
 - A dropped bomb falls for **0.8 s**, carried on the way the plane was flying and slowing as it falls: it lands about a tile on from where it was let go. It is drawn shrinking as it falls. **Nothing shows where it will land** (the owner's ask: hitting someone should not be easy).
 - It goes off **the moment it lands**, a blast **one tile each way**, in the pilot's name. On a brick, only the brick burns and breaks. On a solid block it blasts from the top of it. A power-up where it lands is destroyed, and a bomb there is set off, like any blast.
-- **B** again lands the plane at once. Otherwise it lands by itself **16 seconds** after take-off (8 until the owner asked for twice as long, 19 November 2026), or half a second after its last bomb. It blinks for its last second and a half. Bombs still falling still land. Once it lands the laptop is used up.
+- **B** again lands the plane at once. Otherwise it lands by itself **6 seconds** after take-off (8 at first, 16 from 19 November 2026, 6 since the owner's ask of 23 November 2026), or half a second after its bomb. It blinks for its last second and a half. Bombs still falling still land. Once it lands the laptop is used up.
 - Knocked out while flying, the plane is gone (bombs already falling still land). When the round is decided every plane lands. A robot coming back with a new life has no laptop.
 - Teammates: a plane's blast hurts them only with Friendly fire on, like any blast.
 - CPU players fly it too (see `docs/CPU-PLAYERS.md`).
@@ -182,7 +182,7 @@ How the blocks fall:
 - **One at a time**, about half a second apart. The first one starts to fall the moment the timer reaches 0:00.
 - **Where:** round the edge of the arena, starting at the top-left corner and going clockwise: along the top, down the right side, back along the bottom, up the left side. Then the same again one ring further in, and once more. Pillars are skipped: they are solid already.
 - **An area in the middle is left open.** It is always a clean rectangle: its edges run along open rows and columns, never through the pillars, which stand inside it (`keptSize`; the owner's ask, 20 November 2026). That makes it 9 tiles across by 7 down on Standard (columns 3 to 11, rows 3 to 9: 51 tiles to stand on), 7 by 5 on Mini and Big (29 tiles), and on an arena grown for seven or eight players 7 by 5 on Mini and Standard, 9 by 7 on Big. On Standard it was 7 by 5 from 18 to 20 November 2026, with pillars on its edges, so it did not end as a clean rectangle. No block ever falls in it, and whatever is in it (bricks, power-ups) is untouched. It was a 5 by 5 square until the owner had it widened (18 November 2026): the last four blocks used to close the two columns either side of it.
-- **Warning:** each block is in the air for a little under two thirds of a second (0.63 s) before it lands. Its tile is marked with a red outline and a shadow that darkens as it comes down.
+- **Warning:** each block is in the air for about half a second (0.53 s; 0.75 s at first, then 0.63 s until the owner asked for it 20% faster, 23 November 2026) before it lands. Its tile is marked with a red outline and a shadow that darkens as it comes down. Each block comes in from its own side of the arena, from outside, so it never hides the open floor: the top row's fall downwards, the right side's to the left, the bottom row's upwards, the left side's to the right; a corner goes with its row (`fallFrom` in render.ts; the owner's ask, 23 November 2026: they all came down from above).
 - **Landing:** the tile becomes a solid block for the rest of the round. A brick there, and anything under it, is gone. So is a power-up, a blast, or a bomb (it does not go off, and its owner gets it back).
 - **A robot under a landing block is knocked out.** A shield does not help: it stops a blast, not a block.
 - A robot or a bomb on the next tile that was leaning over the block's tile is pushed back onto the middle of its own.
@@ -330,12 +330,12 @@ All of these are named constants near the top of `src/sim.ts`. Changing one chan
 | `SHIELD_GRACE_TICKS` | 30 | After a shield takes a blast, how long blasts do no harm (0.5 s) |
 | `CURSE_TICKS` | 480 | How long a curse lasts (8 s) |
 | `CURSE_SPEED` | 0.85 | Walking speed while cursed, as a share of the starting speed |
-| `PLANE_TICKS` | 960 | Longest flight (16 s; 8 s until 19 November 2026) |
+| `PLANE_TICKS` | 360 | Longest flight (6 s; 8 s at first, 16 s from 19 to 23 November 2026) |
 | `PLANE_SPEED` | 0.05 | The plane's speed in tiles per tick (3 a second; it was 0.08, 4.8 a second) |
-| `TURN_STEPS`, `PLANE_TURN` | 1024, 4 | The plane's heading is kept in 1024ths of a turn, and turns at most 4 of them a tick (84° a second; it was 169°, in 256ths) |
+| `TURN_STEPS`, `PLANE_TURN` | 11264, 40 | The plane's heading is kept in 11264ths of a turn, and turns at most 40 of them a tick (76.7° a second, a circle 10% wider; it was 4 in 1024ths, 84°, and before that 169°, in 256ths) |
 | `AIM_STEPS` | 64 | The way it is steered comes in 64ths of a turn |
 | `PLANE_STEP` | | How far it moves each tick at each heading: worked out once with sums only (no `Math.sin`), so every engine agrees |
-| `PLANE_BOMBS` | 3 | Bombs a plane drops |
+| `PLANE_BOMBS` | 1 | Bombs a plane drops (3 until 23 November 2026) |
 | `PLANE_FIRST_GAP`, `PLANE_DROP_GAP` | 30, 20 | No bomb in the first half second, and a third of a second between two |
 | `PLANE_AFTER` | 30 | Once its last bomb is away it flies on half a second, then lands |
 | `DROP_TICKS` | 48 | How long a dropped bomb falls (0.8 s) |
@@ -344,7 +344,7 @@ All of these are named constants near the top of `src/sim.ts`. Changing one chan
 | `ITEM_CHANCE` | see Power-ups | The chance that a brick hides each power-up |
 | `ROUND_TICKS` | 5400 | What the timer counts down from (1 minute 30). The blocks start when it reaches 0 |
 | `SHRINK_TICKS` | 3000 | How long the blocks take to fall, from the moment the timer reaches 0 (50 seconds) |
-| `FALL_TICKS` | 38 | How long a falling block is in the air, with its shadow showing, before it lands (0.63 s) |
+| `FALL_TICKS` | 32 | How long a falling block is in the air, with its shadow showing, before it lands (0.53 s; 38 until 23 November 2026) |
 | `DEATH_TICKS` | 90 | Length of the knocked-out animation (1.5 s). If it is you, the panel appears when it ends |
 | `GHOST_TICKS` | 300 | How long the count after a knock-out goes on (5 s), so the ghost has time to float off the top of the screen |
 

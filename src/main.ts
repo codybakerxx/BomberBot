@@ -25,7 +25,7 @@ import { CpuSlot, Guest, ITEM_NAMES, MatchSetup, Prefs, SHARPNESS, SOUND_GROUPS,
 import { BOMB_ICON, Opt, answerConfirm, choice, confirmFirst, confirmOpen, group, heading, mount, note, slider, toggle, wireConfirm, wireFlash } from './ui';
 import { Hand, DEFAULT_SENS, OLD_SENS, SENS_DEG, SENS_MAX, STRAIGHT, sensTilt, standardAims } from './swipe';
 import { Online } from './online';
-import { canInstall, howToAdd, install, isApple, myEndpoint, onWebsite, pushOff, pushOn, pushState, type PushState } from './app';
+import { canInstall, howToAdd, install, isApple, myEndpoint, onWebsite, pushOff, pushOn, pushRefresh, pushState, pushTest, type PushState } from './app';
 import { decodeWorld, packInput, readCode, unpackInput, type BellAnswer, type Score, type Seat, type ServerMsg } from './net';
 /** Look up an element of src/page.html by its id. */
 const $ = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T;
@@ -2149,10 +2149,11 @@ addEventListener('resize', hideBellTip);
 /** The server's answer to the bell (worker.ts, `Friends`), in plain words under it. */
 function bellAnswer(answer: BellAnswer, why: string, n: number): void {
   clearTimeout(bellWait);
-  if (answer === 'sent') bellSay(`Rang ${n} friend${n === 1 ? '' : 's'}!`, `They’ve been told that room ${net?.code ?? ''} is open.`, true);
+  // (if some phones could not be reached, the server's line says why: shown in place of the usual one)
+  if (answer === 'sent') bellSay(`Rang ${n} friend${n === 1 ? '' : 's'}!`, why.includes('(') ? why : `They’ve been told that room ${net?.code ?? ''} is open.`, true);
   else if (answer === 'none')
     bellSay('Nobody to ring yet', 'The bell rings friends who switched on Room invites in Settings › App. It never rings your own phone.', false, 9000);
-  else if (answer === 'wait') bellSay('Friends were just rung', 'A room can ring once a minute.');
+  else if (answer === 'wait') bellSay('Friends were just rung', 'A room can ring once every 10 seconds.');
   else if (answer === 'busy') bellSay('Lots of rings this hour', 'Try again a little later.');
   else bellSay('Couldn’t ring anyone', why);
 }
@@ -2558,7 +2559,20 @@ const notifyOpts: Opt[] = [
     set: (on) => void setPush(on),
   }),
 ];
-const refreshNotify = mount($('notifyOpts'), notifyOpts);
+const refreshOpts = mount($('notifyOpts'), notifyOpts);
+function refreshNotify(): void {
+  refreshOpts();
+  $('notifyTest').hidden = pushNow !== 'on';
+}
+$('notifyTest').addEventListener('click', async () => {
+  const b = $('notifyTest') as HTMLButtonElement;
+  if (b.disabled) return;
+  b.disabled = true;
+  $('notifyNote').textContent = 'Sending…';
+  const r = await pushTest();
+  $('notifyNote').textContent = r.why;
+  b.disabled = false;
+});
 async function setPush(on: boolean): Promise<void> {
   pushBusy = true;
   pushNow = on ? 'on' : 'off'; // the switch moves at once
@@ -2588,6 +2602,7 @@ function showApp(): void {
   void pushState().then((st) => {
     if (!pushBusy) pushNow = st;
     refreshNotify();
+    if (st === 'on') void pushRefresh(); // (on the server's list with this phone's current sign-up)
   });
 }
 $('appInstall').addEventListener('click', () => void install());
@@ -2795,6 +2810,8 @@ if (onWebsite()) {
   ])
     document.head.appendChild(Object.assign(document.createElement('link'), { rel, href }));
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => {});
+  // each time the game opens with invites on, this phone's current sign-up goes to the server again (pushRefresh)
+  if ('Notification' in window && Notification.permission === 'granted') setTimeout(() => void pushRefresh(), 3000);
 }
 // the browser tab's icon: drawn now, so the game opened as a file has it too (on the website the same picture
 // is also served as a file, for the home screen: page.html)

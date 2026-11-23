@@ -142,6 +142,57 @@ export async function pushOn(): Promise<string> {
   }
 }
 
+/**
+ * This phone's sign-up, made sure of: the phone's current one, signed up again if it has none or one made with
+ * an older key, and sent to the server. Run every time the game opens with notifications allowed, and before a
+ * test. An iPhone can replace or drop its sign-up on its own (after an update, or now and then), and the server
+ * then held an address that no longer reached the phone, while the phone still showed invites as on: the likely
+ * reason invites never arrived (the owner and a friend, November 2026). Says what went wrong, or ''.
+ */
+export async function pushRefresh(): Promise<string> {
+  if (!supported() || Notification.permission !== 'granted') return 'Room invites are not on for this phone.';
+  const reg = await registration();
+  if (!reg) return 'BomberBot is still getting ready on this phone. Try again in a moment.';
+  try {
+    const r = await fetch('/api/push/key', { cache: 'no-store' });
+    const { key } = (await r.json()) as { key: string };
+    let sub = await reg.pushManager.getSubscription();
+    if (sub && sub.options.applicationServerKey && new Uint8Array(sub.options.applicationServerKey).join() !== keyBytes(key).join()) {
+      await sub.unsubscribe();
+      sub = null;
+    }
+    sub ??= await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: keyBytes(key) });
+    const old = (() => {
+      try {
+        return localStorage.getItem(MINE);
+      } catch {
+        return null;
+      }
+    })();
+    const s = await fetch('/api/push/subscribe', { method: 'POST', body: JSON.stringify({ sub: sub.toJSON() }) });
+    if (!s.ok) return ((await s.json().catch(() => null)) as { why?: string } | null)?.why ?? 'The server did not take it.';
+    // the phone's old address, if it changed: off the list, so nobody sends to it
+    if (old && old !== sub.endpoint) await fetch('/api/push/unsubscribe', { method: 'POST', body: JSON.stringify({ endpoint: old }) }).catch(() => null);
+    keepMine(sub.endpoint);
+    return '';
+  } catch {
+    return 'Could not reach the server. Check your connection and try again.';
+  }
+}
+
+/** A test notification to this phone (Settings › App). Says how it went, in the push service's words if it failed. */
+export async function pushTest(): Promise<{ ok: boolean; why: string }> {
+  const why = await pushRefresh();
+  if (why) return { ok: false, why };
+  const endpoint = (await subscription())?.endpoint;
+  try {
+    const r = await fetch('/api/push/test', { method: 'POST', body: JSON.stringify({ endpoint }) });
+    return (await r.json()) as { ok: boolean; why: string };
+  } catch {
+    return { ok: false, why: 'Could not reach the server. Check your connection and try again.' };
+  }
+}
+
 export async function pushOff(): Promise<void> {
   keepMine(null);
   const sub = await subscription();

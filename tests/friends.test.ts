@@ -69,7 +69,7 @@ async function main(): Promise<void> {
   }) as typeof fetch;
   try {
     const r = (await (await post('/invite', { code: 'BKTW', name: 'Cody', me: host.sub.endpoint })).json()) as { why: string; bell: string; n: number };
-    assert.strictEqual(r.why, 'Told 2 friends that room BKTW is open.');
+    assert.strictEqual(r.why, 'Told 2 friends that room BKTW is open. (1 phone had switched invites off or removed the app.)', 'and says a phone was gone');
     assert.strictEqual(r.bell, 'sent', 'the page is told how it went, to say it under the bell');
     assert.strictEqual(r.n, 2, 'and how many friends were rung');
     assert.ok(!got.has(host.sub.endpoint), 'not the host');
@@ -84,8 +84,25 @@ async function main(): Promise<void> {
     }
     assert.strictEqual((await storage.list({ prefix: 'f:' })).size, 3, 'the phone that is gone is dropped');
     const again = (await (await post('/invite', { code: 'BKTW', name: 'Cody' })).json()) as { why: string; bell: string };
-    assert.match(again.why, /just told/, 'not twice in a minute');
+    assert.match(again.why, /just told/, 'not twice in 10 seconds');
     assert.strictEqual(again.bell, 'wait');
+    const annAuth = got.get(ann.sub.endpoint)!.headers.get('Authorization');
+    // the log keeps what each push service answered
+    const log = (await (await f.fetch(new Request('https://x/api/push/log'))).json()) as { log: { status: number; to: string }[]; phones: number };
+    assert.ok(log.log.some((l) => l.status === 410 && l.to === 'fcm.googleapis.com'), 'the gone phone in the log');
+    assert.ok(log.log.some((l) => l.status === 201 && l.to === 'web.push.apple.com'), 'and the sent one');
+    assert.strictEqual(log.phones, 3);
+    // a test notification goes to the phone that asked, and not again straight away
+    got.clear();
+    const t1 = (await (await post('/api/push/test', { endpoint: ann.sub.endpoint })).json()) as { ok: boolean; why: string };
+    assert.ok(t1.ok, t1.why);
+    assert.ok(got.has(ann.sub.endpoint) && got.size === 1, 'only to that phone');
+    assert.strictEqual(JSON.parse(await ann.open(got.get(ann.sub.endpoint)!.body)).body, 'Room invites work on this phone.');
+    assert.strictEqual(got.get(ann.sub.endpoint)!.headers.get('Authorization'), annAuth, 'the signing token is kept, not made afresh each send (Apple turns that away)');
+    const t2 = (await (await post('/api/push/test', { endpoint: ann.sub.endpoint })).json()) as { ok: boolean };
+    assert.ok(!t2.ok, 'not twice in a row');
+    const t3 = (await (await post('/api/push/test', { endpoint: 'https://web.push.apple.com/nobody' })).json()) as { ok: boolean; why: string };
+    assert.ok(!t3.ok && /not on the server/.test(t3.why), 'a phone not on the list is told so');
     // the key stays the same between calls
     const k1 = await (await f.fetch(new Request('https://x/api/push/key'))).json();
     const k2 = await (await f.fetch(new Request('https://x/api/push/key'))).json();

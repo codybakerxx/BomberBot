@@ -1340,13 +1340,17 @@ export function drawDynamic(ctx: Ctx, world: World, T: number, time: number, foc
     }
   }
 
-  // the falling blocks themselves, over everything: larger while high up, speeding up as they drop
+  // the falling blocks themselves, over everything: larger while high up, speeding up as they drop. Each comes
+  // in from its own side of the arena, from outside, so it never hides the open floor it is closing in on (the
+  // owner's ask, 23 November 2026; they all came down from above, over the floor below them): the top row's
+  // fall downwards, the right side's to the left, the bottom row's upwards, the left side's to the right
   for (const f of world.falling) {
     const e = 1 - Math.max(0, f.landAt - world.tick) / FALL_TICKS;
     const high = 1 - e * e; // 1 at the top, 0 on the floor
     const size = T * (1 + 0.3 * high);
-    const px = f.cx * T - (size - T) / 2;
-    const py = f.cy * T - (size - T) / 2 - high * T * 2.4;
+    const [ox, oy] = fallFrom(world, f.cx, f.cy);
+    const px = f.cx * T - (size - T) / 2 + ox * high * T * 2.4;
+    const py = f.cy * T - (size - T) / 2 + oy * high * T * 2.4;
     ctx.save();
     ctx.globalAlpha = Math.min(1, 0.35 + e * 1.3);
     drawHard(ctx, px, py, size);
@@ -1386,6 +1390,18 @@ function drawSkies(ctx: Ctx, world: World, T: number, time: number): void {
     const heading = (p.planeDir / TURN_STEPS) * Math.PI * 2;
     for (const [x, y] of spots((p.planeX + 0.5) * T, (p.planeY + 0.5) * T, T * 1.2)) drawPlane(ctx, x, y, T, heading, col, time, p.flying);
   }
+}
+
+/**
+ * The side a falling block on (cx, cy) comes in from, as a step outwards: the ring of the arena it is in decides
+ * (top row [0, -1], bottom row [0, 1], left side [-1, 0], right side [1, 0]; a corner goes with its row).
+ */
+export function fallFrom(world: World, cx: number, cy: number): [number, number] {
+  const ring = Math.min(cx, cy, world.w - 1 - cx, world.h - 1 - cy);
+  if (cy === ring) return [0, -1];
+  if (cy === world.h - 1 - ring) return [0, 1];
+  if (cx === ring) return [-1, 0];
+  return [1, 0];
 }
 
 /** A bomb falling from a plane, seen from above, `r` across its body: an iron body, four tail fins behind it, its owner's colour round it. */
