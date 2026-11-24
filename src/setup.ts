@@ -727,8 +727,8 @@ export function classicRules(s: MatchSetup, myColor: string): MatchSetup {
 
 /**
  * Hardcore: Classic, but every robot starts with all the bombs, the longest blast and the top speed, and the
- * glove is very rare (Custom power-ups with the glove at Very rare, a quarter of its usual share, and no arena
- * sure to have one) (the owner's asks, 23 November 2026). It first maxed everything out, bricks, power-ups and closing in too, and the owner
+ * glove is rarer (Custom power-ups with the glove at Rare, half its usual share, and no arena sure to have
+ * one) (the owner's asks, 23 November 2026: it was Very rare, a quarter, for an evening). It first maxed everything out, bricks, power-ups and closing in too, and the owner
  * found it too hardcore the same evening: the rest is Classic's, Power-up density included.
  */
 export function hardcoreRules(s: MatchSetup, myColor: string): MatchSetup {
@@ -738,7 +738,7 @@ export function hardcoreRules(s: MatchSetup, myColor: string): MatchSetup {
   out.startFire = MAX_FIRE;
   out.startSpeed = MAX_SPEED_ITEMS;
   out.itemsOn = true;
-  out.items = { ...out.items, grab: ITEM_VERY_RARE };
+  out.items = { ...out.items, grab: ITEM_RARE }; // (half as common as usual: the owner's ask; it was Very rare for an evening)
   return out;
 }
 

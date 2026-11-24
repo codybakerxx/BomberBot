@@ -759,7 +759,7 @@ console.log('room checks passed');
   for (const k of ['brickShare', 'itemShare', 'itemOn', 'closeIn', 'roundSecs', 'lives'] as const)
     assert.deepStrictEqual(hard[k], classic[k], `Hardcore: ${k} as in Classic (the owner: the rest normal, power-up density included)`);
   // the glove very rare (the owner's ask): Rare, and no arena sure to have one; the rest of the mix as usual
-  assert.ok(hard.itemsOn && hard.items.grab === ITEM_VERY_RARE, 'Hardcore: the glove at Very rare');
+  assert.ok(hard.itemsOn && hard.items.grab === ITEM_RARE, 'Hardcore: the glove at Rare, half as common');
   for (const k of ['bomb', 'fire', 'speed', 'kick', 'shield', 'curse', 'laptop'] as const) assert.strictEqual(hard.items[k], classic.items[k], `Hardcore: ${k} as usual`);
   {
     const cfg = worldConfig(hard, me, 1);
@@ -776,8 +776,8 @@ console.log('room checks passed');
       all += kinds.length;
       if (!n) none++;
     }
-    assert.ok(gloves / all < 0.016, `gloves are about 1.3% of power-ups in Hardcore, rarer than a shield (${((100 * gloves) / all).toFixed(1)}%)`);
-    assert.ok(none > 80, `most Hardcore arenas have no glove at all (${none} of 200)`);
+    assert.ok(gloves / all > 0.022 && gloves / all < 0.031, `gloves are about half their usual 5.1% of power-ups in Hardcore (${((100 * gloves) / all).toFixed(1)}%)`);
+    assert.ok(none > 30, `some Hardcore arenas have no glove at all (${none} of 200)`);
   }
   assert.equal(hard.firstTo, 3, 'and Rounds to win kept');
   hard.lives = 2;
