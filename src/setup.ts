@@ -263,6 +263,8 @@ export interface MatchSetup {
    */
   randomRules: boolean;
   rolledKey: string;
+  /** Item Drop (the owner's ask, 24 November 2026): a robot knocked out drops the power-ups it collected */
+  itemDrop: boolean;
 }
 
 /** The colours a team can have. A team is known by its colour: the Red team, the Green team... */
@@ -647,6 +649,7 @@ export function defaultSetup(myColor: string): MatchSetup {
     friendlyFire: false, // teammates are safe from each other's blasts unless it is switched on
     randomRules: false,
     rolledKey: '',
+    itemDrop: false,
   };
 }
 
@@ -679,7 +682,7 @@ export const RULE_GROUPS = {
   time: ['timerOn', 'roundSecs', 'closeIn'],
   winning: ['firstTo'],
   lives: ['lives', 'postMortem', 'afterlife', 'angelsBack'],
-  arena: ['brickShare', 'itemShare', 'itemsOn', 'itemOn', 'items'],
+  arena: ['brickShare', 'itemShare', 'itemDrop', 'itemsOn', 'itemOn', 'items'],
   start: ['startOn', 'startBombs', 'startFire', 'startSpeed'],
 } as const satisfies Record<string, readonly (keyof MatchSetup)[]>;
 export type RuleGroup = keyof typeof RULE_GROUPS;
@@ -710,6 +713,7 @@ export const MODES = [
   { id: 'classic', name: 'Classic', line: 'Usual rules' },
   { id: 'hardcore', name: 'Hardcore', line: 'Maxed start' },
   { id: 'random', name: 'Random', line: 'New each match' },
+  { id: 'itemdrop', name: 'Item Drop', line: 'Loot the fallen' },
 ] as const;
 export type ModeId = (typeof MODES)[number]['id'];
 const MODE_KEYS = (Object.keys(RULE_GROUPS) as RuleGroup[]).filter((g) => g !== 'winning').flatMap((g) => [...RULE_GROUPS[g]]);
@@ -758,6 +762,7 @@ export function rollRules(s: MatchSetup, random: () => number): MatchSetup {
   out.postMortem = yes(0.35);
   out.afterlife = out.postMortem ? (yes(0.5) ? 'angel' : 'zombie') : 'watch';
   out.angelsBack = out.afterlife === 'angel' && yes(0.5);
+  out.itemDrop = yes(0.3);
   out.brickShare = int(40, BRICK_SHARE_MAX, BRICK_SHARE_STEP);
   out.itemShare = int(30, 100, ITEM_SHARE_STEP);
   out.itemsOn = yes(0.4);
@@ -774,12 +779,27 @@ export function rollRules(s: MatchSetup, random: () => number): MatchSetup {
   return out;
 }
 
+/** Item Drop's Power-up density: much rarer than Classic's 60%, so most power-ups come from robots knocked out */
+export const ITEM_DROP_SHARE = 20;
+
+/**
+ * Item Drop (the owner's ask, 24 November 2026): Classic, with Item Drop on (a robot knocked out drops the
+ * power-ups it collected, for anyone to pick up) and power-ups much rarer under the bricks.
+ */
+export function itemDropRules(s: MatchSetup, myColor: string): MatchSetup {
+  const out = classicRules(s, myColor);
+  out.itemDrop = true;
+  out.itemShare = ITEM_DROP_SHARE;
+  return out;
+}
+
 /** Which mode a setup's rules are: the bubble lit on the Match page, or 'custom' for none. */
 export function modeOf(s: MatchSetup, myColor: string): ModeId | 'custom' {
   if (s.randomRules && rulesKey(s) === s.rolledKey) return 'random';
   const k = rulesKey(s);
   if (k === rulesKey(classicRules(s, myColor))) return 'classic';
   if (k === rulesKey(hardcoreRules(s, myColor))) return 'hardcore';
+  if (k === rulesKey(itemDropRules(s, myColor))) return 'itemdrop';
   return 'custom';
 }
 
@@ -867,6 +887,7 @@ export function worldConfig(s: MatchSetup, myColor: string, seed: number, guests
     lives: s.lives,
     angels: afterlifeOf(s) !== 'angel' ? 'off' : s.angelsBack ? 'revive' : 'on',
     zombies: afterlifeOf(s) === 'zombie',
+    itemDrop: s.itemDrop,
   };
 }
 
@@ -946,6 +967,7 @@ export function readSetup(raw: unknown, myColor: string, colorIds: string[]): Ma
   out.itemShare = clampInt(r.itemShare, 0, 100, d.itemShare);
   out.itemShare -= out.itemShare % ITEM_SHARE_STEP;
   if (typeof r.itemsOn === 'boolean') out.itemsOn = r.itemsOn;
+  if (typeof r.itemDrop === 'boolean') out.itemDrop = r.itemDrop;
   out.itemOn = { ...d.itemOn };
   if (r.items && typeof r.items === 'object') {
     // (saved before Very rare, version 7 and below: Off, Rare, Normal, Lots were steps 0 to 3)

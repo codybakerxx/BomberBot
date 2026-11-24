@@ -287,10 +287,11 @@ for (const level of BOT_LEVELS) {
 
 // 18. four CPU players of each level: whoever is still in when the blocks stop is inside the square. (A round
 // won while blocks are still falling ends there, wherever the winner stands: it is not counted. Seed 4 alone
-// stopped being enough when the laptop came, November 2026: the round played differently and was won early.)
+// stopped being enough when the laptop came, November 2026: the round played differently and was won early.
+// Seeds 1 to 4 stopped being enough for Hard when the plane got faster, 24 November 2026: up to 8 are tried.)
 for (const level of BOT_LEVELS) {
   let full = 0;
-  for (let seed = 1; seed <= 4; seed++) {
+  for (let seed = 1; seed <= 8 && full < 2; seed++) {
     const w = createWorld({ seed, players: [0, 1, 2, 3].map((i) => ({ colorId: String(i) })) });
     const bots = [0, 1, 2, 3].map((i) => createBot(i, level, seed));
     for (let t = 0; t < ROUND_TICKS + SHRINK_TICKS && !w.over; t++) step(w, bots.map((b) => botInput(w, b)));

@@ -39,6 +39,8 @@ export interface OnlineHooks {
   error(why: string, fatal: boolean): void;
   /** the answer to the host's bell (Tell friends): how it went, the server's line, how many friends were rung */
   bell(answer: BellAnswer, why: string, n: number): void;
+  /** someone in the room said something in the quick chat (`id`: their member number) */
+  chat(id: number, text: string): void;
 }
 
 /** In a round: a ping twice a second for the picture's clock, and a quick few at the start of each round. */
@@ -258,6 +260,9 @@ export class Online {
         if (m.d !== undefined) this.pred?.pong(m.c, m.d);
         return;
       }
+      case 'chat':
+        this.hooks.chat(m.id, m.text);
+        return;
       case 'note':
         if (m.bell) this.hooks.bell(m.bell, m.why, m.n ?? 0);
         else this.hooks.error(m.why, false);

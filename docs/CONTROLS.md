@@ -63,6 +63,10 @@ The caption on the swipe pad ("11% sensitivity", or "Steer the plane" while flyi
 
 The **menu during a match** (the three bars at the top right, or Escape) pauses the round. It says whether the match is local, whether the round is paused or over, which round it is, the rules and the time left, and every player's state (in or out) and rounds won. Then **Resume** (back into the round, or back to its result), **Settings**, and the host's choices: **Restart** (the whole match again: everyone's score back to 0, round 1, same players and rules) and **Leave to the lobby**. Both ask first.
 
+**Holding the menu button down** (about 0.4 s) opens the **quick menu** in place of the menu: a small panel under it with **Sound effects** on or off, the **Volume** under it, and **Movement sensitivity**. The round does not pause. A tap anywhere outside, or Escape, closes it; a plain tap on the button still opens the full menu. (The owner's ask, 24 November 2026.)
+
+**Quick chat**: the speech-bubble button at the top (upright with four players or fewer at the far left, the place kept clear to match the menu button, since the scoreboard fills the bar beside the menu; otherwise just left of the menu button) opens a panel of five kinds of line along its top: **Hello**, **Taunts**, **Sorry**, **Hype** and **Custom**. The first four each have four ready-made lines; Custom has a box to type up to 40 characters and Send. A line picked shows for about 3.5 s in a bubble over your robot, edged in its colour; online, everyone in the room sees it over your robot (someone not in the round, as a line at the top). One line every 1.5 s at most. The round does not pause; a tap outside closes the panel. (The owner's ask, 24 November 2026.)
+
 When a round ends, the result panel offers **Next round** and **Menu**. When someone has won the match it offers **Rematch** (same players and rules, the score back to 0) and **Lobby**.
 
 Keys in the menus: Tab moves between buttons, ← and → change the setting in focus, Q and E turn the pages, and Escape goes back one step (closes a question or a panel, leaves Settings, resumes from the menu, goes from the lobby to the title).
@@ -77,7 +81,7 @@ Holding a **laptop** (a power-up: see [GAME-RULES.md](GAME-RULES.md), Laptop), *
 - **B** again lands the plane ("Land" on the B button). It also lands by itself after 6 seconds (16 until 23 November 2026), or half a second after its bomb.
 - Nothing shows where a bomb will land: you judge it by eye. A bomb carries on about a tile the way the plane was flying as it falls.
 - The plane always takes off heading for the middle of the arena, whichever way the robot faces (the owner's ask, 23 November 2026).
-- The plane flies at 3 tiles a second and turns at most 93.75° a second, so a swipe turns it in a gentle curve, its circle 10% tighter than at 84° (the owner's ask, 23 November 2026; before that he asked for it slower and turning less, 19 November 2026: it was 4.8 tiles and 169° a second).
+- The plane flies at 3.3 tiles a second and turns at most about 122° a second, so a swipe turns it in a curve about 15% tighter than at 93.75° (the owner's ask, 24 November 2026: tighter again and slightly faster; it was 3 tiles and 93.75° a second, its circle 10% tighter than at 84° at his ask the day before; before that he asked for it slower and turning less, 19 November 2026: it was 4.8 tiles and 169° a second).
 - While flying, the caption on the swipe pad says **Steer the plane**, and a one-line tip over the arena explains it the first time you pick a laptop up in a match.
 
 Online, your steering is sent with your presses, in 64 ways (`IN_AIM` in net.ts: see [ONLINE.md](ONLINE.md)).

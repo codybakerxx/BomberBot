@@ -153,6 +153,17 @@ async def main():
                 await pg.evaluate("document.querySelector('#settings .scroll').scrollTop = 5000"); await look('settings ' + t + ' end')
             await pg.evaluate("document.getElementById('setDone').click()")
             await pg.evaluate("document.getElementById('arenaStart').click()"); await pg.wait_for_timeout(600); await look('playing')
+            # quick chat (24 November 2026): every kind of line, a long bubble, and the button clear of the timer
+            await pg.evaluate("document.getElementById('chatBtn').click()")
+            for k in range(5):
+                await pg.evaluate(f"document.querySelectorAll('.chat-tab')[{k}].click()"); await look(f'chat panel {k}')
+            await pg.evaluate("document.querySelectorAll('.chat-tab')[1].click(); document.querySelector('.chat-line:last-child').click()"); await look('chat bubble')
+            clash = await pg.evaluate("(() => { const a = document.getElementById('chatBtn').getBoundingClientRect(), t = document.getElementById('timer').getBoundingClientRect(), m = document.getElementById('menuBtn').getBoundingClientRect(); const hit = (x, y) => x.left < y.right && y.left < x.right && x.top < y.bottom && y.top < x.bottom; return hit(a, t) || hit(a, m); })()")
+            if clash: total += 1; print(f'  {w}x{h} playing: the chat button runs into the timer or the menu button')
+            # the quick menu: the menu button held down
+            await pg.dispatch_event('#menuBtn', 'pointerdown', {'button': 0, 'pointerType': 'touch'}); await pg.wait_for_timeout(600); await look('quick menu')
+            await pg.dispatch_event('#menuBtn', 'pointerup', {'button': 0, 'pointerType': 'touch'})
+            await pg.evaluate("document.getElementById('quickMenu').hidden = true")
             await pg.evaluate("document.getElementById('menuBtn').click()"); await look('menu')
             await pg.evaluate("document.getElementById('pauseRestart').click()"); await look('confirm')
             await pg.evaluate("document.getElementById('confirmNo').click(); document.getElementById('pauseResume').click()")

@@ -8,7 +8,7 @@
 import assert from 'node:assert';
 import { COLORS } from '../src/render';
 import { createWorld, ITEM_CHANCE, SOFT, step, AIM_STEPS, MAX_BOMBS, MAX_FIRE, MAX_SPEED_ITEMS } from '../src/sim';
-import { Room, COLOR_IDS, LEAD_MS, TICK_MS, AWAY_MS, HOST_AWAY_MS, type Conn, type Member } from '../src/room';
+import { Room, COLOR_IDS, LEAD_MS, TICK_MS, AWAY_MS, HOST_AWAY_MS, CHAT_GAP_MS, type Conn, type Member } from '../src/room';
 import {
   decodeWorld,
   packInput,
@@ -23,6 +23,7 @@ import {
   worldHash,
   makeCode,
   PROTOCOL,
+  CHAT_MAX,
   type ClientMsg,
   type ServerMsg,
 } from '../src/net';
@@ -818,3 +819,24 @@ console.log('room checks passed');
   const third = h.last('room')!.setup;
   assert.ok(third.randomRules && rulesKey(third) !== rulesKey(second), 'back in the lobby: new rules for the next match');
 }
+
+// quick chat (24 November 2026): a line goes to everyone in the room with who said it, tidied, and not too often
+{
+  const room4 = new Room('CHAT', makeRng(4));
+  const a = new Page('ca');
+  const b = new Page('cb');
+  a.member = room4.hello(a.conn, { t: 'hello', id: 'ca', name: 'Cody', colorId: 'gold', dance: 'party', create: true, pv: PROTOCOL }, now);
+  b.member = room4.hello(b.conn, { t: 'hello', id: 'cb', name: 'Zed', colorId: 'blue', dance: 'party', create: false, pv: PROTOCOL }, now);
+  room4.message(a.member!, { t: 'chat', text: '  Too   slow!  ' }, now);
+  for (const p of [a, b]) assert.deepStrictEqual(p.last('chat'), { t: 'chat', id: a.member!.id, text: 'Too slow!' }, `${p.key} hears it`);
+  room4.message(a.member!, { t: 'chat', text: 'again' }, now + 200);
+  assert.equal(b.last('chat')!.text, 'Too slow!', 'a second line straight after is dropped');
+  room4.message(a.member!, { t: 'chat', text: 'again' }, now + CHAT_GAP_MS);
+  assert.equal(b.last('chat')!.text, 'again', 'after the gap it goes');
+  room4.message(b.member!, { t: 'chat', text: '\n\t' }, now);
+  assert.equal(a.last('chat')!.text, 'again', 'an empty line is not sent');
+  room4.message(b.member!, { t: 'chat', text: 'y'.repeat(300) }, now);
+  assert.equal(a.last('chat')!.text.length, CHAT_MAX, 'cut short');
+}
+
+console.log('room chat checks passed');

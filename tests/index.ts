@@ -9,6 +9,7 @@ import './bot.test';
 import './dances.test';
 import './lives.test';
 import './laptop.test';
+import './itemdrop.test';
 import './room.test';
 import './predict.test';
 import './push.test';

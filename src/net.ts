@@ -22,7 +22,7 @@ import type { BotLevel } from './bot';
  * The version of these messages. A page says it in `hello`; the server turns away a page with another (one
  * left open from before an update), telling it to reload. Raise it whenever a message changes its meaning.
  */
-export const PROTOCOL = 10; // 3: the laptop's plane (steering in the inputs, planes and falling bombs in the world); 4: the plane slower, turning less, flying longer; 5: Power-ups (itemShare in the setup), and a custom mix is only which kinds; 6: Brick density (brickShare) and a switch for each kind (itemOn); 7: the area the falling blocks leave is a clean rectangle on every size (9 by 7 on Standard); 8: the plane with one bomb, 6 s, off towards the middle, turning tighter, and the blocks falling faster; 9: the input mask keeps the plane's steering (it was wiped), and the Mode bubbles (randomRules, rolledKey in the setup); 10: the kinds every arena is sure to have (`sure` in the round's config: not one set to Rare or Very rare)
+export const PROTOCOL = 11; // 3: the laptop's plane (steering in the inputs, planes and falling bombs in the world); 4: the plane slower, turning less, flying longer; 5: Power-ups (itemShare in the setup), and a custom mix is only which kinds; 6: Brick density (brickShare) and a switch for each kind (itemOn); 7: the area the falling blocks leave is a clean rectangle on every size (9 by 7 on Standard); 8: the plane with one bomb, 6 s, off towards the middle, turning tighter, and the blocks falling faster; 9: the input mask keeps the plane's steering (it was wiped), and the Mode bubbles (randomRules, rolledKey in the setup); 10: the kinds every arena is sure to have (`sure` in the round's config: not one set to Rare or Very rare); 11: Item drop (itemDrop in the setup and the round's config), quick chat (`chat`), the plane faster and turning tighter
 
 /** Room codes: four letters, without the ones easily mixed up (I, O) or that spell words easily (vowels). */
 export const CODE_LETTERS = 'BCDFGHJKLMNPQRSTVWXZ';
@@ -293,7 +293,9 @@ export type ClientMsg =
   /** leaving the room for good */
   | { t: 'bye' }
   /** the host: send a notification to everyone who turned them on (Settings › App) that this room is open. `me`: this phone's own sign-up, left out. */
-  | { t: 'invite'; me?: string };
+  | { t: 'invite'; me?: string }
+  /** a quick-chat line (picked or typed in the menu's chat), said over their robot to everyone in the room */
+  | { t: 'chat'; text: string };
 
 /** What the server sends. */
 export type ServerMsg =
@@ -316,7 +318,18 @@ export type ServerMsg =
    * a short line for the top of the screen. The answer to the host's bell (Tell friends) also says how it went
    * (`bell`) and how many friends were rung (`n`), so the page can say it under the bell in its own words.
    */
-  | { t: 'note'; why: string; bell?: BellAnswer; n?: number };
+  | { t: 'note'; why: string; bell?: BellAnswer; n?: number }
+  /** someone in the room said this (quick chat): `id` is the member's number, as in `MemberInfo` */
+  | { t: 'chat'; id: number; text: string };
+
+/** The longest quick-chat line, in characters. */
+export const CHAT_MAX = 40;
+/** Tidy a chat line: one line, no control characters, at most CHAT_MAX characters ('' if nothing is left). */
+export function cleanChat(raw: unknown): string {
+  if (typeof raw !== 'string') return '';
+  // eslint-disable-next-line no-control-regex
+  return [...raw.replace(/[\u0000-\u001f\u007f\u2028\u2029]+/g, ' ').replace(/\s+/g, ' ').trim()].slice(0, CHAT_MAX).join('').trim();
+}
 
 /** How a ring of the host's bell (Tell friends) went: friends rung, nobody to ring, too soon, too many this hour, or it failed. */
 export type BellAnswer = 'sent' | 'none' | 'wait' | 'busy' | 'fail';

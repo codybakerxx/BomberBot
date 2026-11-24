@@ -143,11 +143,11 @@ Four of the same level:
 
 | Level | Blasted itself | Shut in by a rival | Caught in a rival's blast | Under a block, early | Under a block, in the last 15 s of them | Won | Rounds drawn | Not decided |
 |---|---|---|---|---|---|---|---|---|
-| Beginner | 0.0% | 0.4% | 40.8% | 0.4% | 1.3% | 2.5% | 0 of 60 | 54 of 60 |
-| Normal | 0.0% | 27.1% | 45.4% | 0.8% | 2.1% | 22.9% | 3 of 60 | 2 of 60 |
-| Hard | 0.0% | 20.0% | 52.5% | 0.0% | 0.0% | 21.7% | 1 of 60 | 7 of 60 |
+| Beginner | 0.0% | 0.4% | 42.9% | 0.8% | 0.8% | 1.7% | 0 of 60 | 56 of 60 |
+| Normal | 0.0% | 27.9% | 42.1% | 1.3% | 3.3% | 23.8% | 1 of 60 | 2 of 60 |
+| Hard | 0.0% | 25.0% | 47.9% | 0.0% | 0.0% | 22.9% | 0 of 60 | 5 of 60 |
 
-(The Hard row: 23 November 2026, after Hard was made more aggressive; it was 32.5%, 35.0%, 16.3% won and 20 of 60 not decided.)
+(24 November 2026, the plane faster and turning tighter. The Hard row of 23 November 2026, after Hard was made more aggressive, was 20.0%, 52.5%, 21.7% won, 7 of 60 not decided; it was 32.5%, 35.0%, 16.3% won and 20 of 60 not decided.)
 
 The other tables are in [docs/CPU-PLAYERS.md](../docs/CPU-PLAYERS.md).
 
@@ -166,15 +166,15 @@ What it cannot show is how they feel to play against. That needs a phone.
 
 ## `pilot.ts`: how often does a CPU player's plane get someone?
 
-One CPU pilot of each level, handed a laptop, against one target: a robot that never looks up and walks to the next wall, one that also turns at random every half second (both in an arena with no bricks), and a Normal CPU player that dodges what it notices. It counts the share of flights that knocked the target out. Recorded on 23 November 2026 with one bomb, 6 s flights, taking off towards the middle, 93.75° a second, 60 arenas each:
+One CPU pilot of each level, handed a laptop, against one target: a robot that never looks up and walks to the next wall, one that also turns at random every half second (both in an arena with no bricks), and a Normal CPU player that dodges what it notices. It counts the share of flights that knocked the target out. Recorded on 24 November 2026 with one bomb, 6 s flights, taking off towards the middle, 3.3 tiles and about 122° a second, 60 arenas each:
 
 | Pilot | Never looks up | Turns at random too | Normal CPU player |
 |---|---|---|---|
-| Beginner | 12% | 21% | 5% |
-| Normal | 33% | 33% | 5% |
-| Hard | 72% | 20% | 8% |
+| Beginner | 22% | 25% | 6% |
+| Normal | 35% | 28% | 8% |
+| Hard | 80% | 23% | 12% |
 
-With three bombs, 84° a second and 16 s (19 November 2026): Beginner 41%, 39%, 6%; Normal 67%, 58%, 17%; Hard 93%, 48%, 25%. With the first plane (4.8 tiles a second, 169° a second, 8 s), 18 November 2026: Beginner 46%, 30%, 16%; Normal 62%, 50%, 22%; Hard 83%, 58%, 24%.
+At 3 tiles and 93.75° a second (23 November 2026): Beginner 12%, 21%, 5%; Normal 33%, 33%, 5%; Hard 72%, 20%, 8%. The tighter turn lets a pilot line up on a target sooner; the CPU pilots were left as they were. With three bombs, 84° a second and 16 s (19 November 2026): Beginner 41%, 39%, 6%; Normal 67%, 58%, 17%; Hard 93%, 48%, 25%. With the first plane (4.8 tiles a second, 169° a second, 8 s), 18 November 2026: Beginner 46%, 30%, 16%; Normal 62%, 50%, 22%; Hard 83%, 58%, 24%.
 
 The first tuning had the pilots let go whenever the rules' own sums put the rival anywhere in the blast; even Beginner then got a wandering robot in more than half its flights, and making its aim worse barely helped: three bombs with a blast a tile each way forgive a lot. They now let go only when they judge, by eye, that the bomb lands right on the rival, their feel for how far it carries off by their level's `carry`. What it cannot show is how hard the plane is for a person to fly, or how fair it feels to be bombed by one.
 

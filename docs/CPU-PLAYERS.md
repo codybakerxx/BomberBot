@@ -112,15 +112,15 @@ The laptop (see [GAME-RULES.md](GAME-RULES.md), Laptop) is worth about as much t
 
 **Seeing other players' falling bombs.** Another player's falling bomb is noticed as soon, for the 0.8 s it falls, as a bomb on the floor is for its 2.55 s fuse (`notice`): Beginner after 22 ticks of the 48, Normal after 7, Hard at once. So a Beginner sees one coming only late, and a Hard one in time to step aside.
 
-**How often a flight gets someone** (`experiments/pilot.ts`, 60 arenas each, 23 November 2026, with one bomb, 6 s flights, taking off towards the middle and turning 10% tighter; the share of flights that knocked the target out):
+**How often a flight gets someone** (`experiments/pilot.ts`, 60 arenas each, 24 November 2026, with one bomb, 6 s flights, taking off towards the middle, 3.3 tiles and about 122° a second; the share of flights that knocked the target out):
 
 | Pilot | A robot that never looks up and walks to the next wall (no bricks) | One that also turns at random every half second (no bricks) | A Normal CPU player, which dodges what it notices (some bricks) |
 |---|---|---|---|
-| Beginner | 12% | 21% | 5% |
-| Normal | 33% | 33% | 5% |
-| Hard | 72% | 20% | 8% |
+| Beginner | 22% | 25% | 6% |
+| Normal | 35% | 28% | 8% |
+| Hard | 80% | 23% | 12% |
 
-(With three bombs and 16 s flights, 19 November 2026: Beginner 41%, 39%, 6%; Normal 67%, 58%, 17%; Hard 93%, 48%, 25%. With the first plane, 4.8 tiles a second for 8 s: Beginner 46%, 30%, 16%; Normal 62%, 50%, 22%; Hard 83%, 58%, 24%. Their settings were left as they were.)
+(At 3 tiles and 93.75° a second, 23 November 2026: Beginner 12%, 21%, 5%; Normal 33%, 33%, 5%; Hard 72%, 20%, 8%. With three bombs and 16 s flights, 19 November 2026: Beginner 41%, 39%, 6%; Normal 67%, 58%, 17%; Hard 93%, 48%, 25%. With the first plane, 4.8 tiles a second for 8 s: Beginner 46%, 30%, 16%; Normal 62%, 50%, 22%; Hard 83%, 58%, 24%. Their settings were left as they were.)
 
 Against someone who keeps an eye on the sky, a flight mostly misses; against someone who never looks up, a Hard pilot hardly ever does. With one bomb a flight (since 23 November 2026) a miss is a wasted laptop, so the numbers fell to about a third of what three bombs got; against someone who dodges, a flight now rarely lands. A CPU pilot also no longer lets go when it judges the bomb would land on the outer wall beside its target (it used to count that as on target). How it feels to be bombed by one, and whether Hard is too good at it, has to be played: the four numbers in each level's line are the ones to turn.
 
@@ -184,16 +184,17 @@ A round has no end of its own: the timer runs 1 minute 30, the blocks take 50 se
 
 | Level | Blasted itself | Shut in by a rival | Caught in a rival's blast | Under a block, early | Under a block, in the last 15 s of them | Won | Rounds drawn | Not decided | Decided after |
 |---|---|---|---|---|---|---|---|---|---|
-| Beginner | 0.0% | 0.4% | 40.8% | 0.4% | 1.3% | 2.5% | 0 of 60 | 54 of 60 | 138 s |
-| Normal | 0.0% | 27.1% | 45.4% | 0.8% | 2.1% | 22.9% | 3 of 60 | 2 of 60 | 161 s |
-| Hard | 0.0% | 20.0% | 52.5% | 0.0% | 0.0% | 21.7% | 1 of 60 | 7 of 60 | 122 s |
+| Beginner | 0.0% | 0.4% | 42.9% | 0.8% | 0.8% | 1.7% | 0 of 60 | 56 of 60 | 91 s |
+| Normal | 0.0% | 27.9% | 42.1% | 1.3% | 3.3% | 23.8% | 1 of 60 | 2 of 60 | 154 s |
+| Hard | 0.0% | 25.0% | 47.9% | 0.0% | 0.0% | 22.9% | 0 of 60 | 5 of 60 | 130 s |
 
 - "Shut in by a rival" and "blasted itself" are both a bot caught by its own blast. The script calls it "shut in by a rival" when, within six steps of where the bot stood, there was a tile its own bombs would not have reached that was blocked or about to be blasted by a bomb a rival dropped *after* the bomb that caught it. It looks at the arena as it was when that bomb was dropped, so a tile a block has landed on since still counts as a way out it had. A rival's bomb dropped on the very same tick counts too, and so does one a rival threw or kicked that came to rest on the way out afterwards, a rival's bomb let go from a plane (from the moment it was let go), and a rival's bomb a falling block took away after the bot dropped its own. It is also "shut in by a rival" when the bot's own bomb went off early because a rival's bomb (one from a plane too) set it off, and that rival's bomb was dropped, kicked, thrown or let go after the bot dropped its own, including when the bot's shield took a first blast and its own bomb's blast caught it half a second later. Anything else is "blasted itself".
 - With the laptop in every arena (18 November 2026) the columns moved little: the CPU players fly it now and then, and a plane's bombs add to what catches them. The slower plane with 16 s flights (19 November 2026) moved them little again, and so did power-ups at 60% of bricks rather than 61.25% (the same day), and bricks on 80% of the open floor rather than 78% (the same day: the table above; the arenas differ each time).
 - Before Normal and Hard pressed in the square, Normal left 32 of 60 rounds not decided and Hard 9. Now it is none and 2. The price shows in "shut in by a rival": Normal went from 3.8% to about 20%, Hard from 27.5% to about 34%. That is the risk they now take on purpose. Beginner does not press, and its 20 of 60 is the old figure give or take (it was 15).
 - "Decided after" is the average length of the rounds that were decided. The blocks stop at 140 s, so most are settled in the square.
 - With the shorter timer and faster blocks, rounds are settled about 35 seconds sooner than before, and the other columns moved little. One thing did move: four Hards drew 9 rounds of 60 (it was 2). Why was not looked into; with the 7 by 5 it is back to 2.
-- With Hard made more aggressive (23 November 2026, the Hard row here): four Hards settle their rounds about a minute sooner (122 s, was 176 s), only 7 of 60 still going 2 minutes after the blocks stop (20), and more of them go out to a rival's blast. The Beginner and Normal rows are the run before; they were not changed.
+- With the plane faster and turning tighter (24 November 2026, the table above): every column within noise of the day before; blasted itself still 0 everywhere.
+- With Hard made more aggressive (23 November 2026): four Hards settle their rounds about a minute sooner (122 s, was 176 s), only 7 of 60 still going 2 minutes after the blocks stop (20), and more of them go out to a rival's blast. The Beginner and Normal rows are the run before; they were not changed.
 - With the plane's one bomb and 6 s, and the blocks 20% faster (23 November 2026): every column within noise of 20 November; blasted itself still 0 everywhere.
 - With the 9 by 7 on Standard (20 November 2026): far more rounds still going 2 minutes after the blocks stop, Beginner 54 of 60 (10 before), Hard 21 (4), Normal still 1. The square has 51 tiles to stand on rather than 23, so careful players have room to keep out of each other's way; Beginner does not press in the square at all. Watch for rounds dragging on in play; the CPU players' pressing in the square (`squareBold`) is what would be tuned, if it shows with people too.
 - With the 7 by 5 and the 2.55 s fuse (18 November 2026): about where it was. Four Beginners left 12 of 60 not decided with the 7 by 5 alone and 17 with the longer fuse too (20 before either): noise, mostly. Four Hards draw 2 of 60 again.
@@ -202,20 +203,22 @@ A round has no end of its own: the timer runs 1 minute 30, the blocks take 50 se
 
 | Level | Won | Blasted | Under a block, early | Blasted itself | Rivals it blasted |
 |---|---|---|---|---|---|
-| Beginner | 1.1% | 92.2% | 0.6% | 0.0% | 2 |
-| Normal | 11.7% | 83.3% | 0.0% | 0.0% | 25 |
-| Hard | 77.2% | 17.2% | 0.0% | 0.0% | 262 |
+| Beginner | 0.6% | 91.7% | 1.1% | 0.0% | 1 |
+| Normal | 15.6% | 79.4% | 0.6% | 0.0% | 29 |
+| Hard | 73.9% | 21.1% | 0.0% | 0.0% | 248 |
 
-4 of 180 drawn, 14 left undecided (23 November 2026, Hard made more aggressive: it wins 77% of these rounds, was 39%; the run before gave 8 drawn, 39 undecided; 20 November 2026, the 9 by 7 on Standard: the bigger square leaves many more rounds going; with the 7 by 5 the same morning's arenas gave 6 drawn, 6 undecided; 19 November 2026, bricks at 80%: Normal won 35.6% and Hard 60.6% with bricks at 78% the same day, nothing in the CPU players changed between the two: a different set of arenas swings this table that much; with power-ups at 60%: 1 drawn, 3 undecided; with the slower plane just before: 3 and 4; with the first plane: 7 and 3; before the laptop: 4 and 5; with the 5 by 5 and the 2.5 s fuse: 5 drawn, 2 undecided) (it was 27 before they pressed in the square). The levels are well apart: each wins far more and blasts far more rivals than the one below.
+4 of 180 drawn, 14 left undecided (24 November 2026, the plane faster and turning tighter: Hard 77.2% the day before; 23 November 2026, Hard made more aggressive: it wins 77% of these rounds, was 39%; the run before gave 8 drawn, 39 undecided; 20 November 2026, the 9 by 7 on Standard: the bigger square leaves many more rounds going; with the 7 by 5 the same morning's arenas gave 6 drawn, 6 undecided; 19 November 2026, bricks at 80%: Normal won 35.6% and Hard 60.6% with bricks at 78% the same day, nothing in the CPU players changed between the two: a different set of arenas swings this table that much; with power-ups at 60%: 1 drawn, 3 undecided; with the slower plane just before: 3 and 4; with the first plane: 7 and 3; before the laptop: 4 and 5; with the 5 by 5 and the 2.5 s fuse: 5 drawn, 2 undecided) (it was 27 before they pressed in the square). The levels are well apart: each wins far more and blasts far more rivals than the one below.
 
 **One against one** (`cpu-matches.ts duel`, 60 rounds each, the two taking each corner in turn, the whole round with the timer and the falling blocks; the last columns are what the first-named player did with its kit, a round on average):
 
 | Pairing | Won | Lost | Won by a blast | Before 0:00 | Time to win | Drawn | Not decided | Blasted itself | Bombs | Most out at once | Kicks | Throws | Flights |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| Hard v Beginner | 59 | 0 | 58 | 48 | 71 s | 0 | 1 | 0 | 43 | 5.6 | 0.6 | 10.5 | 0.5 |
-| Hard v Normal | 52 | 8 | 44 | 30 | 87 s | 0 | 0 | 0 | 59 | 5.5 | 1.7 | 24.9 | 0.5 |
-| Hard v Hard | 29 | 31 | 20 | 7 | 103 s | 0 | 0 | 0 | 60 | 5.0 | 2.0 | 29.6 | 0.5 |
-| Normal v Beginner | 40 | 6 | 38 | 7 | 136 s | 0 | 14 | 0 | 64 | 3.1 | 0 | 0 | 0.7 |
+| Hard v Beginner | 59 | 1 | 59 | 53 | 64 s | 0 | 0 | 0 | 38 | 5.3 | 0.5 | 9.2 | 0.5 |
+| Hard v Normal | 49 | 10 | 40 | 23 | 89 s | 1 | 0 | 0 | 63 | 5.3 | 1.9 | 28.1 | 0.5 |
+| Hard v Hard | 33 | 25 | 23 | 6 | 110 s | 2 | 0 | 0 | 69 | 5.0 | 2.6 | 35.8 | 0.5 |
+| Normal v Beginner | 42 | 4 | 39 | 9 | 129 s | 0 | 14 | 0 | 64 | 3.2 | 0.1 | 0 | 0.7 |
+
+(24 November 2026, the plane faster and turning tighter; within noise of the run the day before.)
 
 Before Hard was made more aggressive (23 November 2026, 40 rounds each): Hard v Beginner won 23 of 40, 7 before 0:00, in 125 s on average, 17 still going 2 minutes after the blocks stopped, and it never kicked or threw; Hard v Normal won 23 and lost 11. A kick is rarer than a throw: it needs the boot and a lane, the glove only a rival three tiles off.
 
@@ -223,9 +226,11 @@ Before Hard was made more aggressive (23 November 2026, 40 rounds each): Hard v 
 
 | Three of | Blasted the player | Average time | A block got the player | The player won | Not decided | CPU players that blasted themselves |
 |---|---|---|---|---|---|---|
-| Beginner | 32 of 80 | 118 s | 1 of 80 | 2 of 80 | 73 of 80 | 0 |
-| Normal | 58 of 80 | 122 s | 6 of 80 | 6 of 80 | 13 of 80 | 0 |
-| Hard | 80 of 80 | 50 s | 0 of 80 | 0 of 80 | 3 of 80 | 0 |
+| Beginner | 34 of 80 | 119 s | 1 of 80 | 2 of 80 | 75 of 80 | 0 |
+| Normal | 62 of 80 | 115 s | 5 of 80 | 2 of 80 | 12 of 80 | 0 |
+| Hard | 80 of 80 | 45 s | 0 of 80 | 0 of 80 | 3 of 80 | 0 |
+
+(24 November 2026, the plane faster and turning tighter.)
 
 (23 November 2026, Hard made more aggressive: three Hards got the player every time, in 50 s on average; they took 100 s and missed 15 of 80 before.)
 
@@ -247,7 +252,7 @@ This table is noisy, and the stand-in is not a person. Read it loosely.
 
 | Level | Blasted itself | Got the other player | Average time |
 |---|---|---|---|
-| Beginner | 0 of 40 | 26 of 40 | 130 s |
+| Beginner | 0 of 40 | 25 of 40 | 125 s |
 | Normal | 0 of 40 | 39 of 40 | 96 s |
 | Hard | 0 of 40 | 40 of 40 | 54 s (76 s before 23 November 2026) |
 

@@ -19,6 +19,7 @@ import { MAX_CPUS, copyRules, problem, readSetup, rollCpus, rollRules, swapTeams
 import { readDance, type DanceId } from './dances';
 import {
   CHECK_EVERY,
+  cleanChat,
   PROTOCOL,
   encodeWorld,
   newQueue,
@@ -57,6 +58,8 @@ export const CATCH_UP = 30;
 export const AWAY_MS = 10 * 60_000;
 /** A host who has been gone this long hands the room to the next person still here (it was 12 s). */
 export const HOST_AWAY_MS = 2 * 60_000;
+/** A person can say one quick-chat line this often. */
+export const CHAT_GAP_MS = 1500;
 
 /** A connection to one page. */
 export interface Conn {
@@ -75,6 +78,8 @@ export interface Member {
   conn: Conn | null;
   /** when the connection dropped, or -1 */
   awaySince: number;
+  /** when they last said something in the quick chat */
+  chatAt: number;
   /** in the match being played */
   playing: boolean;
   /** what they are pressing, and the presses waiting for their tick (net.ts) */
@@ -196,6 +201,7 @@ export class Room {
       dance: readDance(msg.dance) ?? 'party',
       conn,
       awaySince: -1,
+      chatAt: -1e9,
       playing: false,
       q: newQueue(),
       epoch: 0,
@@ -394,6 +400,14 @@ export class Room {
       }
       case 'bye': {
         this.remove(m);
+        return;
+      }
+      case 'chat': {
+        // one line every CHAT_GAP_MS each, so nobody can flood the room
+        const text = cleanChat(msg.text);
+        if (!text || now - m.chatAt < CHAT_GAP_MS) return;
+        m.chatAt = now;
+        this.broadcast({ t: 'chat', id: m.id, text });
         return;
       }
     }

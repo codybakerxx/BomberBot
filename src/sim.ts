@@ -313,6 +313,8 @@ export interface World {
   angels: AngelRule;
   /** knocked-out players out of lives get up again as zombies (in place of angels) */
   zombies: boolean;
+  /** Item Drop: a robot knocked out drops the power-ups it collected round where it fell (`dropKit`) */
+  itemDrop: boolean;
   /** where each player started the round, by id: where a lost life comes back */
   spawns: { x: number; y: number }[];
   /** what a robot starts with, and comes back with after losing a life */
@@ -374,6 +376,8 @@ export interface WorldConfig {
   angels?: AngelRule;
   /** Knocked-out players as zombies (World.zombies), in place of angels. Default false. */
   zombies?: boolean;
+  /** Item Drop (World.itemDrop): a robot knocked out drops what it collected. Default false. */
+  itemDrop?: boolean;
   /**
    * A teams match: the side of each player, in the order of `players` (0, 1...). The last side with a robot in
    * the round wins it. Everyone on one side: they play together (World.coop). Left out, every robot plays for
@@ -477,10 +481,11 @@ export const ZOMBIE_SAFE_TICKS = 60; // blasts leave it be for 1 s after it gets
 // (19 November 2026, the owner, to make it easier to control: slower, turning less, and twice as long a flight.
 // It was 4.8 tiles a second, 169° a second and 8 s.) (23 November 2026, the owner: one bomb, 6 s, always taking
 // off towards the middle, and turns 10% tighter: it was 3 bombs, 16 s, off the way the robot faced, 84° a second.)
+// (24 November 2026, the owner: tighter again and slightly faster: it was 3 tiles a second and 93.75° a second.)
 export const PLANE_TICKS = 6 * TICK_HZ; // a flight lasts up to 6 s
-export const PLANE_SPEED = 0.05; // tiles a tick (3 tiles a second: a little quicker than a robot with no speed power-ups)
+export const PLANE_SPEED = 0.055; // tiles a tick (3.3 tiles a second, 10% quicker than the 3 before)
 export const TURN_STEPS = 9216; // the plane's heading is kept in 9216ths of a turn (1024 × 9, so a tenth tighter is a whole number) ...
-export const PLANE_TURN = 40; // ... and turns at most this many a tick (93.75° a second, a full circle in about 3.8 s; its circle 10% tighter than at 84°): it sweeps round, never on the spot
+export const PLANE_TURN = 52; // ... and turns at most this many a tick (121.9° a second, a full circle in about 3 s; its circle about 15% tighter than at 93.75° and 3 tiles a second, though faster): it sweeps round, never on the spot
 export const AIM_STEPS = 64; // the way it is steered (PlayerInput.aim) comes in 64ths of a turn
 export const PLANE_BOMBS = 1; // bombs a plane can drop (it was 3)
 export const PLANE_FIRST_GAP = 30; // none in its first half second, so the first cannot land on the robot it took off from
@@ -706,6 +711,7 @@ export function createWorld(cfg: WorldConfig): World {
     stepAssist: cfg.stepAssist ?? false,
     angels: !cfg.zombies && (cfg.angels === 'on' || cfg.angels === 'revive') ? cfg.angels : 'off',
     zombies: !!cfg.zombies,
+    itemDrop: !!cfg.itemDrop,
     spawns: spawns.map((p) => ({ ...p })),
     start: { bombs: startBombs, fire: startFire, speed: startSpeed },
     teams: teamsOn,
@@ -1473,6 +1479,7 @@ function moveDrops(world: World): void {
  */
 function knockOut(world: World, p: Player, cause: 'blast' | 'block', by: number): void {
   if (p.flying) endFlight(world, p); // (its plane goes too; bombs already falling still land)
+  if (world.itemDrop && !p.zombie) dropKit(world, p);
   p.laptop = false;
   p.alive = false;
   p.moving = false;
@@ -1499,6 +1506,51 @@ function knockOut(world: World, p: Player, cause: 'blast' | 'block', by: number)
     p.angelHeld = 0;
   }
   world.events.push({ type: 'death', player: p.id, cause, by, out: p.lives === 0 });
+}
+
+/** How far from where it fell a knocked-out robot's power-ups can land, in steps across open floor. */
+export const DROP_REACH = 4;
+
+/**
+ * Item Drop (the owner's ask, 24 November 2026): a robot knocked out leaves behind every power-up it collected
+ * (bombs and blast over its start, speed power-ups, the boot, the glove, a laptop it has not flown), on the
+ * open floor nearest where it fell, one to a tile, for anyone to pick up. Nearest first, in a fixed order, so
+ * every copy of the world agrees; what finds no room within DROP_REACH steps is lost. Not the shield or curse.
+ */
+function dropKit(world: World, p: Player): void {
+  const kit: ItemKind[] = [];
+  for (let i = world.start.bombs; i < p.bombsMax; i++) kit.push('bomb');
+  for (let i = world.start.fire; i < p.fire; i++) kit.push('fire');
+  for (let i = world.start.speed; i < p.speed; i++) kit.push('speed');
+  if (p.canKick) kit.push('kick');
+  if (p.canGrab) kit.push('grab');
+  if (p.laptop && !p.flying) kit.push('laptop');
+  if (!kit.length) return;
+  // the tools first, so they are the ones nearest where it fell
+  kit.reverse();
+  const w = world.w;
+  const start = Math.round(p.y) * w + Math.round(p.x);
+  const seen = new Set([start]);
+  let ring = [start];
+  for (let step = 0; step <= DROP_REACH && kit.length && ring.length; step++) {
+    const next: number[] = [];
+    for (const i of ring) {
+      const x = i % w;
+      const y = (i - x) / w;
+      if (kit.length && world.tiles[i] === FLOOR && !bombAt(world, x, y) && !world.items.some((it) => it.cx === x && it.cy === y) && !world.falling.some((f) => f.cx === x && f.cy === y)) {
+        world.items.push({ cx: x, cy: y, kind: kit.shift()!, age: 0 });
+      }
+      for (let d = 1; d <= 4; d++) {
+        const nx = x + DX[d];
+        const ny = y + DY[d];
+        const j = ny * w + nx;
+        if (nx < 0 || ny < 0 || nx >= w || ny >= world.h || seen.has(j) || world.tiles[j] !== FLOOR) continue;
+        seen.add(j);
+        next.push(j);
+      }
+    }
+    ring = next;
+  }
 }
 
 /**

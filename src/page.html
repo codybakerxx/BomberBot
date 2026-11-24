@@ -122,6 +122,36 @@
   #score { position: fixed; pointer-events: none; }
   /* the layer the ghosts of knocked-out robots float up on: as wide as the arena, from the top of the screen to the arena's bottom edge. layout() places it. */
   #ghosts { position: fixed; top: 0; pointer-events: none; }
+  /* quick chat (quick.ts; the owner's ask, 24 November 2026): a button like the menu's, placed by layout() */
+  #chatBtn { position: fixed; top: 6px; width: 38px; height: 34px; padding: 0; display: grid; place-items: center; color: var(--ink); background: rgba(255, 255, 255, 0.08); border: 1px solid rgba(255, 255, 255, 0.25); border-radius: 10px; }
+  #chatBtn svg { width: 21px; height: 21px; }
+  #chatBtn[aria-expanded='true'] { color: #1a1406; background: var(--accent); border-color: var(--accent); }
+  #menuBtn { -webkit-touch-callout: none; user-select: none; -webkit-user-select: none; }
+  /* the panels over the round: they never pause it, and close on a tap outside */
+  .pop { position: fixed; z-index: 3; width: min(320px, calc(100vw - 16px)); max-height: calc(100vh - 60px); overflow-y: auto; display: flex; flex-direction: column; gap: 8px; padding: 10px; background: rgba(16, 20, 32, 0.97); border: 1px solid rgba(255, 197, 106, 0.45); border-radius: 16px; box-shadow: 0 16px 34px rgba(0, 0, 0, 0.6); animation: tip-in 0.16s ease-out; }
+  .pop[hidden] { display: none; }
+  .pop h3 { margin: 2px 4px 0; font: 700 13px/1 var(--font-display); letter-spacing: 0.14em; text-transform: uppercase; color: var(--accent); }
+  .pop .opts .opt { background: #131827; }
+  .chat-tabs { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 4px; }
+  .chat-tab { display: flex; flex-direction: column; align-items: center; gap: 3px; min-width: 0; padding: 6px 2px 5px; font: 700 10px/1.1 var(--font-display); letter-spacing: 0.02em; text-transform: none; color: var(--ink-dim); background: #131827; border: 1px solid transparent; border-radius: 10px; }
+  .chat-tab span:last-child { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .chat-icon { font-size: 18px; line-height: 1; }
+  .chat-tab[aria-pressed='true'] { color: var(--ink); border-color: var(--accent); background: rgba(255, 197, 106, 0.14); }
+  .chat-lines { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 5px; }
+  .chat-lines[hidden] { display: none; }
+  .chat-line { min-height: 44px; padding: 7px 8px; font: 600 13px/1.2 var(--font-body); letter-spacing: 0; text-transform: none; text-align: center; color: var(--ink); background: #1b2133; border: 1px solid var(--line); border-radius: 10px; overflow-wrap: anywhere; }
+  .chat-own { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px; }
+  .chat-own[hidden] { display: none; }
+  .chat-own input { min-width: 0; font-size: 16px; }
+  /* what was said, in a bubble over the robot that said it, edged in its colour */
+  #bubbles { position: fixed; inset: 0; z-index: 1; pointer-events: none; overflow: hidden; }
+  .bubble { position: absolute; left: 0; top: 0; max-width: min(200px, 60vw); padding: 5px 10px 6px; font: 700 13px/1.2 var(--font-body); color: #141824; background: #fffaf0; border: 2px solid var(--who, #ffc56a); border-radius: 12px; box-shadow: 0 6px 14px rgba(0, 0, 0, 0.45); overflow-wrap: anywhere; text-align: center; animation: bubble-in 0.18s ease-out; transition: opacity 0.45s; }
+  .bubble::after { content: ''; position: absolute; left: var(--tail, 50%); bottom: -7px; width: 10px; height: 10px; margin-left: -5px; background: #fffaf0; border: solid var(--who, #ffc56a); border-width: 0 2px 2px 0; transform: rotate(45deg); }
+  .bubble.going { opacity: 0; }
+  @keyframes bubble-in { from { opacity: 0; scale: 0.7; } }
+  @media (prefers-reduced-motion: reduce) { .bubble, .pop { animation: none; } }
+  body.calm .bubble, body.calm .pop { animation: none; }
+  body.menu-open #chatBtn, body.title-open #chatBtn, body.menu-open #bubbles, body.title-open #bubbles { visibility: hidden; }
   /* a short line over the top of the arena during a round (showTip in main.ts): how angels play */
   #playTip { position: fixed; transform: translateX(-50%); z-index: 2; max-width: 94vw; padding: 5px 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-transform: none; letter-spacing: 0; pointer-events: none; text-align: center; font: 600 13px/1.3 var(--font-body); color: #fff6e0; background: rgba(12, 16, 28, 0.82); border: 1px solid rgba(255, 220, 140, 0.55); border-radius: 10px; }
   #playTip.go { animation: tip-life 4.5s ease forwards; }
@@ -492,7 +522,7 @@
   .size-pick button[aria-pressed="true"] small { color: rgba(5, 6, 11, 0.72); }
   #lobbyMatch.readonly .size-pick button { pointer-events: none; }
   /* the Mode bubbles, under the map's panel: the same bubbles as the sizes, on the page's own background */
-  .mode-pick { margin: 2px 0 4px; }
+  .mode-pick { margin: 2px 0 4px; grid-template-columns: repeat(2, minmax(0, 1fr)); } /* four modes: two rows of two */
   .mode-pick small { white-space: nowrap; font-size: clamp(10px, 3.1vw, 11.5px); }
   #lobbyMatch.readonly .size-pick button:not([aria-pressed="true"]) { opacity: 0.45; }
   /* the lobby's top bar: back on the left, the mode in the very middle, the buttons on the right, all on one line */
@@ -1102,7 +1132,25 @@
 <canvas id="cv"></canvas>
 <div id="timer" role="timer" aria-label="Time left in the round">1:30</div>
 <canvas id="score" role="img" aria-label="Rounds won"></canvas>
-<button id="menuBtn" type="button" aria-label="Menu"><i></i></button>
+<button id="menuBtn" type="button" aria-label="Menu (hold for quick settings)"><i></i></button>
+<!-- quick chat (quick.ts): the button, its panel, and the bubbles over the robots -->
+<button id="chatBtn" type="button" aria-label="Quick chat" aria-expanded="false" aria-controls="chatPanel">
+  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3h11A2.5 2.5 0 0 1 20 5.5v8a2.5 2.5 0 0 1-2.5 2.5H11l-4.6 3.7c-.5.4-1.4.1-1.4-.6V16h0A2.5 2.5 0 0 1 4 13.5z" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"/><circle cx="8.5" cy="9.6" r="1.3" fill="currentColor"/><circle cx="12" cy="9.6" r="1.3" fill="currentColor"/><circle cx="15.5" cy="9.6" r="1.3" fill="currentColor"/></svg>
+</button>
+<div id="bubbles" aria-live="polite"></div>
+<section id="chatPanel" class="pop" role="dialog" aria-label="Quick chat" hidden>
+  <div class="chat-tabs" role="toolbar" aria-label="Kinds of line"></div>
+  <div class="chat-lines"></div>
+  <form class="chat-own" hidden>
+    <input type="text" enterkeyhint="send" autocomplete="off" autocapitalize="sentences" spellcheck="false" placeholder="Type a line…" aria-label="Your own line">
+    <button class="mini" type="submit">Send</button>
+  </form>
+</section>
+<!-- the quick menu: the menu button held down (quick.ts) -->
+<section id="quickMenu" class="pop" role="dialog" aria-labelledby="quickTitle" hidden>
+  <h3 id="quickTitle">Quick settings</h3>
+  <div class="opts"></div>
+</section>
 <canvas id="ghosts" aria-hidden="true"></canvas>
 <div id="playTip" role="status" aria-live="polite" hidden></div>
 <div id="netNote" role="status" aria-live="polite" hidden></div>

@@ -78,6 +78,7 @@ import {
   MODES,
   classicRules,
   hardcoreRules,
+  itemDropRules,
   rollRules,
   modeOf,
   settleMode,
@@ -1473,6 +1474,7 @@ export function createLobby(host: LobbyHost): {
       const was = modeOf(s(), host.myColor);
       pickArena(s(), a.id); // (the arena's own round length and closing in: Classic stays Classic)
       if (was === 'hardcore') host.setup = hardcoreRules(s(), host.myColor);
+      if (was === 'itemdrop') host.setup = itemDropRules(s(), host.myColor);
       if (was === 'random') host.setup = rollRules(s(), Math.random);
       changed();
     });
@@ -1490,7 +1492,7 @@ export function createLobby(host: LobbyHost): {
     b.addEventListener('click', () => {
       if (!canEdit()) return;
       if (m.id !== 'random' && modeOf(s(), host.myColor) === m.id) return;
-      host.setup = m.id === 'classic' ? classicRules(s(), host.myColor) : m.id === 'hardcore' ? hardcoreRules(s(), host.myColor) : rollRules(s(), Math.random);
+      host.setup = m.id === 'classic' ? classicRules(s(), host.myColor) : m.id === 'hardcore' ? hardcoreRules(s(), host.myColor) : m.id === 'itemdrop' ? itemDropRules(s(), host.myColor) : rollRules(s(), Math.random);
       changed();
       for (const box of $('rules').querySelectorAll<HTMLElement>('.set-group')) {
         box.classList.remove('was-reset');
@@ -1700,6 +1702,17 @@ export function createLobby(host: LobbyHost): {
           changed();
         },
         text: (v) => (v ? `${v}%` : 'None'),
+      }),
+      toggle({
+        // the owner's ask, 24 November 2026 (and the Item Drop mode's own rule)
+        label: 'Item drop',
+        hint: 'A robot knocked out drops the power-ups it collected, for anyone to pick up',
+        get: () => s().itemDrop,
+        set: (v) => {
+          s().itemDrop = v;
+          changed();
+        },
+        offText: 'Power-ups go with a robot knocked out.',
       }),
       toggle({
         label: 'Custom power-ups',

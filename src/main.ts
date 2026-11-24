@@ -25,6 +25,7 @@ import { CpuSlot, Guest, ITEM_NAMES, MatchSetup, Prefs, SHARPNESS, SOUND_GROUPS,
 import { BOMB_ICON, Opt, answerConfirm, choice, confirmFirst, confirmOpen, group, heading, mount, note, slider, toggle, wireConfirm, wireFlash } from './ui';
 import { Hand, DEFAULT_SENS, OLD_SENS, SENS_DEG, SENS_MAX, STRAIGHT, sensTilt, standardAims } from './swipe';
 import { Online } from './online';
+import { createBubbles, createChat, createQuickMenu } from './quick';
 import { canInstall, howToAdd, install, isApple, myEndpoint, onWebsite, pushOff, pushOn, pushRefresh, pushState, pushTest, type PushState } from './app';
 import { decodeWorld, packInput, readCode, unpackInput, type BellAnswer, type Score, type Seat, type ServerMsg } from './net';
 /** Look up an element of src/page.html by its id. */
@@ -125,6 +126,10 @@ let angelTipShown = false;
 /** the first laptop picked up here in a match gets a tip saying what it does */
 let laptopTipShown = false;
 const playTip = $('playTip');
+/** The bubbles over the robots: what each said in the quick chat (quick.ts) */
+const bubbles = createBubbles($('bubbles'), (i) => colorById(world.players[i]?.colorId ?? 'gold').glow);
+/** The quick menu: the menu button held down (quick.ts) */
+const quickMenu = $('quickMenu');
 let tipTimer = 0;
 /** A short line over the top of the arena for a few seconds, during a round. */
 function showTip(text: string): void {
@@ -278,6 +283,7 @@ window.addEventListener('touchstart', showTouch, { passive: true, once: true });
 function newWorld(): void {
   const seed = (Math.random() * 2 ** 31) | 0;
   world = createWorld(worldConfig(setup, myColor, seed, guests.map((g) => g.colorId)));
+  bubbles.clear();
   bots = matchCpus().map((c, i) => createBot(i + 1 + guests.length, c.level, seed));
   blastedBy = -1;
   hurried = false;
@@ -454,6 +460,18 @@ function layout(): void {
     const cell = box.width / across;
     scoreCells = Array.from({ length: places }, (_, i) => ({ x: (i % across) * cell, w: cell, y: ROW * Math.floor(i / across) + 22, ny: ROW * Math.floor(i / across) + 22 + HEAD_R + 11 }));
   }
+  // The quick chat button (the owner's ask, 24 November 2026: left of the menu). Upright with four players the
+  // scoreboard fills the top bar right up to the menu button, so there it takes the far left, the place kept
+  // clear to match the menu button; everywhere else it sits just left of the menu button.
+  const chatBtn = $('chatBtn');
+  const farLeft = stacked && places <= 4;
+  chatBtn.style.left = farLeft ? '8px' : '';
+  chatBtn.style.right = farLeft ? '' : '52px';
+  const chatPanel = $('chatPanel');
+  chatPanel.style.top = quickMenu.style.top = '46px';
+  chatPanel.style.left = farLeft ? '8px' : '';
+  chatPanel.style.right = farLeft ? '' : '8px';
+  quickMenu.style.right = '8px';
   // sideways with more than four players the scoreboard has two rows: the swipe pad starts under them
   touch.style.setProperty('--pad-top', `${stacked ? 88 : Math.max(88, box.top + box.height + 6)}px`);
   score.style.left = `${box.left}px`;
@@ -762,6 +780,7 @@ function render(time: number): void {
   }
   drawTimer();
   drawScore();
+  bubbles.place(w, parseFloat(canvas.style.left) || 0, parseFloat(canvas.style.top) || 0, (parseFloat(canvas.style.width) || 0) / w.w, window.innerWidth);
 }
 
 /**
@@ -1308,6 +1327,8 @@ $('handRight').addEventListener('click', () => {
 /** Hide every screen and panel over the game: the lobby, Settings, the menu, the result panel. */
 function hideScreens(): void {
   hideBellTip();
+  chat.close();
+  quick.close();
   lobby.hide();
   $('settings').hidden = true;
   $('pause').hidden = true;
@@ -1652,7 +1673,66 @@ function keepHero(on: boolean): void {
   clearInterval(heroTimer);
   if (on) heroTimer = window.setInterval(() => (mode === 'pause' ? fillHero() : keepHero(false)), 250);
 }
-$('menuBtn').addEventListener('click', openPause);
+/**
+ * Quick chat (the owner's ask, 24 November 2026): a line picked or typed shows over your robot. Online it goes
+ * to the server, which says it to everyone in the room, this page included (`heard`).
+ */
+const chat = createChat($('chatBtn'), $('chatPanel'), (text) => {
+  if (net) net.send({ t: 'chat', text });
+  else bubbles.say(myIdx(), text);
+});
+/**
+ * The quick menu (the owner's ask, 24 November 2026): the menu button held down opens a few settings over the
+ * round without stopping it: sound on or off, the volume, and movement sensitivity. A tap still opens the menu.
+ */
+const quick = createQuickMenu(
+  $('menuBtn'),
+  quickMenu,
+  [
+    toggle({
+      label: 'Sound effects',
+      get: () => prefs.soundOn,
+      set: (v) => {
+        prefs.soundOn = v;
+        prefsChanged();
+      },
+      offText: 'All sounds are off.',
+      under: [
+        slider({
+          label: 'Volume',
+          min: 0,
+          max: 100,
+          step: 10,
+          normal: defaultPrefs().volume,
+          get: () => prefs.volume,
+          set: (v) => {
+            prefs.volume = v;
+            prefsChanged();
+            initAudio();
+            preview('pickup');
+          },
+          text: (v) => `${v}%`,
+        }),
+      ],
+    }),
+    slider({
+      label: 'Movement sensitivity',
+      min: 0,
+      max: SENS_MAX,
+      normal: DEFAULT_SENS,
+      get: () => settings.sens,
+      set: (v) => {
+        settings.sens = v;
+        applySettings(true);
+        refreshPrefs();
+      },
+      text: (v) => `${v}%`,
+      onThumb: true,
+    }),
+  ],
+  openPause,
+  () => mode === 'playing' || mode === 'over',
+);
 // a tap in the blank space round the menu closes it, like Resume (the owner's ask, 18 November 2026)
 $('pause').addEventListener('click', (e) => {
   if (e.target === e.currentTarget && mode === 'pause') closePause();
@@ -1918,6 +1998,7 @@ function joinOnline(code: string | null): void {
         else sayNet(why, 6000);
       },
       bell: bellAnswer,
+      chat: heard,
     },
     serverHost(),
   );
@@ -1951,9 +2032,23 @@ function leaveOnline(bye = true): void {
   showTitle();
 }
 
+/** The people in the room, as the server last said (quick chat lines from someone not in the round name them). */
+let roomPeople: { id: number; name: string; colorId: string }[] = [];
+/** Someone in the room said something (quick chat): over their robot in the round, otherwise a line at the top. */
+function heard(id: number, text: string): void {
+  const at = netRound ? seats.findIndex((x) => x.member === id) : -1;
+  if (at >= 0 && world.players[at]) {
+    bubbles.say(at, text);
+    return;
+  }
+  const who = roomPeople.find((x) => x.id === id);
+  if (who) sayNet(`${who.name || botName(colorById(who.colorId))}: ${text}`, 3500);
+}
+
 /** The room changed (online.ts): who is in it, the host, the setup, and whether a match is on. */
 function onRoom(m: Extract<ServerMsg, { t: 'room' }>): void {
   if (!net) return;
+  roomPeople = m.members.map((x) => ({ id: x.id, name: x.name, colorId: x.colorId }));
   const mine = m.members.find((x) => x.id === m.you);
   if (!mine) return;
   if (!stash) stash = { setup, color: myColor };
@@ -2014,6 +2109,7 @@ function onRoom(m: Extract<ServerMsg, { t: 'room' }>): void {
 function onRound(w: World, s: Seat[], score: Score, fresh: boolean): void {
   if (!net) return;
   const inRound = netRound && (mode === 'playing' || mode === 'over' || mode === 'pause' || (mode === 'settings' && setFrom === 'pause'));
+  if (fresh) bubbles.clear();
   world = w;
   bots = [];
   seats = s;
@@ -2633,6 +2729,8 @@ function refreshPrefs(): void {
 /** Back one step, the same from Escape or a controller's B: a question or a panel first, then the screen. */
 function goBack(): void {
   if (confirmOpen()) answerConfirm(false);
+  else if (chat.isOpen()) chat.close();
+  else if (quick.isOpen()) quick.close();
   else if (mode === 'title' && !$('onlineSheet').hidden) closeOnlineSheet();
   else if (!$('keySheet').hidden) closeKey();
   else if (mode === 'lobby') lobbyHost.back();
