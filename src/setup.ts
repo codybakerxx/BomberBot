@@ -111,13 +111,23 @@ export const CLOSE_IN = [
 export const ITEM_SHARE_STEP = 5;
 export const ITEM_SHARE_DEFAULT = Math.round(ITEM_SHARE * 100);
 
-/** How often each power-up turns up in a custom mix, compared to the others (its usual weight times this). */
+/**
+ * How often each power-up turns up in a custom mix, compared to the others (its usual weight times this).
+ * Very rare was added on 23 November 2026, for Hardcore's glove (the owner's ask): a setup saved before
+ * (version 7 and below) has its steps moved up one (`readSetup`). Off is no longer offered (each kind has a
+ * switch): it is kept to read a setup saved before the switches.
+ */
 export const ITEM_AMOUNTS = [
   { name: 'Off', times: 0 },
+  { name: 'Very rare', times: 0.25 },
   { name: 'Rare', times: 0.5 },
   { name: 'Normal', times: 1 },
   { name: 'Lots', times: 2 },
 ];
+/** The steps of ITEM_AMOUNTS by name */
+export const ITEM_VERY_RARE = 1;
+export const ITEM_RARE = 2;
+export const ITEM_NORMAL = 3;
 
 /** The power-ups, in the order the lobby lists them, with the names it uses. */
 export const ITEM_NAMES: [ItemKind, string, string][] = [
@@ -147,7 +157,7 @@ export const MAX_FIRST_TO = 9;
  * call; it was 3), so a setup saved before then has its Rounds to win put back to 1. 3: Closing in has five
  * steps in place of three (Slow, Normal, Fast became Very slow, Normal, Fast).
  */
-export const SETUP_VERSION = 7;
+export const SETUP_VERSION = 8;
 
 /** What a robot out of lives does, taking the Post-Mortem Behavior switch into account. */
 export function afterlifeOf(s: MatchSetup): Afterlife {
@@ -622,7 +632,7 @@ export function defaultSetup(myColor: string): MatchSetup {
     startSpeed: 0,
     itemShare: ITEM_SHARE_DEFAULT,
     itemsOn: false,
-    items: { bomb: 2, fire: 2, speed: 2, kick: 2, grab: 2, shield: 2, curse: 2, laptop: 2 },
+    items: { bomb: ITEM_NORMAL, fire: ITEM_NORMAL, speed: ITEM_NORMAL, kick: ITEM_NORMAL, grab: ITEM_NORMAL, shield: ITEM_NORMAL, curse: ITEM_NORMAL, laptop: ITEM_NORMAL },
     itemOn: { bomb: true, fire: true, speed: true, kick: true, grab: true, shield: true, curse: true, laptop: true },
     lives: 1,
     afterlife: 'watch', // watching is the standard: Post-Mortem Behavior off (the owner's call)
@@ -716,9 +726,10 @@ export function classicRules(s: MatchSetup, myColor: string): MatchSetup {
 }
 
 /**
- * Hardcore: Classic, but every robot starts with all the bombs, the longest blast and the top speed (the
- * owner's ask, 23 November 2026). It first maxed everything out, bricks, power-ups and closing in too, and
- * the owner found it too hardcore the same evening: the rest is Classic's, power-ups included.
+ * Hardcore: Classic, but every robot starts with all the bombs, the longest blast and the top speed, and the
+ * glove is very rare (Custom power-ups with the glove at Very rare, a quarter of its usual share, and no arena
+ * sure to have one) (the owner's asks, 23 November 2026). It first maxed everything out, bricks, power-ups and closing in too, and the owner
+ * found it too hardcore the same evening: the rest is Classic's, Power-up density included.
  */
 export function hardcoreRules(s: MatchSetup, myColor: string): MatchSetup {
   const out = classicRules(s, myColor);
@@ -726,6 +737,8 @@ export function hardcoreRules(s: MatchSetup, myColor: string): MatchSetup {
   out.startBombs = MAX_BOMBS;
   out.startFire = MAX_FIRE;
   out.startSpeed = MAX_SPEED_ITEMS;
+  out.itemsOn = true;
+  out.items = { ...out.items, grab: ITEM_VERY_RARE };
   return out;
 }
 
@@ -750,7 +763,7 @@ export function rollRules(s: MatchSetup, random: () => number): MatchSetup {
   out.itemsOn = yes(0.4);
   for (const [k] of ITEM_CHANCE) {
     out.itemOn[k] = ALWAYS_ON.includes(k) || !out.itemsOn || yes(0.85);
-    out.items[k] = out.itemsOn ? int(1, ITEM_AMOUNTS.length - 1) : 2;
+    out.items[k] = out.itemsOn ? int(ITEM_RARE, ITEM_AMOUNTS.length - 1) : ITEM_NORMAL;
   }
   out.startOn = yes(0.4);
   out.startBombs = out.startOn ? int(1, 5) : 1;
@@ -846,6 +859,8 @@ export function worldConfig(s: MatchSetup, myColor: string, seed: number, guests
     roundTicks: s.timerOn ? s.roundSecs * TICK_HZ : 0,
     shrinkTicks: CLOSE_IN[s.closeIn].secs * TICK_HZ,
     itemChance: itemChances(s),
+    // (a kind set to Rare or Very rare in a custom mix is not made sure of: rare means rare)
+    sure: (['kick', 'grab', 'laptop'] as const).filter((k) => !s.itemsOn || s.items[k] >= ITEM_NORMAL),
     startBombs: s.startOn ? s.startBombs : 1,
     startFire: s.startOn ? s.startFire : START_FIRE,
     startSpeed: s.startOn ? s.startSpeed : 0,
@@ -933,7 +948,12 @@ export function readSetup(raw: unknown, myColor: string, colorIds: string[]): Ma
   if (typeof r.itemsOn === 'boolean') out.itemsOn = r.itemsOn;
   out.itemOn = { ...d.itemOn };
   if (r.items && typeof r.items === 'object') {
-    for (const [k] of ITEM_CHANCE) out.items[k] = clampInt((r.items as Record<string, unknown>)[k], 0, ITEM_AMOUNTS.length - 1, 2);
+    // (saved before Very rare, version 7 and below: Off, Rare, Normal, Lots were steps 0 to 3)
+    const before = typeof r.v !== 'number' || r.v < 8;
+    for (const [k] of ITEM_CHANCE) {
+      const v = clampInt((r.items as Record<string, unknown>)[k], 0, ITEM_AMOUNTS.length - 1, ITEM_NORMAL);
+      out.items[k] = before && v > 0 ? Math.min(ITEM_AMOUNTS.length - 1, v + 1) : v;
+    }
   }
   if (r.itemOn && typeof r.itemOn === 'object') {
     for (const [k] of ITEM_CHANCE) if (typeof (r.itemOn as Record<string, unknown>)[k] === 'boolean') out.itemOn[k] = (r.itemOn as Record<string, boolean>)[k];
@@ -943,7 +963,7 @@ export function readSetup(raw: unknown, myColor: string, colorIds: string[]): Ma
   for (const [k] of ITEM_CHANCE) {
     if (out.items[k] === 0) {
       out.itemOn[k] = false;
-      out.items[k] = 2;
+      out.items[k] = ITEM_NORMAL;
     }
     if (ALWAYS_ON.includes(k)) out.itemOn[k] = true;
   }

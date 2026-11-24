@@ -358,6 +358,12 @@ export interface WorldConfig {
    * must add up to 1 or less.
    */
   itemChance?: [ItemKind, number][];
+  /**
+   * The kinds every arena gets at least one of, when their chance is above 0 (default: the boot, the glove
+   * and the laptop). The lobby leaves out one set to Rare in a custom mix, so Rare is rare (the owner's ask,
+   * 23 November 2026: the glove very rare in Hardcore).
+   */
+  sure?: ItemKind[];
   /** What every player starts the round with: bombs (1 to MAX_BOMBS, default 1), blast length (START_FIRE to MAX_FIRE), speed power-ups (0 to MAX_SPEED_ITEMS). */
   startBombs?: number;
   startFire?: number;
@@ -614,7 +620,7 @@ export function createWorld(cfg: WorldConfig): World {
   }
   // every arena has at least one kick, one grab and one laptop power-up somewhere (unless the lobby has switched
   // them off; the laptop since 18 November 2026, the owner's ask)
-  for (const kind of ['kick', 'grab', 'laptop'] as const) {
+  for (const kind of cfg.sure ?? (['kick', 'grab', 'laptop'] as const)) {
     if (!chances.some(([k, c]) => k === kind && c > 0)) continue;
     if ([...hidden.values()].includes(kind)) continue;
     const empty: number[] = [];

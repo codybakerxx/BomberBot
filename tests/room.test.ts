@@ -27,7 +27,7 @@ import {
   type ServerMsg,
 } from '../src/net';
 import { makeRng } from '../src/sim';
-import { ARENAS, MAPS, ITEM_SHARE_STEP, type MatchSetup, defaultRules, itemChances, defaultSetup, dropOnto, fixedSize, lineUp, pickTeam, readSetup, recolour, rollCpus, seatLast, seating, setTeamSize, settleTeams, evenTeams, startTeams, summary, swapTeams, canEven, RULE_GROUPS, resetGroup, groupIsDefault, groupValues, modeOf, hardcoreRules, rollRules, rulesKey, settleMode, ROUND_STEP, SOUND_GROUPS, SOUND_NAMES, teamChoices, teamSizes, teamsFor, wholeTile, worldConfig } from '../src/setup';
+import { ARENAS, MAPS, ITEM_SHARE_STEP, type MatchSetup, defaultRules, itemChances, defaultSetup, dropOnto, fixedSize, lineUp, pickTeam, readSetup, recolour, rollCpus, seatLast, seating, setTeamSize, settleTeams, evenTeams, startTeams, summary, swapTeams, canEven, RULE_GROUPS, resetGroup, groupIsDefault, groupValues, ITEM_NORMAL, ITEM_RARE, ITEM_VERY_RARE, modeOf, hardcoreRules, rollRules, rulesKey, settleMode, ROUND_STEP, SOUND_GROUPS, SOUND_NAMES, teamChoices, teamSizes, teamsFor, wholeTile, worldConfig } from '../src/setup';
 import { BOT_LEVELS } from '../src/bot';
 import { DANCE_IDS } from '../src/dances';
 import type { World } from '../src/sim';
@@ -81,7 +81,7 @@ for (const a of ARENAS) {
   const sum = (c: [string, number][]): number => c.reduce((n, [, x]) => n + x, 0);
   assert.equal(defaultSetup('gold').itemShare, 60, '60% by default');
   assert.deepStrictEqual(itemChances(defaultSetup('gold')), ITEM_CHANCE, 'the default setup gives the usual chances');
-  const lots = { ...defaultSetup('gold'), itemsOn: true, items: { bomb: 3, fire: 3, speed: 3, kick: 3, grab: 3, shield: 3, curse: 3, laptop: 3 } };
+  const lots = { ...defaultSetup('gold'), itemsOn: true, items: { bomb: 4, fire: 4, speed: 4, kick: 4, grab: 4, shield: 4, curse: 4, laptop: 4 } };
   const c = itemChances(lots);
   assert.ok(Math.abs(sum(c) - 0.6) < 1e-12, `still 60% of the bricks (${sum(c)})`);
   assert.ok(Math.abs(c[0][1] / c[2][1] - 60 / 44) < 1e-9, 'in the usual proportions');
@@ -133,7 +133,11 @@ for (const a of ARENAS) {
   // a kind saved at Off, before the switches, comes back switched off at Normal
   const was = readSetup({ ...defaultSetup('gold'), itemOn: undefined, items: { ...defaultSetup('gold').items, curse: 0 } }, 'gold', colorIds);
   assert.equal(was.itemOn.curse, false);
-  assert.equal(was.items.curse, 2);
+  assert.equal(was.items.curse, ITEM_NORMAL);
+  // saved before Very rare (version 7): Rare, Normal and Lots keep their meaning, a step up
+  const seven = readSetup({ ...defaultSetup('gold'), v: 7, itemsOn: true, items: { bomb: 1, fire: 2, speed: 3, kick: 2, grab: 2, shield: 2, curse: 2, laptop: 2 } }, 'gold', colorIds);
+  assert.deepStrictEqual([seven.items.bomb, seven.items.fire, seven.items.speed], [ITEM_RARE, ITEM_NORMAL, 4], 'Rare, Normal, Lots read as before');
+  assert.equal(readSetup(JSON.parse(JSON.stringify(seven)), 'gold', colorIds).items.bomb, ITEM_RARE, 'and saved again, read the same');
   assert.equal(was.itemOn.bomb, true);
 }
 
@@ -752,8 +756,29 @@ console.log('room checks passed');
   assert.equal(modeOf(hard, me), 'hardcore');
   assert.ok(hard.startOn && hard.startBombs === MAX_BOMBS && hard.startFire === MAX_FIRE && hard.startSpeed === MAX_SPEED_ITEMS, 'Hardcore: bombs, blast and speed maxed from the start');
   const classic = defaultRules(s, me);
-  for (const k of ['brickShare', 'itemShare', 'itemsOn', 'items', 'itemOn', 'closeIn', 'roundSecs', 'lives'] as const)
-    assert.deepStrictEqual(hard[k], classic[k], `Hardcore: ${k} as in Classic (the owner: the rest normal, power-ups included)`);
+  for (const k of ['brickShare', 'itemShare', 'itemOn', 'closeIn', 'roundSecs', 'lives'] as const)
+    assert.deepStrictEqual(hard[k], classic[k], `Hardcore: ${k} as in Classic (the owner: the rest normal, power-up density included)`);
+  // the glove very rare (the owner's ask): Rare, and no arena sure to have one; the rest of the mix as usual
+  assert.ok(hard.itemsOn && hard.items.grab === ITEM_VERY_RARE, 'Hardcore: the glove at Very rare');
+  for (const k of ['bomb', 'fire', 'speed', 'kick', 'shield', 'curse', 'laptop'] as const) assert.strictEqual(hard.items[k], classic.items[k], `Hardcore: ${k} as usual`);
+  {
+    const cfg = worldConfig(hard, me, 1);
+    assert.deepStrictEqual(cfg.sure, ['kick', 'laptop'], 'the glove is not made sure of');
+    assert.deepStrictEqual(worldConfig(classic, me, 1).sure, ['kick', 'grab', 'laptop'], 'in Classic it is');
+    let gloves = 0;
+    let none = 0;
+    let all = 0;
+    for (let seed = 1; seed <= 200; seed++) {
+      const w = createWorld({ ...worldConfig(hard, me, seed) });
+      const kinds = [...w.hidden.values()];
+      const n = kinds.filter((k) => k === 'grab').length;
+      gloves += n;
+      all += kinds.length;
+      if (!n) none++;
+    }
+    assert.ok(gloves / all < 0.016, `gloves are about 1.3% of power-ups in Hardcore, rarer than a shield (${((100 * gloves) / all).toFixed(1)}%)`);
+    assert.ok(none > 80, `most Hardcore arenas have no glove at all (${none} of 200)`);
+  }
   assert.equal(hard.firstTo, 3, 'and Rounds to win kept');
   hard.lives = 2;
   assert.equal(modeOf(hard, me), 'custom', 'a rule changed by hand: Custom');

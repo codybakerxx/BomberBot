@@ -1740,7 +1740,7 @@ export function createLobby(host: LobbyHost): {
             under: [
               slider({
                 label: 'How often',
-                min: 1,
+                min: 1, // (Off is the kind's switch, not a step: Very rare is the least)
                 max: ITEM_AMOUNTS.length - 1,
                 normal: () => usual().items[kind],
                 get: () => s().items[kind],
