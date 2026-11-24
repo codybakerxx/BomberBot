@@ -1,9 +1,10 @@
 /**
  * Two small things over the round, neither of which pauses it (the owner's asks, 24 November 2026):
  *
- * - Quick chat: the speech-bubble button in the top bar opens a panel of five groups of lines, four ready-made
- *   ones each and a Custom one to type in. A line picked shows in a bubble over the robot that said it, for
- *   everyone in the room (online the server passes it on: `chat` in net.ts).
+ * - Quick chat: the speech-bubble button in the top bar, left of the menu button, opens a panel of five groups
+ *   of lines, four ready-made ones each and a Custom one to type in. A line picked shows in a bubble under the
+ *   name of the player who said it on the scoreboard, for everyone in the room (online the server passes it
+ *   on: `chat` in net.ts).
  * - The quick menu: holding the menu button down opens a small panel of a few settings (sound on or off, the
  *   volume, movement sensitivity) without stopping the round. A tap opens the full menu as before.
  *
@@ -129,8 +130,10 @@ export function createChat(btn: HTMLElement, panel: HTMLElement, say: (text: str
 }
 
 /**
- * The bubbles over the robots. `say` puts one over a player (replacing what it last said); `place` keeps them
- * over their robots, called every frame the arena is drawn, with where the arena is on the page.
+ * What each player said, in a bubble under their name on the scoreboard at the top of the screen, so it never
+ * covers the arena (the owner's ask, 24 November 2026: over the robot it was in the way). `say` puts one under a
+ * player's name (replacing what it last said); `place` keeps them there, called every frame, with where each
+ * player's name is on the page (`at`, null for a player with no place on the scoreboard).
  */
 export function createBubbles(layer: HTMLElement, colourOf: (player: number) => string) {
   const shown = new Map<number, { el: HTMLElement; until: number }>();
@@ -144,24 +147,21 @@ export function createBubbles(layer: HTMLElement, colourOf: (player: number) => 
       layer.append(el);
       shown.set(player, { el, until: performance.now() + BUBBLE_MS });
     },
-    place(w: World, left: number, top: number, tile: number, width: number): void {
+    place(at: (player: number) => { x: number; y: number } | null, width: number): void {
       if (!shown.size) return;
       const now = performance.now();
       for (const [i, b] of shown) {
-        const p = w.players[i];
-        if (!p || now > b.until) {
+        const a = at(i);
+        if (!a || now > b.until) {
           b.el.remove();
           shown.delete(i);
           continue;
         }
-        // over the helmet, kept on the screen
+        // under the name, its tail pointing up at it, kept on the screen
         const bw = b.el.offsetWidth;
-        const at = left + (p.x + 0.5) * tile;
-        const x = Math.max(4, Math.min(width - 4 - bw, at - bw / 2));
-        const y = Math.max(b.el.offsetHeight + 4, top + (p.y - 0.62) * tile);
-        b.el.style.transform = `translate(${Math.round(x)}px, ${Math.round(y - b.el.offsetHeight)}px)`;
-        // the tail points at the robot even when the bubble is pushed in from the edge
-        b.el.style.setProperty('--tail', `${Math.round(Math.max(14, Math.min(bw - 14, at - x)))}px`);
+        const x = Math.max(4, Math.min(width - 4 - bw, a.x - bw / 2));
+        b.el.style.transform = `translate(${Math.round(x)}px, ${Math.round(a.y + 7)}px)`;
+        b.el.style.setProperty('--tail', `${Math.round(Math.max(12, Math.min(bw - 12, a.x - x)))}px`);
         b.el.classList.toggle('going', b.until - now < 500);
       }
     },
@@ -188,8 +188,8 @@ export function createQuickMenu(btn: HTMLElement, panel: HTMLElement, opts: Opt[
     panel.hidden = true;
   };
   const open = (): void => {
-    refresh();
     panel.hidden = false;
+    refresh();
     navigator.vibrate?.(12);
   };
   btn.addEventListener('pointerdown', (e) => {

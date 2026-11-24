@@ -153,7 +153,7 @@ The pieces every menu is built from, so each setting works the same with a finge
 
 ### `src/quick.ts`: quick chat and the quick menu
 
-Two small panels over the round that never pause it. `createChat` builds the chat panel from `CHAT_GROUPS` (five kinds, the last, Custom, a box to type in) and calls back with the line picked; main.ts shows it at once on this screen or sends it to the room online. `createBubbles` keeps a bubble over each robot that said something, placed every frame the arena is drawn (`place`, from `render` in main.ts). `createQuickMenu` opens a few settings (`Opt`s from ui.ts) when the menu button is held down, and still opens the full menu on a tap. Both close on a press outside them, which still goes through to the game.
+Two small panels over the round that never pause it. `createChat` builds the chat panel from `CHAT_GROUPS` (five kinds, the last, Custom, a box to type in) and calls back with the line picked; main.ts shows it at once on this screen or sends it to the room online. `createBubbles` keeps a bubble under the scoreboard name of each player who said something, placed every frame the arena is drawn (`place`, from `render` in main.ts, with where `drawScore` put each name, `nameAt`). `createQuickMenu` opens a few settings (`Opt`s from ui.ts) when the menu button is held down, and still opens the full menu on a tap. Both close on a press outside them, which still goes through to the game.
 
 ### `src/title.ts`: the title screen's picture
 

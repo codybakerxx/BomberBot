@@ -39,4 +39,11 @@ const off = main.indexOf("document.documentElement.classList.remove('booting')")
 assert.ok(first > 0 && off > first, 'main.ts removes "booting" after the first layout()');
 assert.ok(main.lastIndexOf('\nnewWorld();', off) > 0 && main.slice(first, off).split('\n').length < 6, '...right after it');
 
+// Short class names that pieces of the page add for a moment (the P1 tag's and the presence dot's `pop`, a
+// button's `flash`) have no rule of their own: a panel once borrowed `.pop` for its look, and the P1 tag under
+// your colour stretched into a long box when Ready made it pop (24 November 2026).
+for (const name of ['pop']) {
+  assert.ok(!new RegExp(`(^|[\\s,}])\\.${name}\\s*[{,\\[]`).test(css), `no rule styles .${name} on its own (only with the element it is added to)`);
+}
+
 console.log('page checks passed');

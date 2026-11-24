@@ -448,30 +448,29 @@ function layout(): void {
     scoreHeadMax = Math.max(5, Math.min(HEAD_R, (h - scoreNameSize - 4) / 2));
     scoreCells = Array.from({ length: places }, (_, i) => ({ x: 6 + i * cell, w: cell, y: 1 + scoreHeadMax, ny: h - scoreNameSize / 2 - 1 }));
   } else if (stacked) {
+    // The quick chat button sits left of the menu button (the owner's ask, 24 November 2026), so the two take
+    // the right of the top bar. The four places and the timer share the rest, two places each side of the
+    // timer, which sits in the middle of that room (a little left of the screen's middle) so the places stay
+    // as wide as they were. (Until then the far left was kept clear to match the menu button.)
     const half = (timer.offsetWidth || 80) / 2 + 5;
-    const btn = $('menuBtn').getBoundingClientRect();
-    const edge = (btn.width ? Math.min(W - btn.left, 60) : 48) + 4;
-    const cell = Math.max(24, (W / 2 - half - edge) / 2);
+    const left = 6;
+    const right = W - CHAT_RIGHT - CHAT_W - 4;
+    const mid = Math.round((left + right) / 2);
+    timerMid = mid;
+    const cell = Math.max(24, (mid - half - left) / 2);
     scoreNameSize = 11;
-    scoreCells = [edge, edge + cell, W / 2 + half, W / 2 + half + cell].map((x) => ({ x, w: cell, y: topBar / 2 + 3, ny: topBar + Math.min(9, infoRow / 2) }));
+    scoreCells = [left, left + cell, mid + half, mid + half + cell].map((x) => ({ x, w: cell, y: topBar / 2 + 3, ny: topBar + Math.min(9, infoRow / 2) }));
   } else {
     box.left = Math.round((side - box.width) / 2);
     const across = places > 4 ? perRow : 4;
     const cell = box.width / across;
     scoreCells = Array.from({ length: places }, (_, i) => ({ x: (i % across) * cell, w: cell, y: ROW * Math.floor(i / across) + 22, ny: ROW * Math.floor(i / across) + 22 + HEAD_R + 11 }));
   }
-  // The quick chat button (the owner's ask, 24 November 2026: left of the menu). Upright with four players the
-  // scoreboard fills the top bar right up to the menu button, so there it takes the far left, the place kept
-  // clear to match the menu button; everywhere else it sits just left of the menu button.
-  const chatBtn = $('chatBtn');
-  const farLeft = stacked && places <= 4;
-  chatBtn.style.left = farLeft ? '8px' : '';
-  chatBtn.style.right = farLeft ? '' : '52px';
-  const chatPanel = $('chatPanel');
-  chatPanel.style.top = quickMenu.style.top = '46px';
-  chatPanel.style.left = farLeft ? '8px' : '';
-  chatPanel.style.right = farLeft ? '' : '8px';
-  quickMenu.style.right = '8px';
+  // the quick chat button, just left of the menu button (the owner's ask, 24 November 2026), and the two panels under them
+  timer.style.left = stacked && places <= 4 ? `${timerMid}px` : timer.style.left;
+  $('chatBtn').style.right = `${CHAT_RIGHT}px`;
+  $('chatPanel').style.top = quickMenu.style.top = '46px';
+  $('chatPanel').style.right = quickMenu.style.right = '8px';
   // sideways with more than four players the scoreboard has two rows: the swipe pad starts under them
   touch.style.setProperty('--pad-top', `${stacked ? 88 : Math.max(88, box.top + box.height + 6)}px`);
   score.style.left = `${box.left}px`;
@@ -491,6 +490,11 @@ function layout(): void {
   redrawStatic();
 }
 
+/** The quick chat button: its distance from the right of the screen (just left of the menu button) and its width. */
+const CHAT_RIGHT = 52;
+const CHAT_W = 38;
+/** Upright with four places or fewer: where the timer's middle is (layout). */
+let timerMid = 0;
 /** Where layout() put the result panel: its top, and whether it lies over the controls (upright). */
 let resultPlace = { top: 0, stacked: true };
 /**
@@ -571,12 +575,15 @@ function fitText(c: CanvasRenderingContext2D, text: string, max: number): string
   return `${t}…`;
 }
 
+/** Where each player's name is on the page, as drawScore last drew it (the quick chat's bubbles hang under them). */
+const nameAt: ({ x: number; y: number } | undefined)[] = [];
 function drawScore(): void {
   const places = Array.from({ length: Math.max(4, world.players.length) }, (_, i) => world.players[i]);
   const winner = world.over ? world.over.winner : -1;
   const key = places.map((p, i) => (p ? `${p.colorId}t${p.team}${p.alive ? '' : 'x'}${p.zombie ? 'z' : ''}${wins[i]}l${p.lives}${scoreName(i)}` : '-')).join('|') + `|${winner}|${leader}|${score.width}x${score.height}`;
   if (key === scoreKey) return;
   scoreKey = key;
+  nameAt.length = 0;
   const k = score.width / (parseFloat(score.style.width) || score.width); // screen pixels to canvas pixels
   sctx.setTransform(1, 0, 0, 1, 0, 0);
   sctx.clearRect(0, 0, score.width, score.height);
@@ -638,7 +645,10 @@ function drawScore(): void {
     const shown = fitText(sctx, name, cell.w - 4);
     const half = sctx.measureText(shown).width / 2;
     // centred under the head, kept inside its own place
-    sctx.fillText(shown, Math.max(cell.x + 2 + half, Math.min(cx, cell.x + cell.w - 2 - half)), cell.ny);
+    const nameX = Math.max(cell.x + 2 + half, Math.min(cx, cell.x + cell.w - 2 - half));
+    sctx.fillText(shown, nameX, cell.ny);
+    // where the name is on the page: a quick chat line hangs under it (bubbles in quick.ts)
+    nameAt[i] = { x: (parseFloat(score.style.left) || 0) + nameX, y: (parseFloat(score.style.top) || 0) + cell.ny + scoreNameSize / 2 };
     sctx.globalAlpha = 1;
     sctx.textAlign = 'left';
     said.push(`${nameOf(i)}${p.team >= 0 ? `, ${TEAMS[p.team].name},` : ''} ${wins[i]}${i === leader ? ' (in the lead)' : ''}`);
@@ -780,7 +790,7 @@ function render(time: number): void {
   }
   drawTimer();
   drawScore();
-  bubbles.place(w, parseFloat(canvas.style.left) || 0, parseFloat(canvas.style.top) || 0, (parseFloat(canvas.style.width) || 0) / w.w, window.innerWidth);
+  bubbles.place((i) => nameAt[i] ?? null, window.innerWidth);
 }
 
 /**
@@ -2717,6 +2727,7 @@ $('appInstall').addEventListener('click', () => void install());
 
 function refreshPrefs(): void {
   remap?.refresh();
+  quick?.refresh(); // (the quick menu shows some of the same settings)
   refreshSound();
   refreshPad();
   refreshGfx();
