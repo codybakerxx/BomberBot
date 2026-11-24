@@ -6,7 +6,8 @@
  *   head of the player who said it on the scoreboard, for everyone in the room (online the server passes it
  *   on: `chat` in net.ts).
  * - The quick menu: holding the menu button down opens a small panel of a few settings (sound on or off, the
- *   volume, movement sensitivity) without stopping the round. A tap opens the full menu as before.
+ *   volume, movement sensitivity) without stopping the round. A tap opens the full menu as before; while the
+ *   panel is open, a tap on the button closes it instead.
  *
  * Both close on a tap anywhere outside them (the tap still counts: a thumb going back to the pad moves the
  * robot), on Escape, and when the round's screen is left.
@@ -221,7 +222,11 @@ export function createQuickMenu(btn: HTMLElement, panel: HTMLElement, opts: Opt[
       held = false; // the end of the hold, not a tap
       return;
     }
-    if (!panel.hidden) close();
+    // open, a tap on the button closes it rather than opening the full menu (the owner's ask, 24 November 2026)
+    if (!panel.hidden) {
+      close();
+      return;
+    }
     tap();
   });
   outside(panel, btn, close);

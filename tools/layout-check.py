@@ -174,7 +174,11 @@ async def main():
                 over = await pg.evaluate("(() => { const q = document.getElementById('quickMenu'), g = [...q.querySelectorAll('.opts > *')].map(e => e.getBoundingClientRect()), p = q.getBoundingClientRect(); return g.some((r, k) => k && r.top < g[k - 1].bottom - 0.5) || (q.scrollHeight <= q.clientHeight + 1 && g[g.length - 1].bottom > p.bottom + 0.5); })()")
                 if over: total += 1; print(f'  {w}x{h} quick menu: a setting runs over the one under it, or out of the panel')
             await look('quick menu, switched again')
-            await pg.evaluate("document.getElementById('quickMenu').hidden = true")
+            # a tap on the menu button now closes it, and does not open the full menu (the owner's ask, 24 November 2026)
+            await pg.tap('#menuBtn'); await pg.wait_for_timeout(150)
+            if await pg.evaluate("!document.getElementById('quickMenu').hidden || !document.getElementById('pause').hidden"):
+                total += 1; print(f'  {w}x{h} quick menu: a tap on the menu button did not just close it')
+            await pg.evaluate("document.getElementById('quickMenu').hidden = true; if (!document.getElementById('pause').hidden) document.getElementById('pauseResume').click()")
             await pg.evaluate("document.getElementById('menuBtn').click()"); await look('menu')
             await pg.evaluate("document.getElementById('pauseRestart').click()"); await look('confirm')
             await pg.evaluate("document.getElementById('confirmNo').click(); document.getElementById('pauseResume').click()")
