@@ -750,7 +750,10 @@ console.log('room checks passed');
   assert.equal(modeOf(s, me), 'classic', 'Rounds to win is not part of a mode');
   const hard = hardcoreRules(s, me);
   assert.equal(modeOf(hard, me), 'hardcore');
-  assert.ok(hard.startOn && hard.startBombs === MAX_BOMBS && hard.startFire === MAX_FIRE && hard.startSpeed === MAX_SPEED_ITEMS, 'Hardcore: everything maxed');
+  assert.ok(hard.startOn && hard.startBombs === MAX_BOMBS && hard.startFire === MAX_FIRE && hard.startSpeed === MAX_SPEED_ITEMS, 'Hardcore: bombs, blast and speed maxed from the start');
+  const classic = defaultRules(s, me);
+  for (const k of ['brickShare', 'itemShare', 'itemsOn', 'items', 'itemOn', 'closeIn', 'roundSecs', 'lives'] as const)
+    assert.deepStrictEqual(hard[k], classic[k], `Hardcore: ${k} as in Classic (the owner: the rest normal, power-ups included)`);
   assert.equal(hard.firstTo, 3, 'and Rounds to win kept');
   hard.lives = 2;
   assert.equal(modeOf(hard, me), 'custom', 'a rule changed by hand: Custom');

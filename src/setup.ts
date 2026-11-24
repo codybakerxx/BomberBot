@@ -698,7 +698,7 @@ export function groupIsDefault(s: MatchSetup, group: RuleGroup, myColor: string)
  */
 export const MODES = [
   { id: 'classic', name: 'Classic', line: 'Usual rules' },
-  { id: 'hardcore', name: 'Hardcore', line: 'All maxed out' },
+  { id: 'hardcore', name: 'Hardcore', line: 'Maxed start' },
   { id: 'random', name: 'Random', line: 'New each match' },
 ] as const;
 export type ModeId = (typeof MODES)[number]['id'];
@@ -716,10 +716,9 @@ export function classicRules(s: MatchSetup, myColor: string): MatchSetup {
 }
 
 /**
- * Hardcore: everything maxed out (the owner's words). Every robot starts with all the bombs, the longest blast
- * and the top speed; the arena is packed with bricks and every brick hides a power-up, mostly the boot, the
- * glove, the laptop and the shield (the others would do nothing for a robot already at the top); the blocks
- * close in fast.
+ * Hardcore: Classic, but every robot starts with all the bombs, the longest blast and the top speed (the
+ * owner's ask, 23 November 2026). It first maxed everything out, bricks, power-ups and closing in too, and
+ * the owner found it too hardcore the same evening: the rest is Classic's, power-ups included.
  */
 export function hardcoreRules(s: MatchSetup, myColor: string): MatchSetup {
   const out = classicRules(s, myColor);
@@ -727,12 +726,6 @@ export function hardcoreRules(s: MatchSetup, myColor: string): MatchSetup {
   out.startBombs = MAX_BOMBS;
   out.startFire = MAX_FIRE;
   out.startSpeed = MAX_SPEED_ITEMS;
-  out.brickShare = BRICK_SHARE_MAX;
-  out.itemShare = 100;
-  out.itemsOn = true;
-  out.itemOn = { bomb: true, fire: true, speed: true, kick: true, grab: true, shield: true, curse: true, laptop: true };
-  out.items = { bomb: 1, fire: 1, speed: 1, kick: 3, grab: 3, shield: 3, curse: 2, laptop: 3 };
-  out.closeIn = CLOSE_IN.length - 1;
   return out;
 }
 

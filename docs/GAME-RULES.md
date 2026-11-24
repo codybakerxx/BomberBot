@@ -361,7 +361,7 @@ The host can change these before a match. Left alone, every one is the usual rul
 | Mode | Rules |
 |---|---|
 | Classic (the default) | The usual rules for the size picked |
-| Hardcore | Everything maxed out: everyone starts with 8 bombs, a blast of 8 and top speed; bricks at 100% and every brick a power-up, mostly the boot, the glove, the laptop and the shield (Lots; bomb, flame and speed Rare, curse Normal); closing in Fast |
+| Hardcore | Classic, but everyone starts with 8 bombs, a blast of 8 and top speed (a custom start at the most). Bricks, power-ups, the timer and closing in as in Classic. (The first Hardcore also packed the bricks, made every brick a power-up and closed in Fast; the owner found it too hardcore the same evening) |
 | Random | Every rule picked at random and shown on the Match page: timer on 85% of the time, 0:45 to 3:00, any closing-in speed; 1 life (60%), 2 or 3; Post-Mortem on 35% of the time; bricks 40 to 100%; power-ups 30 to 100%; a custom mix 40% of the time; a custom start 40% of the time (up to 5 bombs, a blast of 5, +3 speed). Picked again for every new match: on Rematch and Restart, and on coming back to the lobby; Start plays the rules shown. A tap on Random picks again. Online the server picks |
 
 | Setting | Choices | What it changes |
