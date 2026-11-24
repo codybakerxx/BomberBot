@@ -163,6 +163,13 @@ async def main():
             # the quick menu: the menu button held down
             await pg.dispatch_event('#menuBtn', 'pointerdown', {'button': 0, 'pointerType': 'touch'}); await pg.wait_for_timeout(600); await look('quick menu')
             await pg.dispatch_event('#menuBtn', 'pointerup', {'button': 0, 'pointerType': 'touch'})
+            # its switch off and on again: the Volume under it opens and pushes Movement sensitivity down, never over it
+            # (the owner saw it come up over it once, 24 November 2026)
+            for _ in range(2):
+                await pg.evaluate("document.querySelector('#quickMenu .switch-btn').click()"); await pg.wait_for_timeout(150)
+                over = await pg.evaluate("(() => { const q = document.getElementById('quickMenu'), g = [...q.querySelectorAll('.opts > *')].map(e => e.getBoundingClientRect()), p = q.getBoundingClientRect(); return g.some((r, k) => k && r.top < g[k - 1].bottom - 0.5) || (q.scrollHeight <= q.clientHeight + 1 && g[g.length - 1].bottom > p.bottom + 0.5); })()")
+                if over: total += 1; print(f'  {w}x{h} quick menu: a setting runs over the one under it, or out of the panel')
+            await look('quick menu, switched again')
             await pg.evaluate("document.getElementById('quickMenu').hidden = true")
             await pg.evaluate("document.getElementById('menuBtn').click()"); await look('menu')
             await pg.evaluate("document.getElementById('pauseRestart').click()"); await look('confirm')

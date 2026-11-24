@@ -128,8 +128,13 @@
   #chatBtn[aria-expanded='true'] { color: #1a1406; background: var(--accent); border-color: var(--accent); }
   #menuBtn { -webkit-touch-callout: none; user-select: none; -webkit-user-select: none; }
   /* the panels over the round: they never pause it, and close on a tap outside */
-  .quick-pop { position: fixed; z-index: 3; width: min(320px, calc(100vw - 16px)); max-height: calc(100vh - 60px); overflow-y: auto; display: flex; flex-direction: column; gap: 8px; padding: 10px; background: rgba(16, 20, 32, 0.97); border: 1px solid rgba(255, 197, 106, 0.45); border-radius: 16px; box-shadow: 0 16px 34px rgba(0, 0, 0, 0.6); animation: tip-in 0.16s ease-out; }
+  /* Not a scrolling box where it fits (every phone upright): an iPhone draws a scrolling box on a layer of its
+     own and can be late redrawing it when it grows, which may be how the Volume slider once came up over
+     Movement sensitivity in the quick menu instead of pushing it down (the owner, 24 November 2026). Only a
+     short screen, held sideways, lets it scroll. */
+  .quick-pop { position: fixed; z-index: 3; width: min(320px, calc(100vw - 16px)); display: flex; flex-direction: column; gap: 8px; padding: 10px; background: rgba(16, 20, 32, 0.97); border: 1px solid rgba(255, 197, 106, 0.45); border-radius: 16px; box-shadow: 0 16px 34px rgba(0, 0, 0, 0.6); animation: tip-in 0.16s ease-out; }
   .quick-pop[hidden] { display: none; }
+  @media (max-height: 430px) { .quick-pop { max-height: calc(100vh - 56px); overflow-y: auto; } }
   .quick-pop h3 { margin: 2px 4px 0; font: 700 13px/1 var(--font-display); letter-spacing: 0.14em; text-transform: uppercase; color: var(--accent); }
   .quick-pop .opts > .opt, .quick-pop .opts > .opt-group { background: #131827; }
   .chat-tabs { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 4px; }
