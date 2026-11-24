@@ -25,7 +25,7 @@ import { CpuSlot, Guest, ITEM_NAMES, MatchSetup, Prefs, SHARPNESS, SOUND_GROUPS,
 import { BOMB_ICON, Opt, answerConfirm, choice, confirmFirst, confirmOpen, group, heading, mount, note, slider, toggle, wireConfirm, wireFlash } from './ui';
 import { Hand, DEFAULT_SENS, OLD_SENS, SENS_DEG, SENS_MAX, STRAIGHT, sensTilt, standardAims } from './swipe';
 import { Online } from './online';
-import { createBubbles, createChat, createQuickMenu } from './quick';
+import { BUBBLE_TAIL, createBubbles, createChat, createQuickMenu } from './quick';
 import { canInstall, howToAdd, install, isApple, myEndpoint, onWebsite, pushOff, pushOn, pushRefresh, pushState, pushTest, type PushState } from './app';
 import { decodeWorld, packInput, readCode, unpackInput, type BellAnswer, type Score, type Seat, type ServerMsg } from './net';
 /** Look up an element of src/page.html by its id. */
@@ -305,13 +305,22 @@ const INFO_ROWS = 1;
 /** The biggest a head on the scoreboard is drawn, centre to edge, in screen pixels. */
 const HEAD_R = 13;
 /**
- * Where each place on the scoreboard goes: the left edge and width of its cell, and how far down the middle
- * of its head is, in screen pixels from the scoreboard's own top left. Four places, or one per player when
- * more than four are playing.
+ * Where each place on the scoreboard goes: the left edge and width of its cell, and `foot`, the line its head
+ * sits on, in page pixels from the scoreboard's own top left. The name goes over the head and a quick chat
+ * line hangs under it (the owner's ask, 24 November 2026). Four places, or one per player when more than four
+ * are playing.
  */
-/** Where each place on the scoreboard goes: its cell, the middle of its head, and the middle of its name under it. */
-let scoreCells: { x: number; w: number; y: number; ny: number }[] = [];
-/** the size of the names under the heads, in page pixels */
+let scoreCells: { x: number; w: number; foot: number }[] = [];
+/**
+ * Upright with more than four players the scoreboard is a band of its own under the top bar: names, heads,
+ * and room under the heads for a chat line, so it never runs onto the arena. Page pixels.
+ */
+const SCORE_BAND = 58;
+/** Upright, the room under the top bar is at least this tall, so a chat line under a head fits above the arena. */
+const CHAT_ROOM = 24;
+/** Where the quick chat's bubbles may go (the arena is never covered), and how big their type is: set by layout(). */
+let bubbleRoom = { left: 0, right: 0, bottom: 0 };
+/** the size of the names over the heads, in page pixels */
 let scoreNameSize = 10;
 /** The most a head on the scoreboard may be, centre to edge, so it fits the height it has. */
 let scoreHeadMax = 13;
@@ -381,9 +390,12 @@ function layout(): void {
   const stacked = portrait && isTouch;
   const topBar = stacked ? 46 : 0;
   const minControls = stacked ? Math.min(230, H * 0.3) : 0;
-  const availH = H - topBar - minControls;
+  const places = Math.max(4, world.players.length);
+  // upright with more than four players, the scoreboard is a band of its own under the top bar
+  const band = stacked && places > 4;
+  const availH = H - topBar - (band ? SCORE_BAND : 0) - minControls;
   // the free line is as tall as one block, so the height has to hold one row more than the arena has
-  T = wholeTile(Math.max(8, Math.floor(Math.min((W * dpr) / world.w, (availH * dpr) / (world.h + (stacked ? INFO_ROWS : 0))))), world.w, world.h, dpr);
+  T = wholeTile(Math.max(8, Math.floor(Math.min((W * dpr) / world.w, (availH * dpr) / (world.h + (stacked && !band ? INFO_ROWS : 0))))), world.w, world.h, dpr);
   canvas.width = T * world.w;
   canvas.height = T * world.h;
   const cw = canvas.width / dpr;
@@ -400,7 +412,9 @@ function layout(): void {
   const onPixel = (v: number): number => (Number.isInteger(dpr) ? Math.round(v) : Math.round(v * dpr) / dpr);
   const left = onPixel((W - cw) / 2);
   canvas.style.left = `${left}px`;
-  const infoRow = stacked ? Math.round((T / dpr) * INFO_ROWS) : 0;
+  // (the free line is at least CHAT_ROOM tall, so a chat line under a head on the scoreboard fits over the arena;
+  // with more than four players it is the scoreboard's own band)
+  const infoRow = !stacked ? 0 : band ? SCORE_BAND : Math.max(CHAT_ROOM, Math.round((T / dpr) * INFO_ROWS));
   const top = onPixel(stacked ? topBar + infoRow : (H - ch) / 2);
   canvas.style.top = `${top}px`;
   // the ghost layer: over the arena and everything above it, on the same pixels as the arena
@@ -421,32 +435,32 @@ function layout(): void {
   // the Match my thumb panel sits exactly over the arena, leaving the pad free
   // the timer: centred across the top when upright; otherwise centred over the column beside the arena
   timer.style.left = portrait ? '50%' : `${Math.round(Math.max(150, (W - cw) / 2) / 2)}px`;
-  // The scoreboard: four heads, each with its wins to its right. Upright it is in the top bar, two
-  // places on each side of the timer; the same room is left clear at the far left as the menu button
-  // takes at the far right, so the two pairs match. Otherwise it is a row under the timer, over the
-  // column beside the arena.
+  // The scoreboard: four heads, each with its wins to its right and its name over it. Upright it is in the top
+  // bar, two places on each side of the timer, left of the chat and menu buttons. Otherwise it is a row under
+  // the timer, over the column beside the arena.
   const side = Math.max(150, (W - cw) / 2);
-  const places = Math.max(4, world.players.length);
   const perRow = 5; // sideways, with more than four players: rows of up to five
   const rows = places > 4 ? Math.ceil(places / perRow) : 1;
-  // Each head has its player's name under it (the owner's ask). Upright with four, the names sit in the free
-  // line under the top bar; upright with more, heads and names share that line; sideways each row is taller.
+  // Each head has its player's name over it and room under it for a chat line (the owner's ask, 24 November
+  // 2026: names over the heads, chat under them, never onto the arena or its walls). Upright with four the
+  // heads sit on the foot of the top bar and the chat hangs into the free line; upright with more, the
+  // scoreboard is a band of its own (SCORE_BAND); sideways each row is taller.
   const ROW = 58;
   const box =
-    stacked && places > 4
-      ? // more than four players, upright: the scoreboard takes the free line under the top bar, one place each across the screen
-        { left: 0, top: topBar, width: W, height: Math.max(16, infoRow) }
+    band
+      ? // more than four players, upright: a band under the top bar, one place each across the screen
+        { left: 0, top: topBar, width: W, height: SCORE_BAND }
       : stacked
         ? { left: 0, top: 0, width: W, height: topBar + infoRow }
         : { left: 6, top: 40, width: Math.min(side - 12, places > 4 ? 300 : 260), height: ROW * rows };
   scoreHeadMax = HEAD_R;
   scoreNameSize = 10;
-  if (stacked && places > 4) {
+  if (band) {
     const cell = (W - 12) / places;
-    const h = box.height;
-    scoreNameSize = Math.max(8, Math.min(10, Math.round(h * 0.3)));
-    scoreHeadMax = Math.max(5, Math.min(HEAD_R, (h - scoreNameSize - 4) / 2));
-    scoreCells = Array.from({ length: places }, (_, i) => ({ x: 6 + i * cell, w: cell, y: 1 + scoreHeadMax, ny: h - scoreNameSize / 2 - 1 }));
+    scoreNameSize = 9;
+    scoreHeadMax = 9;
+    // names, then heads; the rest of the band is the chat's
+    scoreCells = Array.from({ length: places }, (_, i) => ({ x: 6 + i * cell, w: cell, foot: scoreNameSize + 3 + 2 * scoreHeadMax + 1 }));
   } else if (stacked) {
     // The quick chat button sits left of the menu button (the owner's ask, 24 November 2026), so the two take
     // the right of the top bar. The four places and the timer share the rest, two places each side of the
@@ -459,13 +473,29 @@ function layout(): void {
     timerMid = mid;
     const cell = Math.max(24, (mid - half - left) / 2);
     scoreNameSize = 11;
-    scoreCells = [left, left + cell, mid + half, mid + half + cell].map((x) => ({ x, w: cell, y: topBar / 2 + 3, ny: topBar + Math.min(9, infoRow / 2) }));
+    // the heads sit on the foot of the top bar, their names over them
+    scoreCells = [left, left + cell, mid + half, mid + half + cell].map((x) => ({ x, w: cell, foot: topBar - 3 }));
   } else {
     box.left = Math.round((side - box.width) / 2);
     const across = places > 4 ? perRow : 4;
     const cell = box.width / across;
-    scoreCells = Array.from({ length: places }, (_, i) => ({ x: (i % across) * cell, w: cell, y: ROW * Math.floor(i / across) + 22, ny: ROW * Math.floor(i / across) + 22 + HEAD_R + 11 }));
+    scoreCells = Array.from({ length: places }, (_, i) => ({ x: (i % across) * cell, w: cell, foot: ROW * Math.floor(i / across) + 4 + scoreNameSize + 3 + 2 * HEAD_R }));
   }
+  // Where a chat line may hang under a head: upright, down to just over the arena's top wall, on one line, its
+  // type as big as that room allows; sideways, inside the column beside the arena, as many lines as it needs.
+  const foot = box.top + (scoreCells[0]?.foot ?? 0);
+  const layer = $('bubbles');
+  if (stacked) {
+    bubbleRoom = { left: 4, right: W - 4, bottom: top - 1 };
+    const room = top - 1 - (foot + 1) - BUBBLE_TAIL - 4; // (4: the bubble's padding and border, top and bottom)
+    layer.style.setProperty('--bubble-font', `${Math.max(7, Math.min(12, Math.floor(room / 1.2)))}px`);
+    layer.style.setProperty('--bubble-max', `${W - 8}px`);
+  } else {
+    bubbleRoom = { left: box.left, right: Math.min(box.left + box.width, left - 3), bottom: H - 4 }; // (never over the arena beside it)
+    layer.style.setProperty('--bubble-font', '12px');
+    layer.style.setProperty('--bubble-max', `${Math.round(bubbleRoom.right - bubbleRoom.left)}px`);
+  }
+  layer.classList.toggle('wrap', !stacked);
   // the quick chat button, just left of the menu button (the owner's ask, 24 November 2026), and the two panels under them
   timer.style.left = stacked && places <= 4 ? `${timerMid}px` : timer.style.left;
   $('chatBtn').style.right = `${CHAT_RIGHT}px`;
@@ -575,15 +605,15 @@ function fitText(c: CanvasRenderingContext2D, text: string, max: number): string
   return `${t}…`;
 }
 
-/** Where each player's name is on the page, as drawScore last drew it (the quick chat's bubbles hang under them). */
-const nameAt: ({ x: number; y: number } | undefined)[] = [];
+/** Where the foot of each player's head is on the page, as drawScore last drew it (the quick chat's bubbles hang under them). */
+const headAt: ({ x: number; y: number } | undefined)[] = [];
 function drawScore(): void {
   const places = Array.from({ length: Math.max(4, world.players.length) }, (_, i) => world.players[i]);
   const winner = world.over ? world.over.winner : -1;
   const key = places.map((p, i) => (p ? `${p.colorId}t${p.team}${p.alive ? '' : 'x'}${p.zombie ? 'z' : ''}${wins[i]}l${p.lives}${scoreName(i)}` : '-')).join('|') + `|${winner}|${leader}|${score.width}x${score.height}`;
   if (key === scoreKey) return;
   scoreKey = key;
-  nameAt.length = 0;
+  headAt.length = 0;
   const k = score.width / (parseFloat(score.style.width) || score.width); // screen pixels to canvas pixels
   sctx.setTransform(1, 0, 0, 1, 0, 0);
   sctx.clearRect(0, 0, score.width, score.height);
@@ -608,7 +638,7 @@ function drawScore(): void {
       numW = sctx.measureText(label || '0').width;
     }
     const cx = cell.x + (cell.w - (2 * r + gap + numW)) / 2 + r;
-    const cy = cell.y;
+    const cy = cell.foot - r; // (the head sits on its cell's foot, its name over it)
     const numX = cx + r + gap; // where the number of wins starts
     const dim = !p ? 0.45 : p.alive && !p.zombie ? 1 : 0.45; // (a zombie is out of the round)
     // the helmet has a rim in the player's colour, which is what shows it against the dark screen
@@ -621,7 +651,7 @@ function drawScore(): void {
     if (i === leader) drawHead(sctx, cx, cy, r, col, { crownOnly: true });
     sctx.fillStyle = winner >= 0 && onSide(i, winner) ? col.glow : p.alive ? '#eef1fb' : '#8a90a3';
     sctx.fillText(label, numX, cy + 1);
-    // with more than one life a round, a little dot for each life left, under the number (the name is under the head)
+    // with more than one life a round, a little dot for each life left, under the number (the name is over the head)
     if (setup.lives > 1 && p.lives > 0) {
       const dr = Math.max(1.2, r * 0.12);
       const step = dr * 2.8;
@@ -632,8 +662,8 @@ function drawScore(): void {
         sctx.fill();
       }
     }
-    // the player's name under the head, as wide as the cell allows (a typed name is drawn as text, never markup);
-    // yours in your colour
+    // the player's name over the head (the owner's ask, 24 November 2026: it was under it), as wide as the cell
+    // allows (a typed name is drawn as text, never markup); yours in your colour
     const name = scoreName(i);
     sctx.font = `600 ${scoreNameSize}px "Chakra Petch", system-ui, sans-serif`;
     sctx.textAlign = 'center';
@@ -646,9 +676,9 @@ function drawScore(): void {
     const half = sctx.measureText(shown).width / 2;
     // centred under the head, kept inside its own place
     const nameX = Math.max(cell.x + 2 + half, Math.min(cx, cell.x + cell.w - 2 - half));
-    sctx.fillText(shown, nameX, cell.ny);
-    // where the name is on the page: a quick chat line hangs under it (bubbles in quick.ts)
-    nameAt[i] = { x: (parseFloat(score.style.left) || 0) + nameX, y: (parseFloat(score.style.top) || 0) + cell.ny + scoreNameSize / 2 };
+    sctx.fillText(shown, nameX, Math.max(scoreNameSize / 2 + 1, cy - r - 2 - scoreNameSize / 2));
+    // where the head is on the page: a quick chat line hangs under it (bubbles in quick.ts)
+    headAt[i] = { x: (parseFloat(score.style.left) || 0) + cx, y: (parseFloat(score.style.top) || 0) + cy + r };
     sctx.globalAlpha = 1;
     sctx.textAlign = 'left';
     said.push(`${nameOf(i)}${p.team >= 0 ? `, ${TEAMS[p.team].name},` : ''} ${wins[i]}${i === leader ? ' (in the lead)' : ''}`);
@@ -790,7 +820,7 @@ function render(time: number): void {
   }
   drawTimer();
   drawScore();
-  bubbles.place((i) => nameAt[i] ?? null, window.innerWidth);
+  bubbles.place((i) => headAt[i] ?? null, bubbleRoom);
 }
 
 /**

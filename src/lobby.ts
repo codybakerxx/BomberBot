@@ -1502,6 +1502,30 @@ export function createLobby(host: LobbyHost): {
     });
     $('modePick').append(b);
   }
+  // the mode row scrolls sideways (the owner's ask, 24 November 2026): its edges fade where there is more to see
+  const modeRow = $('modePick');
+  const modeEdges = (): void => {
+    modeRow.classList.toggle('more-left', modeRow.scrollLeft > 2);
+    modeRow.classList.toggle('more-right', modeRow.scrollLeft + modeRow.clientWidth < modeRow.scrollWidth - 2);
+  };
+  modeRow.addEventListener('scroll', modeEdges, { passive: true });
+  // (shown, turned sideways or resized: the fades and the lit mode looked at again)
+  new ResizeObserver(() => showLitMode(modeOf(s(), host.myColor))).observe(modeRow);
+  /** The mode lit last time the row was brought round to show it ('' until it has been, while the page was hidden). */
+  let modeInView = '';
+  /** Scroll the row so the lit mode is in view, once each time the lit mode changes (not while you scroll it yourself). */
+  function showLitMode(mode: string): void {
+    const lit = modeRow.querySelector<HTMLElement>(`[data-mode="${mode}"]`);
+    const row = modeRow.getBoundingClientRect();
+    if (!row.width) return;
+    if (mode === modeInView) return modeEdges();
+    modeInView = mode;
+    if (lit) {
+      const r = lit.getBoundingClientRect();
+      if (r.left < row.left + 2 || r.right > row.right - 2) modeRow.scrollLeft += r.left < row.left ? r.left - row.left - 4 : r.right - row.right + 4;
+    }
+    modeEdges();
+  }
   /** The arena picture: a real arena built with the setup's size and bricks, with everyone in their corners. */
   // the arena picture is drawn again whenever the room for it changes: shown, turned sideways, resized
   let arenaRoom = 0;
@@ -1980,6 +2004,7 @@ export function createLobby(host: LobbyHost): {
     // the mode bubbles: the one the rules are lit; none, and Custom beside the heading, once a rule is changed
     const mode = modeOf(s(), host.myColor);
     $('modeNow').textContent = mode === 'custom' ? 'Custom' : '';
+    requestAnimationFrame(() => showLitMode(mode)); // (once the page is laid out)
     for (const b of $('modePick').querySelectorAll<HTMLButtonElement>('button')) {
       const m = MODES.find((x) => x.id === b.dataset.mode)!;
       const on = m.id === mode;

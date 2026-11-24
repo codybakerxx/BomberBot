@@ -356,7 +356,7 @@ Starting values for every player are set in `createWorld`: 1 bomb, a blast 1 til
 
 The host can change these before a match. Left alone, every one is the usual rule described above.
 
-**Modes** (the owner's ask, 23 November 2026; Item Drop added 24 November 2026): four bubbles, two to a row, between the map and the rules put in a whole set of rules at once (`MODES`, `classicRules`, `hardcoreRules`, `itemDropRules`, `rollRules` in setup.ts). Each keeps Rounds to win as it is; any rule changed by hand afterwards makes it Custom (no bubble lit, "Custom" beside the heading).
+**Modes** (the owner's ask, 23 November 2026; Item Drop added 24 November 2026): four bubbles in one row that scrolls sideways, between the map and the rules put in a whole set of rules at once (`MODES`, `classicRules`, `hardcoreRules`, `itemDropRules`, `rollRules` in setup.ts). Each keeps Rounds to win as it is; any rule changed by hand afterwards makes it Custom (no bubble lit, "Custom" beside the heading).
 
 | Mode | Rules |
 |---|---|

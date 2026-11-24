@@ -148,10 +148,13 @@
   .chat-own { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px; }
   .chat-own[hidden] { display: none; }
   .chat-own input { min-width: 0; font-size: 16px; }
-  /* what was said, in a bubble under the speaker's name on the scoreboard, edged in its colour, its tail pointing up at the name */
+  /* what was said, in a bubble under the speaker's head on the scoreboard, edged in its colour, its tail pointing up at the name */
   #bubbles { position: fixed; inset: 0; z-index: 1; pointer-events: none; overflow: hidden; }
-  .bubble { position: absolute; left: 0; top: 0; z-index: 1; max-width: min(190px, 56vw); padding: 3px 8px 4px; font: 700 12px/1.2 var(--font-body); color: #141824; background: #fffaf0; border: 2px solid var(--who, #ffc56a); border-radius: 12px; box-shadow: 0 6px 14px rgba(0, 0, 0, 0.45); overflow-wrap: anywhere; text-align: center; animation: bubble-in 0.18s ease-out; transition: opacity 0.45s; }
-  .bubble::before { content: ''; position: absolute; left: var(--tail, 50%); top: -7px; width: 10px; height: 10px; margin-left: -5px; background: #fffaf0; border: solid var(--who, #ffc56a); border-width: 2px 0 0 2px; transform: rotate(45deg); }
+  .bubble { position: absolute; left: 0; top: 0; z-index: 1; max-width: var(--bubble-max, 56vw); padding: 1px 7px 2px; font: 700 var(--bubble-font, 12px)/1.2 var(--font-body); color: #141824; background: #fffaf0; border: 1.5px solid var(--who, #ffc56a); border-radius: 10px; box-shadow: 0 4px 10px rgba(0, 0, 0, 0.45); text-align: center; animation: bubble-in 0.18s ease-out; transition: opacity 0.45s; }
+  /* upright, one line (cut short with … if it must be), so it never runs down onto the arena; sideways it may wrap */
+  .bubble > span { position: relative; z-index: 1; display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #bubbles.wrap .bubble > span { white-space: normal; overflow-wrap: anywhere; }
+  .bubble::before { content: ''; position: absolute; left: var(--tail, 50%); top: -5.5px; width: 8px; height: 8px; margin-left: -4px; background: #fffaf0; border: solid var(--who, #ffc56a); border-width: 1.5px 0 0 1.5px; transform: rotate(45deg); }
   .bubble.going { opacity: 0; }
   @keyframes bubble-in { from { opacity: 0; scale: 0.7; } }
   @media (prefers-reduced-motion: reduce) { .bubble, .quick-pop { animation: none; } }
@@ -527,7 +530,14 @@
   .size-pick button[aria-pressed="true"] small { color: rgba(5, 6, 11, 0.72); }
   #lobbyMatch.readonly .size-pick button { pointer-events: none; }
   /* the Mode bubbles, under the map's panel: the same bubbles as the sizes, on the page's own background */
-  .mode-pick { margin: 2px 0 4px; grid-template-columns: repeat(2, minmax(0, 1fr)); } /* four modes: two rows of two */
+  /* the modes: one straight row that scrolls sideways (the owner's ask, 24 November 2026: it was two rows of two),
+     about three in view so the next one peeks in; its edges fade where there are more to scroll to */
+  .mode-pick { display: flex; gap: 8px; margin: 2px -4px 4px; padding: 2px 4px 6px; overflow-x: auto; overscroll-behavior-x: contain; scroll-snap-type: x mandatory; scroll-padding: 0 4px; touch-action: pan-x pan-y; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+  .mode-pick::-webkit-scrollbar { display: none; }
+  .mode-pick button { flex: 0 0 calc((100% - 16px) / 2.7); min-width: 0; scroll-snap-align: start; }
+  .mode-pick.more-right { -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent); mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent); }
+  .mode-pick.more-left { -webkit-mask-image: linear-gradient(to left, #000 calc(100% - 28px), transparent); mask-image: linear-gradient(to left, #000 calc(100% - 28px), transparent); }
+  .mode-pick.more-left.more-right { -webkit-mask-image: linear-gradient(to right, transparent, #000 28px, #000 calc(100% - 28px), transparent); mask-image: linear-gradient(to right, transparent, #000 28px, #000 calc(100% - 28px), transparent); }
   .mode-pick small { white-space: nowrap; font-size: clamp(10px, 3.1vw, 11.5px); }
   #lobbyMatch.readonly .size-pick button:not([aria-pressed="true"]) { opacity: 0.45; }
   /* the lobby's top bar: back on the left, the mode in the very middle, the buttons on the right, all on one line */

@@ -3,7 +3,7 @@
  *
  * - Quick chat: the speech-bubble button in the top bar, left of the menu button, opens a panel of five groups
  *   of lines, four ready-made ones each and a Custom one to type in. A line picked shows in a bubble under the
- *   name of the player who said it on the scoreboard, for everyone in the room (online the server passes it
+ *   head of the player who said it on the scoreboard, for everyone in the room (online the server passes it
  *   on: `chat` in net.ts).
  * - The quick menu: holding the menu button down opens a small panel of a few settings (sound on or off, the
  *   volume, movement sensitivity) without stopping the round. A tap opens the full menu as before.
@@ -129,25 +129,31 @@ export function createChat(btn: HTMLElement, panel: HTMLElement, say: (text: str
   return { open, close, isOpen: () => !panel.hidden };
 }
 
+/** How far a bubble's tail reaches up from its body, in page pixels. */
+export const BUBBLE_TAIL = 6;
+
 /**
- * What each player said, in a bubble under their name on the scoreboard at the top of the screen, so it never
- * covers the arena (the owner's ask, 24 November 2026: over the robot it was in the way). `say` puts one under a
- * player's name (replacing what it last said); `place` keeps them there, called every frame, with where each
- * player's name is on the page (`at`, null for a player with no place on the scoreboard).
+ * What each player said, in a bubble under their head on the scoreboard at the top of the screen, so it never
+ * covers the arena (the owner's asks, 24 November 2026: over the robot it was in the way; then the name over
+ * the head and the chat under it, never down onto the arena or its walls). `say` puts one under a player's
+ * head (replacing what it last said); `place` keeps them there, called every frame, with where each head's foot
+ * is on the page (`at`, null for a player with no place on the scoreboard) and the room they may use.
  */
 export function createBubbles(layer: HTMLElement, colourOf: (player: number) => string) {
-  const shown = new Map<number, { el: HTMLElement; until: number }>();
+  const shown = new Map<number, { el: HTMLElement; until: number; font: number }>();
   return {
     say(player: number, text: string): void {
       shown.get(player)?.el.remove();
       const el = document.createElement('div');
       el.className = 'bubble';
-      el.textContent = text; // (typed by a person: always text, never markup)
+      const words = document.createElement('span');
+      words.textContent = text; // (typed by a person: always text, never markup)
+      el.append(words);
       el.style.setProperty('--who', colourOf(player));
       layer.append(el);
-      shown.set(player, { el, until: performance.now() + BUBBLE_MS });
+      shown.set(player, { el, until: performance.now() + BUBBLE_MS, font: 0 });
     },
-    place(at: (player: number) => { x: number; y: number } | null, width: number): void {
+    place(at: (player: number) => { x: number; y: number } | null, room: { left: number; right: number; bottom: number }): void {
       if (!shown.size) return;
       const now = performance.now();
       for (const [i, b] of shown) {
@@ -157,11 +163,17 @@ export function createBubbles(layer: HTMLElement, colourOf: (player: number) => 
           shown.delete(i);
           continue;
         }
-        // under the name, its tail pointing up at it, kept on the screen
+        // under the head, its tail pointing up at it, kept inside its room
+        const y = a.y + 1 + BUBBLE_TAIL;
+        // never past the bottom of its room (upright: the arena's top wall): smaller type until it fits
+        if (y + b.el.offsetHeight > room.bottom && b.font !== 6) {
+          b.font = Math.max(6, (b.font || parseFloat(getComputedStyle(b.el).fontSize)) - 1);
+          b.el.style.fontSize = `${b.font}px`;
+        }
         const bw = b.el.offsetWidth;
-        const x = Math.max(4, Math.min(width - 4 - bw, a.x - bw / 2));
-        b.el.style.transform = `translate(${Math.round(x)}px, ${Math.round(a.y + 7)}px)`;
-        b.el.style.setProperty('--tail', `${Math.round(Math.max(12, Math.min(bw - 12, a.x - x)))}px`);
+        const x = Math.max(room.left, Math.min(room.right - bw, a.x - bw / 2));
+        b.el.style.transform = `translate(${Math.round(x)}px, ${Math.round(y)}px)`;
+        b.el.style.setProperty('--tail', `${Math.round(Math.max(10, Math.min(bw - 10, a.x - x)))}px`);
         b.el.classList.toggle('going', b.until - now < 500);
       }
     },

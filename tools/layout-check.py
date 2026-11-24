@@ -47,7 +47,9 @@ FIND = """() => {
     const st = getComputedStyle(e);
     const name = (e.id ? '#' + e.id : e.tagName.toLowerCase() + (e.className && typeof e.className === 'string' ? '.' + e.className.split(' ')[0] : '')) + ' "' + (e.textContent || '').trim().slice(0, 24) + '"';
     // off the side of the screen (things on purpose off-screen aside)
-    if ((r.right > W + 1 || r.left < -1) && st.position !== 'fixed' && !['cv','ghosts','titleArt'].includes(e.id)) bad.push('off screen: ' + name + ' ' + Math.round(r.left) + '..' + Math.round(r.right));
+    // (a row that scrolls sideways, such as the modes, may hold more than the screen shows: that is its point)
+    const inRow = (() => { for (let n = e.parentElement; n && n !== document.body; n = n.parentElement) if (['auto', 'scroll'].includes(getComputedStyle(n).overflowX)) return true; return false; })();
+    if ((r.right > W + 1 || r.left < -1) && st.position !== 'fixed' && !inRow && !['cv','ghosts','titleArt'].includes(e.id)) bad.push('off screen: ' + name + ' ' + Math.round(r.left) + '..' + Math.round(r.right));
     // text wider than its own box
     if (e.children.length === 0 && (e.textContent || '').trim() && e.scrollWidth > e.clientWidth + 1 && st.overflow === 'visible' && st.display !== 'inline') bad.push('text out of its box: ' + name + ' ' + e.scrollWidth + ' > ' + e.clientWidth);
     // a child sticking out of a box with a border (a card, a button)
@@ -158,6 +160,8 @@ async def main():
             for k in range(5):
                 await pg.evaluate(f"document.querySelectorAll('.chat-tab')[{k}].click()"); await look(f'chat panel {k}')
             await pg.evaluate("document.querySelectorAll('.chat-tab')[1].click(); document.querySelector('.chat-line:last-child').click()"); await look('chat bubble')
+            onto = await pg.evaluate("(() => { const cv = document.getElementById('cv').getBoundingClientRect(); return [...document.querySelectorAll('.bubble')].some(b => { const r = b.getBoundingClientRect(); return r.bottom > cv.top + 0.5 && r.right > cv.left + 0.5 && r.left < cv.right - 0.5; }); })()")
+            if onto: total += 1; print(f'  {w}x{h} chat bubble: runs onto the arena or its walls')
             clash = await pg.evaluate("(() => { const a = document.getElementById('chatBtn').getBoundingClientRect(), t = document.getElementById('timer').getBoundingClientRect(), m = document.getElementById('menuBtn').getBoundingClientRect(); const hit = (x, y) => x.left < y.right && y.left < x.right && x.top < y.bottom && y.top < x.bottom; return hit(a, t) || hit(a, m); })()")
             if clash: total += 1; print(f'  {w}x{h} playing: the chat button runs into the timer or the menu button')
             # the quick menu: the menu button held down

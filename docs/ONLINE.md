@@ -51,7 +51,7 @@ The picture's tick is read off a clock (`frame` in `predict.ts`). Frames come on
 - **The plane online** (fixed 23 November 2026): the server masked every input with `IN_ALL`, which was
   2079, not a mask (31 + 32 × 64); it wiped the plane's steering, so a plane could not be steered online.
   `IN_ALL` is now 4095 (`tests/room.test.ts` sends every aim through), `PROTOCOL` 9.
-- **Quick chat** (24 November 2026): a line picked or typed in the chat panel goes to the server (`{ t: 'chat', text }`), which tidies it (`cleanChat` in net.ts: one line, at most `CHAT_MAX` 40 characters), keeps each person to one line every 1.5 s (`CHAT_GAP_MS`) and sends it to everyone in the room, the sender included (`{ t: 'chat', id, text }`). Each page puts it in a bubble under that person's name on the scoreboard (`heard` in main.ts, `createBubbles` in quick.ts), always as text, never as markup. `PROTOCOL` 11 (with Item drop and the faster plane).
+- **Quick chat** (24 November 2026): a line picked or typed in the chat panel goes to the server (`{ t: 'chat', text }`), which tidies it (`cleanChat` in net.ts: one line, at most `CHAT_MAX` 40 characters), keeps each person to one line every 1.5 s (`CHAT_GAP_MS`) and sends it to everyone in the room, the sender included (`{ t: 'chat', id, text }`). Each page puts it in a bubble under that person's head on the scoreboard (`heard` in main.ts, `createBubbles` in quick.ts), always as text, never as markup. `PROTOCOL` 11 (with Item drop and the faster plane).
 - **Someone joining during a match** waits in the lobby (read-only) and plays from the next match.
 - The page opened as a file (as when it is sent to a phone) still plays online: it connects to the address above.
 
