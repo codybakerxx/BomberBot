@@ -1246,11 +1246,15 @@ export function groundKey(world: World): number {
   return h;
 }
 
+/** Nobody wears the crown. */
+const NO_CROWN = (): boolean => false;
+
 /**
- * Everything that moves, every frame. `grounded`: the picture already has the shadows and breakable blocks
- * in it (drawGround), so they are not drawn again.
+ * Everything that moves, every frame. `crowned` says who wears the crown (the leader and, in a teams match,
+ * everyone on its side). `grounded`: the picture already has the shadows and breakable blocks in it
+ * (drawGround), so they are not drawn again.
  */
-export function drawDynamic(ctx: Ctx, world: World, T: number, time: number, focusId = 0, celebrate?: Celebration, crowned = -1, grounded = false): void {
+export function drawDynamic(ctx: Ctx, world: World, T: number, time: number, focusId = 0, celebrate?: Celebration, crowned: (id: number) => boolean = NO_CROWN, grounded = false): void {
   const west = mapNow === 'western';
   if (!grounded) drawGround(ctx, world, T);
 
@@ -1969,7 +1973,7 @@ function dullWash(hex: string): string {
 }
 
 /** A robot on its tile; the winner celebrating; or, for a moment after being knocked out, its remains and its ghost. */
-function drawPlayer(ctx: Ctx, world: World, p: Player, T: number, time: number, celebrate?: Celebration, crowned = -1): void {
+function drawPlayer(ctx: Ctx, world: World, p: Player, T: number, time: number, celebrate?: Celebration, crowned: (id: number) => boolean = NO_CROWN): void {
   const col = colorById(p.colorId);
   const x = (p.x + 0.5) * T;
   const y = (p.y + 0.5) * T + T * 0.46;
@@ -1979,7 +1983,7 @@ function drawPlayer(ctx: Ctx, world: World, p: Player, T: number, time: number, 
     if (celebrate && won && (won === p || allies(won, p))) {
       // the winner: their victory dance (in a teams match, everyone on the winning side still standing)
       const f = danceFrame(celebrate.dance ?? 'party', celebrate.t);
-      drawRobot(ctx, x + f.dx * T, y, T, col, f.facing, f.walk, f.moving, { ...f.pose, crown: crowned === p.id });
+      drawRobot(ctx, x + f.dx * T, y, T, col, f.facing, f.walk, f.moving, { ...f.pose, crown: crowned(p.id) });
     } else {
       // just back after losing a life (or an angel back in the round): blinking while blasts cannot hurt it
       const blink = p.safeTicks > 0 && Math.floor(p.safeTicks / 5) % 2 === 0;
@@ -1991,7 +1995,7 @@ function drawPlayer(ctx: Ctx, world: World, p: Player, T: number, time: number, 
         drawRobot(ctx, x, y, T, zombieOf(col), p.facing, p.walk, p.moving, { arms: zombieArms(p.facing), lean: zombieLean(p) });
         drawSparks(ctx, p, x, y, T, time);
       }
-      else drawRobot(ctx, x, y, T, col, p.facing, p.walk, p.moving, crowned === p.id ? { crown: true } : undefined);
+      else drawRobot(ctx, x, y, T, col, p.facing, p.walk, p.moving, crowned(p.id) ? { crown: true } : undefined);
       if (p.laptop) drawLaptopHeld(ctx, p, x, y, T, time);
       if (blink) ctx.restore();
     }

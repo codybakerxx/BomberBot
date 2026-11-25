@@ -1152,3 +1152,14 @@ export function wholeTile(T: number, cols: number, rows: number, dpr: number): n
   for (let t = T; t >= Math.max(8, T - 12); t--) if (whole((t * cols) / dpr) && whole((t * rows) / dpr)) return t;
   return T;
 }
+
+/**
+ * Whether player `i` wears the crown: the player in the lead (`leader`, -1 before the first win) and, in a teams
+ * match, everyone on its side, so a winning team of any size all wear it (the owner's ask, 25 November 2026).
+ */
+export function wearsCrown(players: readonly { team: number }[], leader: number, i: number): boolean {
+  if (leader < 0) return false;
+  if (i === leader) return true;
+  const side = players[leader]?.team ?? -1;
+  return side >= 0 && players[i]?.team === side;
+}

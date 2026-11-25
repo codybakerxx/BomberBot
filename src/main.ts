@@ -21,7 +21,7 @@ import { readDance, type DanceId } from './dances';
 import { createPadNav } from './padnav';
 import { PAD } from './bindings';
 import { createRemap } from './remap';
-import { CpuSlot, Guest, ITEM_NAMES, MatchSetup, Prefs, SHARPNESS, SOUND_GROUPS, SOUND_NAMES, TEAMS, arenaOf, clockText, defaultPrefs, defaultSetup, load, readPrefs, readSetup, rollCpus, rollRules, save, wholeTile, worldConfig } from './setup';
+import { CpuSlot, Guest, ITEM_NAMES, MatchSetup, Prefs, SHARPNESS, SOUND_GROUPS, SOUND_NAMES, TEAMS, arenaOf, clockText, defaultPrefs, defaultSetup, load, readPrefs, readSetup, rollCpus, rollRules, save, wearsCrown, wholeTile, worldConfig } from './setup';
 import { BOMB_ICON, Opt, answerConfirm, choice, confirmFirst, confirmOpen, group, heading, mount, note, slider, toggle, wireConfirm, wireFlash } from './ui';
 import { Hand, DEFAULT_SENS, OLD_SENS, SENS_DEG, SENS_MAX, STRAIGHT, sensTilt, standardAims } from './swipe';
 import { Online } from './online';
@@ -648,7 +648,7 @@ function drawScore(): void {
     sctx.globalAlpha = 1;
     if (!p) return;
     // the crown goes on last, and is not dimmed
-    if (i === leader) drawHead(sctx, cx, cy, r, col, { crownOnly: true });
+    if (crowned(i)) drawHead(sctx, cx, cy, r, col, { crownOnly: true });
     sctx.fillStyle = winner >= 0 && onSide(i, winner) ? col.glow : p.alive ? '#eef1fb' : '#8a90a3';
     sctx.fillText(label, numX, cy + 1);
     // with more than one life a round, a little dot for each life left, under the number (the name is over the head)
@@ -681,7 +681,7 @@ function drawScore(): void {
     headAt[i] = { x: (parseFloat(score.style.left) || 0) + cx, y: (parseFloat(score.style.top) || 0) + cy + r };
     sctx.globalAlpha = 1;
     sctx.textAlign = 'left';
-    said.push(`${nameOf(i)}${p.team >= 0 ? `, ${TEAMS[p.team].name},` : ''} ${wins[i]}${i === leader ? ' (in the lead)' : ''}`);
+    said.push(`${nameOf(i)}${p.team >= 0 ? `, ${TEAMS[p.team].name},` : ''} ${wins[i]}${crowned(i) ? ' (in the lead)' : ''}`);
   });
   score.setAttribute('aria-label', `Rounds won: ${said.join(', ')}`);
 }
@@ -802,7 +802,7 @@ function render(time: number): void {
   ctx.drawImage(ground(w), 0, 0);
   clock = time;
   const winner = world.over ? world.over.winner : -1;
-  drawDynamic(ctx, w, T, time, myIdx(), winner >= 0 && decidedAt >= 0 ? { player: winner, t: time - decidedAt, dance: danceOf(winner) } : undefined, leader, true);
+  drawDynamic(ctx, w, T, time, myIdx(), winner >= 0 && decidedAt >= 0 ? { player: winner, t: time - decidedAt, dance: danceOf(winner) } : undefined, crowned, true);
   // a few of the robots' pictures made ahead of need, so play does not stutter (the winner's dance included)
   warmSprites(ctx, w, T, 4, world.over && world.over.winner >= 0 ? danceOf(world.over.winner) : 'party');
   // the ghosts, on their own layer, which is only cleared when it has something on it
@@ -988,6 +988,15 @@ function advance(inputs: (PlayerInput | undefined)[]): void {
       `${howOut()} The others are still fighting. ${net ? 'The last robot standing wins the round.' : 'Next round gives this round to one of them at random.'}`,
     );
   }
+}
+
+/**
+ * Who wears the crown: the player in the lead and, in a teams match, everyone on its side, so a winning team
+ * of any size all wear it, on their robots and on the scoreboard (the owner's ask, 25 November 2026: only one
+ * of the two did). Teammates always win together, so they always have the same wins.
+ */
+function crowned(i: number): boolean {
+  return wearsCrown(world.players, leader, i);
 }
 
 /**
@@ -1604,7 +1613,7 @@ function fillPause(): void {
     cv.width = cv.height = Math.round(34 * dpr);
     const col = colorById(p.colorId);
     drawHead(cv.getContext('2d')!, cv.width / 2, cv.height / 2, cv.width * 0.42, col, { xEyes: !p.alive, crown: false });
-    if (i === leader) drawHead(cv.getContext('2d')!, cv.width / 2, cv.height / 2, cv.width * 0.42, col, { crownOnly: true });
+    if (crowned(i)) drawHead(cv.getContext('2d')!, cv.width / 2, cv.height / 2, cv.width * 0.42, col, { crownOnly: true });
     if (p.team >= 0) {
       // a teams match: its side's colour along the edge of its line
       li.classList.add('team');

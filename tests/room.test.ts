@@ -28,7 +28,7 @@ import {
   type ServerMsg,
 } from '../src/net';
 import { makeRng } from '../src/sim';
-import { ARENAS, MAPS, ITEM_SHARE_STEP, type MatchSetup, defaultRules, itemChances, defaultSetup, dropOnto, fixedSize, lineUp, pickTeam, readSetup, recolour, rollCpus, seatLast, seating, setTeamSize, settleTeams, evenTeams, startTeams, summary, swapTeams, canEven, RULE_GROUPS, resetGroup, groupIsDefault, groupValues, ITEM_NORMAL, ITEM_RARE, ITEM_VERY_RARE, modeOf, hardcoreRules, rollRules, rulesKey, settleMode, ROUND_STEP, SOUND_GROUPS, SOUND_NAMES, teamChoices, teamSizes, teamsFor, wholeTile, worldConfig } from '../src/setup';
+import { ARENAS, MAPS, ITEM_SHARE_STEP, type MatchSetup, defaultRules, itemChances, defaultSetup, dropOnto, fixedSize, lineUp, pickTeam, readSetup, recolour, rollCpus, seatLast, seating, setTeamSize, settleTeams, evenTeams, startTeams, summary, swapTeams, canEven, RULE_GROUPS, resetGroup, groupIsDefault, groupValues, ITEM_NORMAL, ITEM_RARE, ITEM_VERY_RARE, modeOf, hardcoreRules, rollRules, rulesKey, settleMode, ROUND_STEP, SOUND_GROUPS, SOUND_NAMES, teamChoices, teamSizes, teamsFor, wearsCrown, wholeTile, worldConfig } from '../src/setup';
 import { BOT_LEVELS } from '../src/bot';
 import { DANCE_IDS } from '../src/dances';
 import type { World } from '../src/sim';
@@ -864,3 +864,19 @@ console.log('room chat checks passed');
 }
 
 console.log('host is P1 checks passed');
+
+// The crown: the leader wears it and, in a teams match, everyone on its side, a team of any size (the owner's
+// ask, 25 November 2026: on a team of two only one wore it)
+{
+  const solo = [{ team: -1 }, { team: -1 }, { team: -1 }];
+  assert.deepStrictEqual(solo.map((_, i) => wearsCrown(solo, 1, i)), [false, true, false], 'no teams: the leader alone');
+  assert.ok(!solo.some((_, i) => wearsCrown(solo, -1, i)), 'nobody before the first win');
+  const pairs = [{ team: 0 }, { team: 0 }, { team: 3 }, { team: 3 }];
+  assert.deepStrictEqual(pairs.map((_, i) => wearsCrown(pairs, 2, i)), [false, false, true, true], 'a team of two: both');
+  const four = [{ team: 1 }, { team: 5 }, { team: 1 }, { team: 1 }, { team: 5 }, { team: 1 }, { team: 5 }, { team: 5 }];
+  assert.deepStrictEqual(four.map((_, i) => wearsCrown(four, 3, i)), [true, false, true, true, false, true, false, false], 'a team of four: all four');
+  const odd = [{ team: 2 }, { team: 2 }, { team: 2 }, { team: 6 }, { team: 4 }];
+  assert.deepStrictEqual(odd.map((_, i) => wearsCrown(odd, 0, i)), [true, true, true, false, false], '3 v 1 v 1: the three');
+}
+
+console.log('crown checks passed');
