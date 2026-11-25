@@ -136,6 +136,7 @@ Unlike the scripts above this is a measurement, not a model: it plays whole roun
 | `alone` | Each level alone for a whole round: does it reach the square the blocks leave open |
 | `solo` | Each level alone with a player who stands still, 40 arenas of 3 minutes, with the timer off |
 | `duel [N]` | One against one: Hard against each level, and Normal against Beginner, N rounds each (60), the two taking each corner in turn: who wins, how soon, and how often the first-named dropped, kicked, threw and flew |
+| `WEST=1` in front of any of them | The same on the Wild West's arenas, with the railway and TNT (since 25 November 2026); robots a train hit are counted at the end |
 
 A round goes on until someone wins, so these runs give up 2 minutes after the blocks stop (4 minutes 20 in, now that the timer is 1 minute 30 and the blocks take 50 seconds) and count the round as not decided.
 
@@ -145,9 +146,9 @@ Four of the same level:
 |---|---|---|---|---|---|---|---|---|
 | Beginner | 0.0% | 0.4% | 42.9% | 0.8% | 0.8% | 1.7% | 0 of 60 | 56 of 60 |
 | Normal | 0.0% | 27.9% | 42.1% | 1.3% | 3.3% | 23.8% | 1 of 60 | 2 of 60 |
-| Hard | 0.0% | 25.0% | 47.9% | 0.0% | 0.0% | 22.9% | 0 of 60 | 5 of 60 |
+| Hard | 0.0% | 26.3% | 45.8% | 0.0% | 0.0% | 22.1% | 0 of 60 | 7 of 60 |
 
-(24 November 2026, the plane faster and turning tighter. The Hard row of 23 November 2026, after Hard was made more aggressive, was 20.0%, 52.5%, 21.7% won, 7 of 60 not decided; it was 32.5%, 35.0%, 16.3% won and 20 of 60 not decided.)
+(25 November 2026, after try-outs stopped counting on the shield; on the Wild West, `WEST=1`, "blasted itself" is 0 too: docs/CPU-PLAYERS.md. 24 November 2026, the plane faster and turning tighter, Hard 25.0%, 47.9%, 22.9% won, 5 of 60. The Hard row of 23 November 2026, after Hard was made more aggressive, was 20.0%, 52.5%, 21.7% won, 7 of 60 not decided; it was 32.5%, 35.0%, 16.3% won and 20 of 60 not decided.)
 
 The other tables are in [docs/CPU-PLAYERS.md](../docs/CPU-PLAYERS.md).
 

@@ -49,6 +49,12 @@ import {
   FLOOR,
   HARD,
   SOFT,
+  TNT,
+  TNT_FUSE_TICKS,
+  TRAIN_LENGTH,
+  TRAIN_NOSE,
+  TRAIN_SPEED,
+  railLength,
   FUSE_TICKS,
   FLAME_TICKS,
   FALL_TICKS,
@@ -427,9 +433,11 @@ function foresee(world: World, b: Bomb): { cx: number; cy: number; t: number; la
 /**
  * The tiles a blast from (cx, cy) covers at time `t`, by the same rules as
  * explode() in sim.ts. Bricks stop it unless they will be gone by then; a
- * brick it reaches is noted as gone once it has burnt.
+ * brick it reaches is noted as gone once it has burnt. A barrel of TNT stops
+ * it too, unless it will have gone off by then, and is handed to `light`.
+ * `tnt`: the blast of a barrel of TNT (`tntBlast`), which breaks no bricks.
  */
-function blastTiles(world: World, gone: Map<number, number>, cx: number, cy: number, range: number, t: number, note: boolean): number[] {
+function blastTiles(world: World, gone: Map<number, number>, cx: number, cy: number, range: number, t: number, note: boolean, tnt = false, light?: (idx: number) => void): number[] {
   const out = [cy * world.w + cx];
   for (let d = 1; d <= 4; d++) {
     for (let i = 1; i <= range; i++) {
@@ -438,13 +446,14 @@ function blastTiles(world: World, gone: Map<number, number>, cx: number, cy: num
       const kind = tile(world, x, y);
       if (kind === HARD) break;
       const idx = y * world.w + x;
-      if (kind === SOFT) {
+      if (kind === SOFT || kind === TNT) {
         const g = gone.get(idx);
         if (g !== undefined && g <= t) {
-          out.push(idx); // burnt away by an earlier blast
+          out.push(idx); // burnt away, or gone off, before this blast
           continue;
         }
-        if (note && g === undefined) gone.set(idx, t + FLAME_TICKS);
+        if (kind === TNT) light?.(idx);
+        else if (note && !tnt && g === undefined) gone.set(idx, t + FLAME_TICKS);
         break;
       }
       out.push(idx);
@@ -452,6 +461,14 @@ function blastTiles(world: World, gone: Map<number, number>, cx: number, cy: num
   }
   return out;
 }
+
+/** As far as a barrel of TNT's blast can reach: across the biggest arena. */
+const TNT_REACH = 64;
+/** A train's warning is seen at most this long after it starts, however slow a CPU player's level is to notice a bomb. */
+const TRAIN_NOTICE = 40;
+/** A train's reach is counted this much wider along its line, and its time this many ticks longer at each end, for a robot walking across. */
+const TRAIN_MARGIN = 0.6;
+const TRAIN_LEAD = 8;
 
 /** A falling block's tile counts as dangerous from this many ticks before the block lands, and then for good. */
 const BLOCK_LEAD = 8;
@@ -536,7 +553,34 @@ export function dangerMap(world: World, viewer: Player | null, notice: number, e
     }
   }
 
-  const pending: { cx: number; cy: number; t: number; landT: number; range: number; done: boolean }[] = [];
+  // the train, once its warning is seen: each tile of its line from just before it gets there until just after it has gone
+  const tr = world.train && world.tick >= world.train.warnAt + Math.min(notice, TRAIN_NOTICE) ? world.train : null;
+  if (tr) {
+    const r = world.rails[tr.line];
+    const len = railLength(world, tr.line);
+    const reach = TRAIN_NOSE + TRAIN_MARGIN;
+    for (let k = 1; k <= len; k++) {
+      // (ticks from when the engine comes out of its tunnel)
+      const a = tr.dir > 0 ? (k - reach - 0.5) / TRAIN_SPEED : (len + 0.5 - k - reach) / TRAIN_SPEED;
+      const b = a + (2 * reach + TRAIN_LENGTH) / TRAIN_SPEED;
+      const to = tr.enterAt - world.tick + Math.ceil(b) + TRAIN_LEAD;
+      if (to <= 0) continue;
+      add(r.dir === 'h' ? r.at * world.w + k : k * world.w + r.at, Math.max(0, tr.enterAt - world.tick + Math.floor(a) - TRAIN_LEAD), to);
+    }
+  }
+
+  const pending: { cx: number; cy: number; t: number; landT: number; range: number; done: boolean; tnt?: boolean }[] = [];
+  // a barrel of TNT that goes off at `t`: noted as gone then, and its blast added (or brought forward)
+  const lightAt = (idx: number, t: number): void => {
+    const cx = idx % world.w;
+    const cy = (idx - cx) / world.w;
+    const was = pending.find((o) => o.tnt && o.cx === cx && o.cy === cy);
+    if (was) {
+      if (!was.done && t < was.t) was.t = t;
+    } else pending.push({ cx, cy, t, landT: 0, range: TNT_REACH, done: false, tnt: true });
+    gone.set(idx, Math.min(gone.get(idx) ?? Infinity, t));
+  };
+  for (const l of world.tntLit) lightAt(l.cy * world.w + l.cx, Math.max(1, l.t));
   for (const b of world.bombs) {
     if (viewer && b.owner !== viewer.id && b.heldBy !== viewer.id && b.age < notice) continue;
     pending.push({ ...foresee(world, b), range: b.range, done: false });
@@ -553,9 +597,24 @@ export function dangerMap(world: World, viewer: Player | null, notice: number, e
       if (!gone.has(idx)) gone.set(idx, d.t + FLAME_TICKS);
       continue;
     }
+    if (tile(world, at.cx, at.cy) === TNT) {
+      lightAt(at.cy * world.w + at.cx, Math.max(1, d.t) + TNT_FUSE_TICKS);
+      continue;
+    }
     pending.push({ cx: at.cx, cy: at.cy, t: Math.max(1, d.t), landT: d.t, range: DROP_FIRE, done: false });
   }
 
+  // the train sets off a bomb on its line the moment it reaches it
+  if (tr) {
+    const r = world.rails[tr.line];
+    const len = railLength(world, tr.line);
+    for (const o of pending) {
+      if (o.tnt || (r.dir === 'h' ? o.cy : o.cx) !== r.at) continue;
+      const k = r.dir === 'h' ? o.cx : o.cy;
+      const at = tr.enterAt - world.tick + Math.ceil((tr.dir > 0 ? k - 1 : len - k) / TRAIN_SPEED);
+      if (at > 0 && at >= o.landT && at < o.t) o.t = at;
+    }
+  }
   // earliest first, so each blast can set off the bombs it reaches
   for (let n = 0; n < pending.length; n++) {
     let next = -1;
@@ -564,7 +623,7 @@ export function dangerMap(world: World, viewer: Player | null, notice: number, e
     }
     const b = pending[next];
     b.done = true;
-    const tiles = blastTiles(world, gone, b.cx, b.cy, b.range, b.t, true);
+    const tiles = blastTiles(world, gone, b.cx, b.cy, b.range, b.t, true, !!b.tnt, (idx) => lightAt(idx, b.t + TNT_FUSE_TICKS));
     for (const idx of tiles) add(idx, b.t, b.t + FLAME_TICKS);
     for (const o of pending) {
       if (o.done || o.landT > b.t + FLAME_TICKS) continue;
@@ -801,8 +860,14 @@ function steer(world: World, p: Player, path: number[]): Dir | -1 {
  * else stands still.
  */
 function survives(world: World, id: number, prefix: PlayerInput[], path: number[]): boolean {
+  return playOut(seenCopy(world), id, prefix, path);
+}
+
+/** A copy of the world to try moves out on, as a player knows it: a train whose warning has not started is left in its tunnel. */
+function seenCopy(world: World): World {
   const w = cloneWorld(world);
-  return playOut(w, id, prefix, path);
+  if (w.train && w.train.warnAt > w.tick) w.train = null;
+  return w;
 }
 
 function playOut(w: World, id: number, prefix: PlayerInput[], path: number[]): boolean {
@@ -820,6 +885,8 @@ function playOut(w: World, id: number, prefix: PlayerInput[], path: number[]): b
     inputs[id] = inp;
     step(w, inputs);
     if (!me.alive) return false;
+    // (a move that only works because its shield takes a blast is not one it makes: it takes no risks for holding one)
+    if (w.events.some((e) => e.type === 'shield' && e.player === id)) return false;
     if (t >= prefix.length && !w.bombs.length && !w.flames.length) break;
   }
   return true;
@@ -844,7 +911,7 @@ function bombEffect(world: World, D: Danger, cx: number, cy: number, range: numb
       const x = cx + DX[d] * i;
       const y = cy + DY[d] * i;
       const kind = tile(world, x, y);
-      if (kind === HARD) break;
+      if (kind === HARD || kind === TNT) break; // (a barrel of TNT it sets off is in the danger map, not counted here)
       const idx = y * world.w + x;
       if (kind === SOFT) {
         if (!D.gone.has(idx)) bricks++;
@@ -1296,7 +1363,7 @@ function pilot(c: Ctx): PlayerInput {
     const nx = wrap(me.planeX + vx + 0.5, world.w) - 0.5;
     const ny = wrap(me.planeY + vy + 0.5, world.h) - 0.5;
     const at = dropLanding(world, nx, ny, vx, vy, DROP_TICKS);
-    const tiles = tile(world, at.cx, at.cy) === SOFT ? [] : blastTiles(world, new Map(), at.cx, at.cy, DROP_FIRE, DROP_TICKS, false);
+    const tiles = tile(world, at.cx, at.cy) === SOFT || tile(world, at.cx, at.cy) === TNT ? [] : blastTiles(world, new Map(), at.cx, at.cy, DROP_FIRE, DROP_TICKS, false);
     // where it judges the bomb would land, by eye: its feel for how far bombs carry on is off by its level's
     // `carry` for this flight. It lets go when that is right on the rival, not just near enough for the blast
     const feel = 1 + bot.aimCarry;
@@ -1587,7 +1654,7 @@ function rivalDistance(world: World, rivals: Player[]): number[] {
         const kind = tile(world, nx, ny);
         if (kind === HARD) continue;
         const j = ny * world.w + nx;
-        const nd = d + (kind === SOFT ? BRICK_STEPS : 1);
+        const nd = d + (kind === SOFT || kind === TNT ? BRICK_STEPS : 1);
         if (nd >= dist[j]) continue;
         dist[j] = nd;
         (buckets[nd] ??= []).push(j);
@@ -1757,7 +1824,7 @@ type Driver = (w: World, me: Player, t: number) => PlayerInput | 'done' | 'fail'
  */
 function tryOut(c: Ctx, driver: Driver): PlayerInput[] | null {
   const { world, bot, spec } = c;
-  const w = cloneWorld(world);
+  const w = seenCopy(world);
   const me = w.players[bot.id];
   const prefix: PlayerInput[] = [];
   const inputs: (PlayerInput | undefined)[] = [];

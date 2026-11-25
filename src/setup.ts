@@ -888,6 +888,8 @@ export function worldConfig(s: MatchSetup, myColor: string, seed: number, guests
     angels: afterlifeOf(s) !== 'angel' ? 'off' : s.angelsBack ? 'revive' : 'on',
     zombies: afterlifeOf(s) === 'zombie',
     itemDrop: s.itemDrop,
+    // the Wild West's railway and TNT (the owner's ask, 25 November 2026): part of the map, on every size
+    ...(s.map === 'western' ? { rails: true, tnt: true } : {}),
   };
 }
 
@@ -1034,6 +1036,9 @@ export const SOUND_NAMES: [string, string][] = [
   ['block', 'Block landing'],
   ['death', 'Knocked out'],
   ['win', 'Round won'],
+  ['bell', 'Crossing bell'],
+  ['train', 'Train'],
+  ['tnt', 'TNT'],
 ];
 
 /**
@@ -1045,6 +1050,7 @@ export const SOUND_GROUPS: [string, string[]][] = [
   ['Power-ups', ['pickup', 'shield', 'curse']],
   ['Falling blocks', ['hurry', 'block']],
   ['Knockouts and wins', ['death', 'win']],
+  ['Trains and TNT', ['bell', 'train', 'tnt']],
 ];
 
 /**

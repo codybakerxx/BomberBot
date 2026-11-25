@@ -262,7 +262,7 @@ async def main():
         await page.screenshot(path=str(OUT / "round-won.png"))
         await context.close()
 
-        # --- the Wild West map: picked on the Match page, then a round on it with a blast and power-ups
+        # --- the Wild West map: picked on the Match page, then a round on it with a blast, power-ups and a train
         context, page = await phone(browser, 393, 740)
         await page.tap("#colOk")
         await page.tap("#colOk")  # Next ›
@@ -279,6 +279,9 @@ async def main():
               item(7, 1, 'bomb'); item(1, 5, 'fire'); item(3, 3, 'speed'); item(5, 3, 'kick'); item(4, 3, 'grab');
               w.flames.push(...[[2,1,'h',3],[3,1,'c',0],[4,1,'h',0],[5,1,'h',4]].map(([cx, cy, kind, tip]) => ({ cx, cy, ttl: 20, owner: 0, kind, tip })));
               __game.bots.length = 0;
+              // a train on the lower line across, mid-arena, its signals flashing (the railway: 25 November 2026)
+              const enterAt = w.tick - 52;
+              w.train = { line: 1, dir: 1, warnAt: enterAt - 150, enterAt, exitAt: enterAt + 200 };
             }"""
         )
         await page.wait_for_timeout(60)

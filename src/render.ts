@@ -12,7 +12,8 @@ import { drawRobot, warmRobots, CRACK, GHOST_ARMS, ROBOT, type Pose, type Wanted
 import { danceFrame, danceSamples, type DanceId } from './dances';
 import { TEAMS, type MapId } from './setup';
 export { warmRobots } from './robot';
-import { World, FLOOR, HARD, SOFT, FLAME_TICKS, DEATH_TICKS, GHOST_TICKS, SHIELD_GRACE_TICKS, FALL_TICKS, TICK_HZ, ItemKind, Player, Bomb, FLY_TICKS_PER_TILE, THROW_TILES, FUSE_TICKS, CARRY_FUSE_TICKS, DX, DY, DROP_TICKS, TURN_STEPS, allies, angelAim, angelReach, perimeterAt } from './sim';
+import { drawBarrel, drawCrossing, drawLitTnt, drawRails, drawTrain, railWalls } from './railway';
+import { World, FLOOR, HARD, SOFT, TNT, FLAME_TICKS, DEATH_TICKS, GHOST_TICKS, SHIELD_GRACE_TICKS, FALL_TICKS, TICK_HZ, ItemKind, Player, Bomb, FLY_TICKS_PER_TILE, THROW_TILES, FUSE_TICKS, CARRY_FUSE_TICKS, DX, DY, DROP_TICKS, TURN_STEPS, allies, angelAim, angelReach, perimeterAt } from './sim';
 
 export interface BotColor {
   /** saved with the player's choice and sent to the rules as Player.colorId */
@@ -71,6 +72,8 @@ function rr(ctx: Ctx, x: number, y: number, w: number, h: number, r: number): vo
  * still finds all the drawing in one place.
  */
 export { drawRobot, drawHead, forgetSprites, ROBOT, type Pose } from './robot';
+/** The Wild West's railway and TNT are drawn in railway.ts; the Key in the menu uses these two. */
+export { drawBarrel, drawSignalIcon } from './railway';
 
 
 /** What a robot burnt to a crisp is drawn in. */
@@ -534,18 +537,29 @@ function softSprite(map: MapId, T: number, variant = 0): HTMLCanvasElement {
   return c;
 }
 
-/** Floor and fixed walls. Redrawn only when the screen size changes. */
+/**
+ * Floor and solid blocks, and the Wild West's railway (railway.ts: its track, tunnels and signals at rest).
+ * Redrawn when the screen size changes and when a falling block lands.
+ */
 export function drawStatic(ctx: Ctx, world: World, T: number): void {
   // the fire every robot here burns with: made now, at the start of a round, so the first blast does not wait
   for (const p of world.players) fireOf(world, p.id);
+  const plain = world.rails.length ? railWalls(world) : null; // (no cactus on the railway's tunnels and signals)
   for (let y = 0; y < world.h; y++) {
     for (let x = 0; x < world.w; x++) {
       const px = x * T;
       const py = y * T;
       drawFloor(ctx, x, y, px, py, T);
-      if (world.tiles[y * world.w + x] === HARD) drawHard(ctx, px, py, T, mapNow, y + 1 < world.h && world.tiles[(y + 1) * world.w + x] === HARD, scatter(x * 12.7 + y * 45.1 + 0.5));
+      if (world.tiles[y * world.w + x] === HARD) drawWall(ctx, world, x, y, T, plain);
     }
   }
+  drawRails(ctx, world, T);
+}
+
+/** The solid block at (x, y), as drawStatic draws it. */
+function drawWall(ctx: Ctx, world: World, x: number, y: number, T: number, plain: Set<number> | null): void {
+  const i = y * world.w + x;
+  drawHard(ctx, x * T, y * T, T, mapNow, y + 1 < world.h && world.tiles[i + world.w] === HARD, plain?.has(i) ? 1 : scatter(x * 12.7 + y * 45.1 + 0.5));
 }
 
 export const ITEM_COLOR: Record<ItemKind, string> = {
@@ -1115,7 +1129,7 @@ function drawFire(ctx: Ctx, world: World, T: number, time: number, west: boolean
       const n = 3;
       for (let i = 0; i <= n; i++) pts.push([x1 + ((x2 - x1) * i) / n, y1 + ((y2 - y1) * i) / n]);
     }
-    return { f, t, life, k, pts, seed: f.cx * 13.1 + f.cy * 7.7, sp: fireOf(world, f.owner) };
+    return { f, t, life, k, pts, seed: f.cx * 13.1 + f.cy * 7.7, sp: f.tnt ? fireSprites('classic') : fireOf(world, f.owner) };
   });
 
   // scorch and the shadow of smoke on the ground
@@ -1139,7 +1153,8 @@ function drawFire(ctx: Ctx, world: World, T: number, time: number, west: boolean
   // orange fire: a faint glow in the colour of whoever placed the bomb, so it is still clear whose blast it is
   // (fire in the robot's own colour says so already)
   for (const { f, pts, k } of orangeFire ? tiles : []) {
-    const tint = tintGlow(colorById(world.players[f.owner]?.colorId ?? 'gold').glow);
+    if (!world.players[f.owner] || f.tnt) continue; // (a barrel of TNT's blast: plain orange)
+    const tint = tintGlow(colorById(world.players[f.owner].colorId).glow);
     const [x, y] = pts[Math.floor(pts.length / 2)];
     ctx.globalAlpha = 0.6 * k;
     ctx.drawImage(tint, x - T * 0.8, y - T * 0.8, T * 1.6, T * 1.6);
@@ -1226,7 +1241,9 @@ export function drawGround(ctx: Ctx, world: World, T: number): void {
   }
   for (let y = 0; y < world.h; y++) {
     for (let x = 0; x < world.w; x++) {
-      if (world.tiles[y * world.w + x] !== SOFT) continue;
+      const t = world.tiles[y * world.w + x];
+      if (t === TNT) drawBarrel(ctx, x * T, y * T, T);
+      if (t !== SOFT) continue;
       // (a block that is breaking is drawn every frame instead, crumbling: drawCrumble)
       if (world.burning.some((b) => b.cx === x && b.cy === y)) continue;
       drawSoft(ctx, x * T, y * T, T, mapNow, softVariant(x, y));
@@ -1286,6 +1303,10 @@ export function drawDynamic(ctx: Ctx, world: World, T: number, time: number, foc
 
   // breakable blocks that are burning flash as they go
   for (const b of world.burning) drawCrumble(ctx, b, T, time);
+  // barrels of TNT about to go off, and a train coming: its line's signals flashing, the gates coming down
+  drawLitTnt(ctx, world, T, time);
+  const plain = world.rails.length ? railWalls(world) : null;
+  drawCrossing(ctx, world, T, (x, y) => drawWall(ctx, world, x, y, T, plain));
 
   // the tile you count as standing on
   const me = world.players[focusId];
@@ -1324,9 +1345,20 @@ export function drawDynamic(ctx: Ctx, world: World, T: number, time: number, foc
     ctx.strokeRect(f.cx * T + 1, f.cy * T + 1, T - 2, T - 2);
   }
 
-  // robots, back to front
+  // robots, back to front; a train along a row among them, in front of those behind its line and behind those in
+  // front of it; a train down a column over them all
   const order = [...world.players].sort((a, b) => a.y - b.y);
-  for (const p of order) drawPlayer(ctx, world, p, T, time, celebrate, crowned);
+  const tr = world.train;
+  const row = tr && world.rails[tr.line].dir === 'h' ? world.rails[tr.line].at : -1;
+  let train = row < 0;
+  for (const p of order) {
+    if (!train && p.y > row + 0.3) {
+      drawTrain(ctx, world, T, world.tick, time);
+      train = true;
+    }
+    drawPlayer(ctx, world, p, T, time, celebrate, crowned);
+  }
+  if (!train || (tr && row < 0)) drawTrain(ctx, world, T, world.tick, time);
 
   // carried and flying bombs go on top
   for (const b of world.bombs) {

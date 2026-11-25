@@ -12,7 +12,7 @@
  */
 import { createWorld, step, ticksLeft, World, PlayerInput, type Player, Dir, TICK_HZ, DEATH_TICKS, type GameEvent, type ItemKind } from './sim';
 import { Bot, BotLevel, BOT_LEVELS, LEVELS, createBot, botInput } from './bot';
-import { COLORS, NOBODY, botName, colorById, drawAngels, drawGround, drawHead, drawItemTile, drawStatic, drawDynamic, drawGhosts, groundKey, setMap, setOrangeFire, warmSprites } from './render';
+import { COLORS, NOBODY, botName, colorById, drawAngels, drawBarrel, drawSignalIcon, drawGround, drawHead, drawItemTile, drawStatic, drawDynamic, drawGhosts, groundKey, setMap, setOrangeFire, warmSprites } from './render';
 import { Input, PadReader, pilotAim, typing } from './input';
 import { drawTitle, closeTitle, drawIcon } from './title';
 import { initAudio, preview, setSound, sfx, wakeAudio } from './audio';
@@ -116,15 +116,21 @@ try {
 const prefs: Prefs = load('prefs', readPrefs);
 /** The CPU players of the current arena (players 1 and up). */
 let bots: Bot[] = [];
-/** Whose blast caught you this round: a player id, CRUSHED for a falling block, or -1 if you are still in. */
+/** Whose blast caught you this round: a player id, CRUSHED for a falling block, TRAIN, TNT_BLAST, or -1 if you are still in. */
 let blastedBy = -1;
 const CRUSHED = -2;
+const TRAIN = -3;
+const TNT_BLAST = -4;
+/** With TNT_BLAST: who set the barrel off (-1 if nobody). */
+let tntBy = -1;
 /** true once this round's "blocks are falling" warning has sounded */
 let hurried = false;
 /** the angel tip has been shown this match (it says how angels play, the first time someone here is one) */
 let angelTipShown = false;
 /** the first laptop picked up here in a match gets a tip saying what it does */
 let laptopTipShown = false;
+/** the tip that a train is coming has been shown this match (the first time its bell rings) */
+let trainTipShown = false;
 const playTip = $('playTip');
 /** The bubbles over the robots: what each said in the quick chat (quick.ts) */
 const bubbles = createBubbles($('bubbles'), (i) => colorById(world.players[i]?.colorId ?? 'gold').glow);
@@ -889,7 +895,11 @@ function soundOf(e: GameEvent): void {
   else if (e.type === 'explode') {
     sfx.explode();
     shakeAt = clock; // the screen shakes a little (render)
-  }
+  } else if (e.type === 'tnt') {
+    sfx.tnt();
+    shakeAt = clock;
+  } else if (e.type === 'bell') sfx.bell();
+  else if (e.type === 'train') sfx.train();
   else if (e.type === 'pickup') e.kind === 'curse' ? sfx.curse() : sfx.pickup();
   else if (e.type === 'shield') sfx.shield();
   else if (e.type === 'kick' || e.type === 'throw') sfx.kick();
@@ -927,7 +937,7 @@ function advance(inputs: (PlayerInput | undefined)[]): void {
     // (online, a sound the picture already made ahead of the server is not made twice; nor are the sounds
     // of ticks caught up on while the page was out of sight)
     if (!(net && (net.heard(world.tick, e) || document.hidden))) soundOf(e);
-    if (e.type === 'explode') {
+    if (e.type === 'explode' || e.type === 'tnt') {
       // a light shake for a blast within two tiles of a robot played on a controller
       if (prefs.rumble)
         for (let i = 0; i < world.players.length; i++) {
@@ -938,7 +948,10 @@ function advance(inputs: (PlayerInput | undefined)[]): void {
       // the arena has one more solid block: the picture of the floor and blocks needs redrawing
       redrawStatic();
     } else if (e.type === 'death') {
-      if (e.player === mi && e.out) blastedBy = e.cause === 'block' ? CRUSHED : e.by;
+      if (e.player === mi && e.out) {
+        blastedBy = e.cause === 'block' ? CRUSHED : e.cause === 'train' ? TRAIN : e.cause === 'tnt' ? TNT_BLAST : e.by;
+        tntBy = e.by;
+      }
       if (prefs.rumble && human(e.player)) padOf(e.player)?.rumble(1, 0.7, 380); // a strong shake: you are out
     }
   }
@@ -948,6 +961,10 @@ function advance(inputs: (PlayerInput | undefined)[]): void {
   if (firstZombie >= 0 && !angelTipShown) {
     angelTipShown = true;
     showTip(couch() ? `${nameOf(firstZombie)}: a zombie! Small bombs only` : 'You are a zombie! Drop small bombs in their way');
+  }
+  if (!trainTipShown && world.events.some((e) => e.type === 'bell')) {
+    trainTipShown = true;
+    showTip('Train coming! Get off the line with the flashing lights');
   }
   if (!laptopTipShown) {
     const got = world.events.find((e) => e.type === 'pickup' && e.kind === 'laptop' && (net ? e.player === mi : human(e.player)));
@@ -984,7 +1001,7 @@ function advance(inputs: (PlayerInput | undefined)[]): void {
     // You are out and the others are still at it. The round carries on behind this panel, and its
     // winner still gets the win. On this screen Next round does not wait for it; online it is played out.
     finish(
-      blastedBy === CRUSHED ? 'You got crushed' : 'You got blasted',
+      blastedBy === CRUSHED ? 'You got crushed' : blastedBy === TRAIN ? 'You got run over' : 'You got blasted',
       `${howOut()} The others are still fighting. ${net ? 'The last robot standing wins the round.' : 'Next round gives this round to one of them at random.'}`,
     );
   }
@@ -1028,6 +1045,12 @@ function onSide(i: number, of: number): boolean {
 function howOut(): string {
   const me = world.players[myIdx()];
   const who = world.players[blastedBy];
+  if (blastedBy === TRAIN) return 'The train hit you.';
+  if (blastedBy === TNT_BLAST) {
+    const lit = world.players[tntBy];
+    if (!lit) return 'Caught in a TNT blast.';
+    return lit === me ? 'Caught in a TNT blast you set off.' : `Caught in a TNT blast ${nameOf(tntBy) === 'You' ? botName(colorById(lit.colorId)) : nameOf(tntBy)} set off.`;
+  }
   return blastedBy === CRUSHED ? 'A falling block landed on you.' : !who || who === me ? 'Caught in your own blast.' : `Caught in ${nameOf(blastedBy) === 'You' ? botName(colorById(who.colorId)) : nameOf(blastedBy)}'s blast.`;
 }
 
@@ -1518,6 +1541,7 @@ function newMatch(again = true): void {
   matchWinner = -1;
   angelTipShown = false;
   laptopTipShown = false;
+  trainTipShown = false;
   start();
 }
 /** Start the next round of the match in a fresh arena. */
@@ -1831,6 +1855,15 @@ function showKey(): void {
     g.lineWidth = Math.max(1, s * 0.06);
     g.strokeRect(s * 0.06, s * 0.06, s * 0.88, s * 0.88);
   });
+  if (world.rails.length) {
+    // the Wild West's railway and TNT
+    row('Train coming', 'Red lights flash and a bell rings: a train is coming down that line. Get off it!', drawSignalIcon);
+    row('TNT', 'A blast sets it off: its fire runs every way to the walls. Bricks stop it and are not broken.', (g, s) => {
+      g.fillStyle = '#93714a';
+      g.fillRect(0, 0, s, s);
+      drawBarrel(g, 0, 0, s);
+    });
+  }
   row('Crown', 'The player in the lead', (g, s) => {
     const col = colorById(world.players[myIdx()]?.colorId ?? 'gold');
     drawHead(g, s / 2, s * 0.58, s * 0.36, col, { xEyes: false, crown: true });
@@ -2177,7 +2210,7 @@ function onRound(w: World, s: Seat[], score: Score, fresh: boolean): void {
     redrawStatic();
     return;
   }
-  if (fresh && roundNo <= 1) angelTipShown = laptopTipShown = false; // a new match
+  if (fresh && roundNo <= 1) angelTipShown = laptopTipShown = trainTipShown = false; // a new match
   blastedBy = -1;
   hurried = false;
   overShown = false;

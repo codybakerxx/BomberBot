@@ -11,6 +11,10 @@
  *   npx tsx experiments/cpu-matches.ts alone      each level alone for a whole round: does it reach the square the blocks leave open
  *   npx tsx experiments/cpu-matches.ts duel [N]   one against one (Hard against each level, Normal against Beginner): who wins, how soon, and what it used
  *
+ * With WEST=1 in front, every arena is the Wild West's, with its railway and TNT: robots the train hits are
+ * counted apart ('train'), and a barrel's blast counts as the blast of whoever set it off (so one a robot set
+ * off itself is under "blasted itself").
+ *
  * These are the real CPU players and the real rules, so unlike the thumb
  * experiments this is a measurement, not a model. What it cannot tell you is
  * how they feel to play against.
@@ -18,6 +22,10 @@
 import { createWorld, step, World, PlayerInput, TICK_HZ, FLOOR, SOFT, ROUND_TICKS, SHRINK_TICKS, DROP_TICKS, DROP_FIRE, FLAME_TICKS, dropLanding, tileAt, DX, DY } from '../src/sim';
 import { createBot, botInput, Bot, BotLevel, BOT_LEVELS, LEVELS } from '../src/bot';
 const wrap = (v: number, n: number): number => ((v % n) + n) % n;
+/** WEST=1: the Wild West's railway and TNT in every arena */
+const WEST = process.env.WEST === '1';
+/** robots a train hit, over the whole run */
+let ranOver = 0;
 
 export interface Outcome {
   /**
@@ -26,9 +34,9 @@ export interface Outcome {
    * below; or after its own bomb had been moved; or after a rival's bomb set
    * its own off early: see `cause` in `playMatch`); or 'self' (caught by its
    * own blast with none of that going on); or 'crushed' (a falling block
-   * landed on it)
+   * landed on it); or 'train' (the Wild West's train hit it)
    */
-  fate: ('alive' | 'self' | 'boxed' | 'other' | 'crushed')[];
+  fate: ('alive' | 'self' | 'boxed' | 'other' | 'crushed' | 'train')[];
   /** when each went out, in ticks, or -1 */
   when: number[];
   winner: number;
@@ -54,7 +62,7 @@ export interface Use {
  * blocks fall.
  */
 export function playMatch(seed: number, levels: (BotLevel | null)[], maxTicks: number, stopWhenDecided = true, timer = true): Outcome {
-  const world: World = createWorld({ seed, players: levels.map((_, i) => ({ colorId: String(i) })), roundTicks: timer ? undefined : 0 });
+  const world: World = createWorld({ seed, players: levels.map((_, i) => ({ colorId: String(i) })), roundTicks: timer ? undefined : 0, rails: WEST, tnt: WEST });
   const bots: (Bot | null)[] = levels.map((lv, i) => (lv ? createBot(i, lv, seed * 31 + 7) : null));
   const fate: Outcome['fate'] = levels.map(() => 'alive');
   const when = levels.map(() => -1);
@@ -80,6 +88,8 @@ export function playMatch(seed: number, levels: (BotLevel | null)[], maxTicks: n
   // bombs a rival has kicked or thrown at some time since they were dropped (one kicked away and back again
   // ends on the tile it was dropped on, so where it lies does not tell)
   const rivalMoved = new Set<number>();
+  // each player's bomb that went off last: on the Wild West, the one that set off a barrel of TNT whose blast caught it
+  const lastOff = new Map<number, number>();
   let t = 0;
   for (; t < maxTicks; t++) {
     for (let i = 0; i < bots.length; i++) inputs[i] = bots[i] ? botInput(world, bots[i]!) : undefined;
@@ -126,12 +136,20 @@ export function playMatch(seed: number, levels: (BotLevel | null)[], maxTicks: n
     // (a bomb under a block that has just landed did not go off: the block took it)
     const crushedBombs = gone.filter((b) => world.events.some((e) => e.type === 'block' && e.cx === b.cx && e.cy === b.cy));
     for (const b of crushedBombs) threats.push({ owner: b.owner, cx: b.cx, cy: b.cy, range: b.range, since: restingAt.get(b.id)?.since ?? 0 });
-    const wentOff = [...gone.filter((b) => !crushedBombs.includes(b)), ...landing];
+    // (where each went off: a bomb that slid on to the next tile during this tick went off there, as its blast says)
+    const booms = world.events.filter((e) => e.type === 'explode') as { cx: number; cy: number }[];
+    const where = <B extends { cx: number; cy: number }>(b: B): B => {
+      if (booms.some((e) => e.cx === b.cx && e.cy === b.cy)) return b;
+      const e = booms.find((e) => Math.abs(e.cx - b.cx) + Math.abs(e.cy - b.cy) === 1);
+      return e ? { ...b, cx: e.cx, cy: e.cy } : b;
+    };
+    const wentOff = [...gone.filter((b) => !crushedBombs.includes(b)).map(where), ...landing];
     for (const d of world.drops) {
       if (d.t !== DROP_TICKS - 1) continue; // (let go on this tick)
       const at = dropLanding(world, d.x, d.y, d.vx, d.vy, d.t);
       if (tileAt(world, at.cx, at.cy) !== SOFT) threats.push({ owner: d.owner, cx: at.cx, cy: at.cy, range: DROP_FIRE, since: t });
     }
+    for (const g of wentOff) if (g.id >= 0) lastOff.set(g.owner, g.id);
     for (const g of wentOff) {
       const c = cause.get(g.id);
       if (g.id >= 0 && rushed.has(g.id) && c && c.owner !== g.owner && c.tick >= (droppedOn.get(g.id) ?? 0)) setOff.push({ owner: g.owner, cx: g.cx, cy: g.cy, range: g.range, tick: t });
@@ -175,6 +193,11 @@ export function playMatch(seed: number, levels: (BotLevel | null)[], maxTicks: n
         fate[e.player] = 'crushed';
         continue;
       }
+      if (e.cause === 'train') {
+        fate[e.player] = 'train';
+        ranOver++;
+        continue;
+      }
       if (e.by !== e.player) {
         fate[e.player] = 'other';
         continue;
@@ -182,7 +205,12 @@ export function playMatch(seed: number, levels: (BotLevel | null)[], maxTicks: n
       // its own blast. Did a rival shut it in, or had its own bomb been moved, or set off early by a rival's?
       // (a rival's bomb in the air, thrown since, comes down where it is going: it blocks that tile and will blast)
       const landing = flying.map((b) => ({ owner: b.owner, cx: b.cx, cy: b.cy, range: b.range, since: thrownOn.get(b.id) ?? t, lands: true }));
-      const boxed = shutIn(world, before, e.player, px, py, (id) => droppedOn.get(id) ?? 0, (id) => restingAt.get(id)?.since ?? 0, (i) => landedOn.get(i) ?? -1, [...threats, ...landing]);
+      // (caught by a barrel of TNT its own bomb set off: its own blast reaches as far as that barrel's fire does)
+      const tnt =
+        e.cause === 'tnt' && lastOff.has(e.player)
+          ? { tiles: new Set(world.flames.filter((f) => f.tnt && f.owner === e.player).map((f) => f.cy * world.w + f.cx)), since: lastOff.get(e.player)! }
+          : undefined;
+      const boxed = shutIn(world, before, e.player, px, py, (id) => droppedOn.get(id) ?? 0, (id) => restingAt.get(id)?.since ?? 0, (i) => landedOn.get(i) ?? -1, [...threats, ...landing], tnt);
       const moved = before.some((b) => b.owner === e.player && droppedAt.has(b.id) && (droppedAt.get(b.id) !== b.cy * world.w + b.cx || (rivalMoved.has(b.id) && inBlast(world, b, px, py))));
       // Set off early: the bomb that caught it went off before its fuse ran out, because a rival's bomb reached
       // it, and that rival's bomb was dropped, kicked or thrown after this one was dropped. (A rival's bomb that
@@ -227,13 +255,17 @@ type Threat = { owner: number; cx: number; cy: number; range: number; since: num
  * was dropped: a tile a block has landed on since still counts as a way it
  * had. A rival's bomb falling from a plane counts like a bomb dropped when it
  * was let go, and so does one a falling block took away after the bot dropped
- * its own (`threats`).
+ * its own (`threats`). On the Wild West, caught by a barrel of TNT its own bomb
+ * set off (`tnt`), its own blast reaches as far as that barrel's fire, and the
+ * bomb that caught it is the one of its own that went off last.
  */
-function shutIn(world: World, bombs: Seen[], who: number, px: number, py: number, droppedOn: (id: number) => number, restingSince: (id: number) => number, landedOn: (tile: number) => number, threats: Threat[] = []): boolean {
+function shutIn(world: World, bombs: Seen[], who: number, px: number, py: number, droppedOn: (id: number) => number, restingSince: (id: number) => number, landedOn: (tile: number) => number, threats: Threat[] = [], tnt?: { tiles: Set<number>; since: number }): boolean {
   const mine = bombs.filter((b) => b.owner === who && b.ground);
   const caughtBy = mine.filter((b) => inBlast(world, b, px, py)).map((b) => b.id);
-  if (!caughtBy.length) return false;
-  const since = Math.min(...caughtBy);
+  if (!caughtBy.length && !tnt) return false;
+  const since = tnt ? tnt.since : Math.min(...caughtBy);
+  // where its own blasts reach (with a barrel of TNT it set off, as far as that fire)
+  const reaches = (x: number, y: number): boolean => mine.some((b) => inBlast(world, b, x, y)) || !!tnt?.tiles.has(y * world.w + x);
   // a tile counts as open if it is floor, or was floor when that bomb was dropped (a block has landed on it since)
   const open = (i: number): boolean => world.tiles[i] === FLOOR || landedOn(i) > droppedOn(since);
   // a rival's bomb counts if it came to lie where it is on the same tick as that bomb was dropped, or later:
@@ -251,7 +283,7 @@ function shutIn(world: World, bombs: Seen[], who: number, px: number, py: number
   for (let depth = 0; depth <= 6 && edge.length; depth++) {
     const next: [number, number][] = [];
     for (const [x, y] of edge) {
-      if (!mine.some((b) => inBlast(world, b, x, y)) && rivals.some((b) => inBlast(world, b, x, y))) return true;
+      if (!reaches(x, y) && rivals.some((b) => inBlast(world, b, x, y))) return true;
       for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
         const nx = x + dx;
         const ny = y + dy;
@@ -416,4 +448,5 @@ if (process.argv[1] && process.argv[1].endsWith('cpu-matches.ts')) {
     for (const lv of BOT_LEVELS) console.log(LEVELS[lv].label.padEnd(10) + pct(wins[lv], total).padStart(8) + pct(blasted[lv], total).padStart(10) + pct(soon[lv], total).padStart(14) + pct(selfs[lv], total).padStart(16) + String(kills[lv]).padStart(19));
     console.log(`\ndraws ${draws} of ${total}, not decided ${open} of ${total}`);
   }
+  if (WEST) console.log(`\nWild West: robots hit by a train in the whole run: ${ranOver}`);
 }

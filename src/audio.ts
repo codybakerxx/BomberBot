@@ -238,6 +238,47 @@ const sounds = {
     voice({ type: 'square', from: 1047, dur: 0.7, vol: 0.06, at: 0.36, lp: 2400, lpTo: 900, wobble: [6, 6] });
     hiss({ kind: 'highpass', from: 6000, dur: 0.5, vol: 0.04, at: 0.36, attack: 0.05 });
   },
+  /** a level-crossing bell (Wild West): one bright metal strike, ringing on; it comes twice a second while the lamps flash */
+  bell: (): void => {
+    for (const [f, v, d] of [
+      [1180, 0.16, 0.42],
+      [2710, 0.07, 0.3],
+      [4020, 0.035, 0.18],
+      [590, 0.05, 0.36],
+    ] as const)
+      voice({ type: 'sine', from: f, to: f * 0.995, dur: d, vol: v });
+    hiss({ kind: 'highpass', from: 5000, dur: 0.03, vol: 0.12 });
+  },
+  /** a steam train coming (Wild West): its whistle, a chord that rises and holds, breathy; then its wheels and chuffing rolling past */
+  train: (): void => {
+    for (const [f, v] of [
+      [415, 0.07],
+      [523, 0.06],
+      [622, 0.05],
+    ] as const) {
+      voice({ type: 'sawtooth', from: f * 0.94, to: f, dur: 0.16, vol: v, lp: 2200, attack: 0.05 });
+      voice({ type: 'sawtooth', from: f, dur: 0.95, vol: v, at: 0.15, lp: 2400, lpTo: 1500, wobble: [5.5, 3], attack: 0.02 });
+    }
+    hiss({ kind: 'bandpass', from: 1900, q: 3, dur: 1.1, vol: 0.09, attack: 0.06 });
+    // the train rolling by: a low rumble and the clack of wheels over the rail joints, chuffing as it goes
+    hiss({ kind: 'lowpass', from: 260, to: 140, dur: 2.6, vol: 0.32, at: 0.7, attack: 0.5 });
+    voice({ type: 'triangle', from: 46, to: 40, dur: 2.4, vol: 0.18, at: 0.75, attack: 0.4 });
+    for (let k = 0; k < 14; k++) {
+      const at = 0.8 + k * 0.15;
+      hiss({ kind: 'bandpass', from: 900, to: 400, q: 1.2, dur: 0.09, vol: 0.1 * Math.sin(Math.PI * Math.min(1, (k + 1) / 14)), at, attack: 0.01 });
+      if (k % 2 === 0) hiss({ kind: 'bandpass', from: 2800, q: 4, dur: 0.03, vol: 0.06, at: at + 0.05 });
+    }
+  },
+  /** a barrel of TNT (Wild West): a bigger, deeper blast than a bomb's, with wood splintering in it */
+  tnt: (): void => {
+    const p = vary(0.08);
+    voice({ type: 'sine', from: 90 * p, to: 26, dur: 1.0, vol: 1 });
+    voice({ type: 'triangle', from: 60 * p, to: 24, dur: 0.7, vol: 0.5, grit: true });
+    hiss({ kind: 'highpass', from: 2000, dur: 0.08, vol: 0.4 });
+    hiss({ kind: 'lowpass', from: 3600 * p, to: 120, dur: 1.1, vol: 0.85, grit: true });
+    hiss({ kind: 'lowpass', from: 420, to: 70, dur: 1.6, vol: 0.4, at: 0.08, attack: 0.1 });
+    for (let k = 0; k < 5; k++) hiss({ kind: 'bandpass', from: 1400 + k * 500, q: 3, dur: 0.05, vol: 0.12, at: 0.05 + k * 0.045 });
+  },
   /** knocked out: a robot powering down, wobbling as it goes */
   death: (): void => {
     voice({ type: 'sawtooth', from: 640, to: 55, dur: 0.75, vol: 0.14, lp: 2600, lpTo: 220, wobble: [11, 30] });

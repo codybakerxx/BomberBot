@@ -8,7 +8,7 @@ The game runs at a fixed 60 ticks a second. Times below are given in seconds wit
 
 *`createWorld` in sim.ts*
 
-- The usual arena (Classic) is 15 tiles wide and 13 tall. The outer ring is wall, leaving 13 by 11 to play in. The lobby also offers Compact (11 by 9 to play in) and Big (15 by 13): the same build in other sizes. It also offers two maps, Midnight (steel blocks and bricks) and Wild West (red rock and wooden crates): a map is only how the arena looks, and every rule here is the same on both.
+- The usual arena (Classic) is 15 tiles wide and 13 tall. The outer ring is wall, leaving 13 by 11 to play in. The lobby also offers Compact (11 by 9 to play in) and Big (15 by 13): the same build in other sizes. It also offers two maps, Midnight (steel blocks and bricks) and Wild West (red rock and wooden crates). Midnight is only a look. The Wild West also has a railway with trains and barrels of TNT (below, **The Wild West's railway and TNT**); every other rule here is the same on both.
 - **Solid blocks** never break. They are the outer wall plus a pillar on every second tile in both directions. The pillars turn the arena into a grid of lanes.
 - **Bricks** can be blasted away. At the start each open tile has an 80% chance of holding a brick (`SOFT_DENSITY`). The lobby's Brick density setting changes that, from 0% to 100% in steps of 5% (it was 78% until 19 November 2026).
 - Each player's starting tile and the tiles next to it are always left clear, so nobody starts boxed in.
@@ -202,6 +202,43 @@ The open area has 23 tiles to stand on there: 35 less the 12 pillars inside it. 
 An earlier version dropped the blocks during the last minute of the timer, so that they stopped at 0:00. That was changed in play-testing: the whole of the timer is now played on the whole arena.
 
 The blocks were made 20% faster on 11 November 2026, after play-testing: they took a minute at first, each 0.75 s in the air and about two thirds of a second apart. Both the time in the air and the gap between blocks were shortened by the same share.
+
+## The Wild West's railway and TNT
+
+*`railLines`, `runTrain`, `trainFrom`, `trainSpan`, `tntBlast` and `lightTnt` in sim.ts; drawn in railway.ts. The owner's design, 25 November 2026.*
+
+On the Wild West map, on every size (`rails` and `tnt` in the round's config, set by `worldConfig` for that map; online too):
+
+**The railway.** Four lines cross the arena, two along rows and two down columns: the third row from the top and from the bottom, the third column from the left and from the right (`railLines`). They run over open ground, so no brick or barrel is ever on a line, and no robot starts on one, on any size or number of players. Each line runs from a tunnel in the outer wall to one in the wall opposite. Beside each tunnel, on the outer wall, one each side of the line, is a crossing signal: a crossbuck, two red lamps and a red and white gate.
+
+**Trains.** Now and then a train comes down one of the lines, picked at random, either way:
+
+- The first warning comes 8 to 14 seconds into the round (`TRAIN_FIRST`), then each next one 12 to 18 seconds after the one before (`TRAIN_GAP`): about every 15 seconds, the owner's ask. Which line, which way and when come from the round's seed, the same on every copy of an online round.
+- **The warning:** that line's lamps flash red in turn, a bell rings twice a second, the line pulses red, and its gates come down over half a second (`GATE_TICKS`). **2.5 seconds** later (`TRAIN_WARN_TICKS`) the engine comes out of its tunnel; it whistles three quarters of a second before (`TRAIN_WHISTLE_TICKS`).
+- The train is an engine, its tender and two coaches, 6.7 tiles long (`TRAIN_CARS`, `TRAIN_COUPLING`, `TRAIN_LENGTH`), and goes **9.4 tiles a second** (`TRAIN_SPEED`): across a Standard arena and into the far tunnel in about 2 seconds. The lamps keep flashing until it has gone, and the gates go up half a second after.
+- **It knocks out any robot it touches:** a robot that counts as standing on a tile of its line (the tile it is ringed on, as for a blast) once the train's front, or its back, is within 0.3 of a tile of it along the line (`TRAIN_NOSE`). A robot on the next tile is safe, however close. A shield does not help (as with a falling block). The result says "You got run over". Once the round is decided it leaves the winner be.
+- A bomb on its line goes off the moment the train reaches it. A power-up on it is swept away.
+- **No train runs once the blocks start to fall:** one is only sent if it will be gone, and its gates up, before the timer reaches 0:00. With no timer they keep coming. Once a round is decided, a train still in its tunnel stays there.
+
+**TNT.** One brick in ten is a red barrel of TNT instead, taken from the bricks that hide no power-up (`TNT_SHARE`; if there are not enough of those, from the others, and their power-up is lost): 3 to 10 on the sizes, more with more bricks.
+
+- A barrel is a block: robots and bombs cannot go through it, and a thrown bomb bounces on over it.
+- **A blast that reaches a barrel sets it off:** the blast stops at the barrel, as at a brick, and the barrel goes off 0.13 s later (`TNT_FUSE_TICKS`). A bomb from a plane landing on one sets it off too. So does another barrel's blast.
+- **Its blast runs every way until something stops it:** the outer wall, a solid block, or a brick, which it does **not** break (it shelters what is behind it, so a brick can be kept for that). A barrel in its way goes off in turn. Bombs it reaches go off moments later; power-ups in the open are burnt. It burns with ordinary orange fire, whoever set it off.
+- It counts as the blast of whoever set it off: their bomb's blast reached it, or a barrel they set off did. A robot it knocks out is theirs ("Caught in a TNT blast Volt set off"), it can knock out the one who set it off, and in a teams match with friendly fire off it spares their teammates.
+- The barrel's tile is open floor afterwards. A falling block landing on a barrel, even one about to go off, crushes it: it never goes off.
+
+| Constant | Value | Meaning |
+|---|---|---|
+| `TRAIN_SPEED` | 0.15625 tiles a tick | 9.4 tiles a second (a robot's fastest is 5.55) |
+| `TRAIN_CARS`, `TRAIN_COUPLING` | 2, 1.0625, 1.625, 1.625; 0.125 | The cars' lengths, engine first, and the gap between two: 6.69 tiles in all (`TRAIN_LENGTH`) |
+| `TRAIN_WARN_TICKS` | 150 (2.5 s) | From the lamps, bell and gates to the engine coming out of its tunnel |
+| `TRAIN_WHISTLE_TICKS` | 45 (0.75 s) | Its whistle, this long before it comes out |
+| `TRAIN_FIRST`, `TRAIN_GAP` | 8 to 14 s, 12 to 18 s | When the first warning comes, and the next after the one before |
+| `TRAIN_NOSE` | 0.3 | How near its front or back must be, along the line, to hit a robot on the line |
+| `GATE_TICKS`, `BELL_TICKS` | 30, 30 | The gates take half a second; the bell rings every half second |
+| `TNT_SHARE` | 0.1 | Share of the bricks that are barrels of TNT |
+| `TNT_FUSE_TICKS` | 8 (0.13 s) | A barrel goes off this long after a blast reaches it |
 
 ## Winning
 

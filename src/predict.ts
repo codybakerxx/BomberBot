@@ -292,6 +292,9 @@ export class Predictor {
       case 'throw':
       case 'land':
       case 'block':
+      case 'tnt':
+      case 'bell':
+      case 'train':
         return true;
       case 'pickup':
         return e.player === this.me;

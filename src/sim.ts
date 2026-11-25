@@ -28,10 +28,14 @@ export type Dir = 0 | 1 | 2 | 3 | 4;
 export const DX = [0, 0, 0, -1, 1];
 export const DY = [0, -1, 1, 0, 0];
 
-/** What a tile can be: open floor, a solid block (never breaks), or a brick (a blast breaks it). */
+/**
+ * What a tile can be: open floor, a solid block (never breaks), a brick (a blast breaks it), or a barrel of TNT
+ * (Wild West: a blast that reaches it sets it off, `tntBlast`).
+ */
 export const FLOOR = 0;
 export const HARD = 1;
 export const SOFT = 2;
+export const TNT = 3;
 
 /**
  * Power-ups: one more bomb at a time, a longer blast, faster walking,
@@ -191,6 +195,8 @@ export interface Flame {
   kind: 'c' | 'h' | 'v';
   /** direction of the arm's tip if this is the last tile, else 0 */
   tip: Dir;
+  /** part of a barrel of TNT's blast: it burns with plain orange fire, whoever set it off */
+  tnt?: boolean;
 }
 
 /** A brick that a blast has reached. It turns to floor when ttl runs out. */
@@ -244,10 +250,16 @@ export type GameEvent =
   /** a falling block has landed on this tile, which is now a solid block */
   | { type: 'block'; cx: number; cy: number }
   /**
-   * `cause` says what knocked the player out: a blast, or a falling block.
-   * `by` is the player whose bomb made the blast, or -1 for a block.
+   * `cause` says what knocked the player out: a blast, a falling block, the train, or a barrel of TNT.
+   * `by` is the player whose bomb made the blast (or set the TNT off), or -1 for a block or the train.
    */
-  | { type: 'death'; player: number; cause: 'blast' | 'block'; by: number; out: boolean }
+  | { type: 'death'; player: number; cause: KnockCause; by: number; out: boolean }
+  /** a barrel of TNT went off on this tile */
+  | { type: 'tnt'; cx: number; cy: number }
+  /** the crossing bell on this line rings (twice a second while its lights flash) */
+  | { type: 'bell'; line: number }
+  /** a train is about to come out of its tunnel on this line: its whistle */
+  | { type: 'train'; line: number }
   /** a player who lost a life is back, at their starting place (or the nearest free tile to it) */
   | { type: 'respawn'; player: number }
   /** an angel's bomb knocked a robot out and, with Angels come back on, the angel took its place */
@@ -260,6 +272,37 @@ export type GameEvent =
   | { type: 'drop'; player: number }
   /** a plane's flight is over (it came home, or its pilot was knocked out) */
   | { type: 'home'; player: number };
+
+/** What can knock a robot out. */
+export type KnockCause = 'blast' | 'block' | 'train' | 'tnt';
+
+/** One line of the railway (Wild West): along row `at` ('h') or down column `at` ('v'), from tunnel to tunnel. */
+export interface Rail {
+  dir: 'h' | 'v';
+  at: number;
+}
+
+/**
+ * A train (the owner's design, 25 November 2026): on line `line` of `world.rails`, going towards higher x or y
+ * (`dir` 1) or lower (-1). From `warnAt` the crossing lights at both ends of the line flash, the bell rings and
+ * the gates come down; at `enterAt` the engine comes out of its tunnel; at `exitAt` the last car has gone into
+ * the far one, and GATE_TICKS later the gates are up again. Anything it touches on the way is knocked out.
+ */
+export interface Train {
+  line: number;
+  dir: 1 | -1;
+  warnAt: number;
+  enterAt: number;
+  exitAt: number;
+}
+
+/** A barrel of TNT a blast has reached: it goes off when `t` runs out. Its blast is `owner`'s, who set it off. */
+export interface LitTnt {
+  cx: number;
+  cy: number;
+  t: number;
+  owner: number;
+}
 
 /** A block on its way down. It lands, and turns its tile solid, when `world.tick` reaches `landAt`. */
 export interface FallingBlock {
@@ -329,6 +372,14 @@ export interface World {
   coop: boolean;
   /** in a teams match, whether a teammate's blast can knock you out (your own always can) */
   friendlyFire: boolean;
+  /** the railway (Wild West: `railLines`); empty on other maps */
+  rails: Rail[];
+  /** the train coming or going, or the next one (it shows nothing until its `warnAt`); null when no more will come */
+  train: Train | null;
+  /** where the trains' own random numbers have got to (which line, which way, how long until the next) */
+  trainSeed: number;
+  /** barrels of TNT that a blast has reached, about to go off */
+  tntLit: LitTnt[];
 }
 
 /** Knocked-out players as angels: off, on (they throw bombs in), or on and able to come back (`revive`). */
@@ -386,6 +437,10 @@ export interface WorldConfig {
   teams?: number[];
   /** In a teams match, can a teammate's blast knock you out? Default true. Your own blast always can. */
   friendlyFire?: boolean;
+  /** The railway and its trains (the Wild West map: setup.ts sets it). Default false. */
+  rails?: boolean;
+  /** Barrels of TNT in place of some bricks (TNT_SHARE; the Wild West map). Default false. */
+  tnt?: boolean;
 }
 
 // ---------------------------------------------------------------- constants
@@ -495,6 +550,29 @@ export const DROP_TICKS = 48; // a dropped bomb falls for 0.8 s: long enough to 
 export const DROP_DRAG = 0.95; // keeping 95% of its speed each tick: it lands about a tile (0.9) on from where it was let go
 export const DROP_FIRE = 1; // its blast reaches one tile each way
 
+// the railway (Wild West; the owner's design, 25 November 2026): four lines across the arena, two along rows and
+// two down columns (`railLines`), each from a tunnel in the outer wall to one in the opposite wall. Now and then
+// a train runs along one of them, picked at random, with a warning first: the crossing lights flash, a bell
+// rings and the gates come down. It knocks out any robot it touches. None comes once the blocks start to fall.
+export const TRAIN_SPEED = 0.15625; // tiles a tick: 9.4 tiles a second (a robot's fastest is 5.55)
+export const TRAIN_CARS = [2, 1.0625, 1.625, 1.625]; // its cars' lengths in tiles, front first: the engine, its tender, two coaches
+export const TRAIN_COUPLING = 0.125; // the gap between two cars
+export const TRAIN_LENGTH = TRAIN_CARS.reduce((n, c) => n + c, 0) + TRAIN_COUPLING * (TRAIN_CARS.length - 1); // 6.69 tiles
+export const TRAIN_WARN_TICKS = 150; // the lights, the bell and the gates start 2.5 s before the engine comes out of its tunnel
+export const TRAIN_WHISTLE_TICKS = 45; // and it whistles 0.75 s before
+export const TRAIN_FIRST = [8 * TICK_HZ, 14 * TICK_HZ]; // the first warning comes 8 to 14 s into the round
+export const TRAIN_GAP = [12 * TICK_HZ, 18 * TICK_HZ]; // and the next 12 to 18 s after the one before (about every 15 s, the owner's ask)
+export const TRAIN_NOSE = 0.3; // a robot counting as on the line's tile is hit once the train is within this of it along the line
+export const GATE_TICKS = 30; // the gates take half a second to come down, and go up again this long after the train has gone
+export const BELL_TICKS = 30; // the bell rings twice a second while the lights flash
+
+// TNT (Wild West; the owner's design, 25 November 2026): red barrels in place of some bricks. A blast that reaches
+// one sets it off: its own blast runs every way until a wall, a block or a brick stops it (it does not break
+// bricks), sets off the bombs and TNT it reaches, and burns with ordinary orange fire. It counts as the blast of
+// whoever set it off.
+export const TNT_SHARE = 0.1; // one brick in ten is a barrel of TNT (taken from bricks that hide no power-up where it can)
+export const TNT_FUSE_TICKS = 8; // a barrel goes off this soon after a blast reaches it (0.13 s)
+
 /**
  * The way a plane flies for each of its TURN_STEPS headings: [x, y] per tick of PLANE_SPEED, clockwise from
  * right (y is down). Worked out with + - * / only, from the series for sine and cosine, never Math.sin or
@@ -583,9 +661,31 @@ export function spawnPoints(w: number, h: number, n = 4): { x: number; y: number
 }
 
 /**
+ * The railway's four lines in an arena `w` by `h` (outer wall included): along the third row from the top and
+ * from the bottom, and down the third column from the left and from the right. They are open rows and columns
+ * (no pillars on them), and no robot starts on one, on any size or number of players (tests/rail.test.ts).
+ */
+export function railLines(w: number, h: number): Rail[] {
+  return [
+    { dir: 'h', at: 3 },
+    { dir: 'h', at: h - 4 },
+    { dir: 'v', at: 3 },
+    { dir: 'v', at: w - 4 },
+  ];
+}
+
+/** Is (x, y) a tile of the railway, inside the outer wall? */
+export function onRail(world: { w: number; h: number; rails: Rail[] }, x: number, y: number): boolean {
+  if (x < 1 || y < 1 || x > world.w - 2 || y > world.h - 2) return false;
+  for (const r of world.rails) if (r.dir === 'h' ? y === r.at : x === r.at) return true;
+  return false;
+}
+
+/**
  * Build a fresh arena: outer wall, a pillar on every second tile, bricks on
  * most of the rest with power-ups hidden under some, and each player's corner
- * left clear so nobody starts boxed in.
+ * left clear so nobody starts boxed in. On the Wild West map the railway is
+ * left clear too, and some of the bricks are barrels of TNT.
  */
 export function createWorld(cfg: WorldConfig): World {
   const w = (cfg.cols ?? 13) + 2;
@@ -599,6 +699,9 @@ export function createWorld(cfg: WorldConfig): World {
     safe.add(s.y * w + s.x);
     for (let d = 1; d <= 4; d++) safe.add((s.y + DY[d]) * w + (s.x + DX[d]));
   }
+  // the railway runs over open ground: no bricks on it
+  const rails = cfg.rails ? railLines(w, h) : [];
+  for (let y = 1; y < h - 1; y++) for (let x = 1; x < w - 1; x++) if (onRail({ w, h, rails }, x, y)) safe.add(y * w + x);
 
   const hidden = new Map<number, ItemKind>();
   const chances = cfg.itemChance ?? ITEM_CHANCE;
@@ -631,6 +734,20 @@ export function createWorld(cfg: WorldConfig): World {
     const empty: number[] = [];
     for (let i = 0; i < tiles.length; i++) if (tiles[i] === SOFT && !hidden.has(i)) empty.push(i);
     if (empty.length) hidden.set(empty[Math.floor(rng() * empty.length)], kind);
+  }
+  // barrels of TNT in place of one brick in ten, picked at random from the bricks that hide nothing (and only
+  // if there are not enough of those, from the others, whose power-up is then lost)
+  if (cfg.tnt) {
+    const plain: number[] = [];
+    const filled: number[] = [];
+    for (let i = 0; i < tiles.length; i++) if (tiles[i] === SOFT) (hidden.has(i) ? filled : plain).push(i);
+    const n = Math.round((plain.length + filled.length) * TNT_SHARE);
+    for (let k = 0; k < n; k++) {
+      const from = plain.length ? plain : filled;
+      const i = from.splice(Math.floor(rng() * from.length), 1)[0];
+      tiles[i] = TNT;
+      hidden.delete(i);
+    }
   }
 
   const roundTicks = Math.max(0, Math.floor(cfg.roundTicks ?? ROUND_TICKS));
@@ -687,7 +804,7 @@ export function createWorld(cfg: WorldConfig): World {
     planeCool: 0,
   }));
 
-  return {
+  const world: World = {
     w,
     h,
     tiles,
@@ -717,7 +834,97 @@ export function createWorld(cfg: WorldConfig): World {
     teams: teamsOn,
     coop: teamsOn && cfg.players.length > 1 && new Set(cfg.teams).size === 1,
     friendlyFire: cfg.friendlyFire ?? true,
+    rails,
+    train: null,
+    trainSeed: (cfg.seed ^ 0x5bd1e995) >>> 0,
+    tntLit: [],
   };
+  if (rails.length) world.train = trainFrom(world, TRAIN_FIRST[0] + Math.floor(trainRand(world) * (TRAIN_FIRST[1] - TRAIN_FIRST[0] + 1)));
+  return world;
+}
+
+// ---------------------------------------------------------------- the railway
+
+/** The trains' next random number, 0 to 1, from their own seed (world.trainSeed), so every copy of a round agrees. */
+function trainRand(world: World): number {
+  world.trainSeed = (world.trainSeed + 0x6d2b79f5) >>> 0;
+  let t = world.trainSeed;
+  t = Math.imul(t ^ (t >>> 15), t | 1);
+  t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+  return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+}
+
+/** How long a line is from tunnel to tunnel, in tiles: the whole width or height inside the outer wall. */
+export function railLength(world: World, line: number): number {
+  return (world.rails[line].dir === 'h' ? world.w : world.h) - 2;
+}
+
+/**
+ * A train whose warning starts at `warnAt`, on a line and going a way picked at random. None (null) if it would
+ * not be gone, and its gates up, before the timer runs out: no train runs once the blocks start to fall.
+ */
+function trainFrom(world: World, warnAt: number): Train | null {
+  const line = Math.floor(trainRand(world) * world.rails.length);
+  const dir = trainRand(world) < 0.5 ? 1 : -1;
+  const enterAt = warnAt + TRAIN_WARN_TICKS;
+  const exitAt = enterAt + Math.ceil((railLength(world, line) + TRAIN_LENGTH) / TRAIN_SPEED);
+  if (world.roundTicks > 0 && exitAt + GATE_TICKS >= world.roundTicks) return null;
+  return { line, dir, warnAt, enterAt, exitAt };
+}
+
+/**
+ * Where a train is along its line on tick `t`: [back, front] in tiles along the row or column (its back is
+ * the lower number). Outside the arena (in a tunnel) before `enterAt` and after `exitAt`.
+ */
+export function trainSpan(world: World, tr: Train, t: number): [number, number] {
+  const run = (t - tr.enterAt) * TRAIN_SPEED;
+  if (tr.dir > 0) {
+    const front = 0.5 + run; // (0.5: the edge of the outer wall, where the tunnel is)
+    return [front - TRAIN_LENGTH, front];
+  }
+  const front = railLength(world, tr.line) + 0.5 - run;
+  return [front, front + TRAIN_LENGTH];
+}
+
+/**
+ * The railway for one tick: the bell while the lights flash, the whistle, and the train itself. It knocks out
+ * every robot it touches: one that counts as standing on a tile of its line (the tile it is drawn ringed on, as
+ * for a blast) once the train's front or back is within TRAIN_NOSE of it. Shield or not, like a falling block;
+ * not the winner once the round is decided. It sets
+ * off the bombs on the line as it reaches them and sweeps the power-ups off it. Once its gates are up the next
+ * train is set, 12 to 18 s after this one's warning. Once the round is decided a train still in its tunnel
+ * stays there, and none comes after it.
+ */
+function runTrain(world: World): void {
+  const tr = world.train;
+  if (!tr) return;
+  const t = world.tick;
+  if (world.over && t < tr.enterAt) {
+    world.train = null;
+    return;
+  }
+  if (t > tr.exitAt + GATE_TICKS) {
+    const gap = TRAIN_GAP[0] + Math.floor(trainRand(world) * (TRAIN_GAP[1] - TRAIN_GAP[0] + 1));
+    world.train = world.over ? null : trainFrom(world, Math.max(tr.warnAt + gap, t + 1));
+    return;
+  }
+  if (t >= tr.warnAt && t <= tr.exitAt && (t - tr.warnAt) % BELL_TICKS === 0) world.events.push({ type: 'bell', line: tr.line });
+  if (t === tr.enterAt - TRAIN_WHISTLE_TICKS) world.events.push({ type: 'train', line: tr.line });
+  if (t < tr.enterAt || t > tr.exitAt) return;
+  const r = world.rails[tr.line];
+  const [back, front] = trainSpan(world, tr, t);
+  for (const p of world.players) {
+    if (!p.alive || wonRound(world, p)) continue;
+    const along = r.dir === 'h' ? p.x : p.y;
+    const on = Math.round(r.dir === 'h' ? p.y : p.x) === r.at;
+    if (on && along > back - TRAIN_NOSE && along < front + TRAIN_NOSE) knockOut(world, p, 'train', -1);
+  }
+  const hit = (cx: number, cy: number): boolean => {
+    const along = r.dir === 'h' ? cx : cy;
+    return (r.dir === 'h' ? cy : cx) === r.at && along > back - 0.5 && along < front + 0.5;
+  };
+  for (const b of world.bombs) if (b.state === 'ground' && hit(b.cx, b.cy)) b.fuse = Math.min(b.fuse, 1);
+  if (world.items.some((it) => hit(it.cx, it.cy))) world.items = world.items.filter((it) => !hit(it.cx, it.cy));
 }
 
 /**
@@ -806,6 +1013,7 @@ function fallBlocks(world: World): void {
     world.items = world.items.filter((it) => it.cx !== cx || it.cy !== cy);
     world.flames = world.flames.filter((fl) => fl.cx !== cx || fl.cy !== cy);
     world.burning = world.burning.filter((b) => b.cx !== cx || b.cy !== cy);
+    world.tntLit = world.tntLit.filter((b) => b.cx !== cx || b.cy !== cy); // (a barrel under it is crushed, and does not go off)
     for (const b of [...world.bombs]) {
       if (b.state !== 'ground') continue;
       if (b.cx === cx && b.cy === cy) {
@@ -860,6 +1068,8 @@ export function cloneWorld(w: World): World {
     items: w.items.map((i) => ({ ...i })),
     falling: w.falling.map((f) => ({ ...f })),
     drops: w.drops.map((d) => ({ ...d })),
+    train: w.train ? { ...w.train } : null,
+    tntLit: w.tntLit.map((t) => ({ ...t })),
     events: [],
     over: w.over ? { ...w.over } : null,
   };
@@ -1278,8 +1488,9 @@ function addFlame(world: World, f: Flame): void {
 
 /**
  * Set a bomb off. The blast runs out in four directions for `range` tiles. A
- * solid block stops it; the first brick it meets burns and stops it; power-ups
- * lying in the open are destroyed; other bombs it touches go off moments later.
+ * solid block stops it; the first brick it meets burns and stops it; a barrel
+ * of TNT stops it and goes off moments later; power-ups lying in the open are
+ * destroyed; other bombs it touches go off moments later.
  */
 function explode(world: World, bomb: Bomb): void {
   world.bombs.splice(world.bombs.indexOf(bomb), 1);
@@ -1308,6 +1519,10 @@ function blast(world: World, x0: number, y0: number, range: number, owner: numbe
         }
         break;
       }
+      if (t === TNT) {
+        lightTnt(world, cx, cy, owner);
+        break;
+      }
       const item = world.items.findIndex((it) => it.cx === cx && it.cy === cy);
       if (item >= 0) world.items.splice(item, 1);
       const other = bombAt(world, cx, cy);
@@ -1320,6 +1535,45 @@ function blast(world: World, x0: number, y0: number, range: number, owner: numbe
         kind: d <= 2 ? 'v' : 'h',
         tip: i === range ? (d as Dir) : 0,
       });
+    }
+  }
+}
+
+/** A blast of `owner`'s has reached a barrel of TNT: it goes off in TNT_FUSE_TICKS, in their name (the first blast to reach it). */
+function lightTnt(world: World, cx: number, cy: number, owner: number): void {
+  if (!world.tntLit.some((t) => t.cx === cx && t.cy === cy)) world.tntLit.push({ cx, cy, t: TNT_FUSE_TICKS, owner });
+}
+
+/**
+ * A barrel of TNT goes off (the owner's design, 25 November 2026). Its tile is open floor from now on, and its
+ * blast runs out every way as far as it can: until the outer wall, a solid block or a brick stops it (the brick
+ * is not broken: it shelters what is behind it), or another barrel, which it sets off. Bombs it reaches go off
+ * moments later and power-ups in the open are destroyed, as with any blast. It burns with ordinary orange
+ * fire, but it is the blast of whoever set the barrel off (their bomb's blast reached it, or a barrel they set
+ * off did): a robot it knocks out is theirs, and in a teams match it spares their teammates if friendly fire is off.
+ */
+function tntBlast(world: World, lit: LitTnt): void {
+  world.tntLit.splice(world.tntLit.indexOf(lit), 1);
+  const { cx: x0, cy: y0 } = lit;
+  world.tiles[y0 * world.w + x0] = FLOOR;
+  world.events.push({ type: 'tnt', cx: x0, cy: y0 });
+  const owner = lit.owner;
+  addFlame(world, { cx: x0, cy: y0, ttl: FLAME_TICKS, owner, kind: 'c', tip: 0, tnt: true });
+  for (let d = 1 as Dir; d <= 4; d++) {
+    for (let i = 1; ; i++) {
+      const cx = x0 + DX[d] * i;
+      const cy = y0 + DY[d] * i;
+      const t = tileAt(world, cx, cy);
+      if (t === HARD || t === SOFT) break;
+      if (t === TNT) {
+        lightTnt(world, cx, cy, owner);
+        break;
+      }
+      const item = world.items.findIndex((it) => it.cx === cx && it.cy === cy);
+      if (item >= 0) world.items.splice(item, 1);
+      const other = bombAt(world, cx, cy);
+      if (other) other.fuse = Math.min(other.fuse, CHAIN_TICKS);
+      addFlame(world, { cx, cy, ttl: FLAME_TICKS, owner, kind: d <= 2 ? 'v' : 'h', tip: 0, tnt: true });
     }
   }
 }
@@ -1461,6 +1715,10 @@ function moveDrops(world: World): void {
       if (!world.burning.some((b) => b.cx === cx && b.cy === cy)) world.burning.push({ cx, cy, ttl: FLAME_TICKS });
       continue;
     }
+    if (tileAt(world, cx, cy) === TNT) {
+      lightTnt(world, cx, cy, d.owner); // (onto a barrel of TNT: it goes off)
+      continue;
+    }
     const item = world.items.findIndex((it) => it.cx === cx && it.cy === cy);
     if (item >= 0) world.items.splice(item, 1);
     const under = bombAt(world, cx, cy);
@@ -1473,11 +1731,11 @@ function moveDrops(world: World): void {
 // ---------------------------------------------------------------- lives and angels
 
 /**
- * A robot is knocked out (by a blast or a falling block). With a life left it comes back at its starting
+ * A robot is knocked out (by a blast, a falling block or the train). With a life left it comes back at its starting
  * place in RESPAWN_TICKS; with none it is out of the round, and with angels on it becomes an angel on the
  * wall once its knocked-out animation has played, at the point of the wall nearest where it fell.
  */
-function knockOut(world: World, p: Player, cause: 'blast' | 'block', by: number): void {
+function knockOut(world: World, p: Player, cause: KnockCause, by: number): void {
   if (p.flying) endFlight(world, p); // (its plane goes too; bombs already falling still land)
   if (world.itemDrop && !p.zombie) dropKit(world, p);
   p.laptop = false;
@@ -1796,7 +2054,8 @@ function angelStep(world: World, p: Player, inp: PlayerInput | undefined): void 
 /**
  * Advance the world by one tick. `inputs[id]` may be missing: that player
  * stands still. Order within a tick: players move and press buttons (or fly
- * their planes), bombs move and count down, due bombs go off, bombs falling
+ * their planes), bombs move, the train runs, bombs count down, due bombs and
+ * barrels of TNT go off, bombs falling
  * from planes land and go off, blasts and burning bricks fade, falling blocks
  * land, players are checked against blasts and power-ups, then the match
  * result.
@@ -1852,16 +2111,25 @@ export function step(world: World, inputs: (PlayerInput | undefined)[]): void {
 
   // bombs: the fuse keeps burning while carried or thrown
   moveBombs(world);
+  // the railway: the train runs over what is on its line (a bomb it reaches goes off now)
+  runTrain(world);
   for (const b of world.bombs) {
     b.fuse--;
     if (b.state === 'ground' && world.flames.some((f) => f.cx === b.cx && f.cy === b.cy)) {
       b.fuse = Math.min(b.fuse, CHAIN_TICKS);
     }
   }
-  for (let guard = 0; guard < 200; guard++) {
+  for (const t of world.tntLit) t.t--;
+  for (let guard = 0; guard < 400; guard++) {
     const due = world.bombs.find((b) => b.state !== 'air' && b.fuse <= 0);
-    if (!due) break;
-    explode(world, due);
+    if (due) {
+      explode(world, due);
+      continue;
+    }
+    // barrels of TNT a blast reached
+    const lit = world.tntLit.find((t) => t.t <= 0);
+    if (!lit) break;
+    tntBlast(world, lit);
   }
   // bombs falling from planes: those that land now go off (a bomb they reach goes off moments later)
   moveDrops(world);
@@ -1905,7 +2173,7 @@ export function step(world: World, inputs: (PlayerInput | undefined)[]): void {
         p.graceTicks = SHIELD_GRACE_TICKS;
         world.events.push({ type: 'shield', player: p.id });
       } else {
-        knockOut(world, p, 'blast', flame.owner);
+        knockOut(world, p, flame.tnt ? 'tnt' : 'blast', flame.owner);
         // an angel's bomb, with Angels come back on: the angel takes this robot's place
         const by = world.players[flame.owner];
         if (world.angels === 'revive' && by && by.angel && by.id !== p.id && !allies(by, p) && !comebacks.some((c) => c[0] === by)) comebacks.push([by, cx, cy, p.id]);
