@@ -29,7 +29,7 @@ The picture's tick is read off a clock (`frame` in `predict.ts`). Frames come on
 - **The lobby** is the same lobby as on a phone, with everyone in the room as player cards (P1 is whoever made
   the room, then people in the order they joined, then the CPU players). Each person picks a robot and presses
   Ready on their own screen. Robots stay different. Taking a CPU player's robot swaps with it, as on a phone.
-- **The host** (whoever made the room) sets the match: the CPU players and every rule. The others can see the
+- **The host** (whoever made the room) is always **P1** (the owner's rule, 25 November 2026): when the host leaves, or is gone long enough to hand the room on, the next person in line who is still here takes over and becomes P1, everyone else keeping their order behind them (`makeHost` in room.ts); a host who was handed over comes back as the next in line. The host sets the match: the CPU players and every rule. The others can see the
   Match page but cannot change it. Only the host can start. If someone is not ready, the host is asked first.
   A room needs someone to play against: a CPU player or another person. Up to eight players in all; a person who
   joins a full room takes the last CPU player's place.

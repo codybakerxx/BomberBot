@@ -128,6 +128,15 @@ export class Room {
   private host(): Member | undefined {
     return this.members.find((m) => m.id === this.hostId);
   }
+  /**
+   * Make someone the host. The host is always P1 (the owner's rule, 25 November 2026): they go to the front of
+   * the room, everyone else keeping their order behind them, so whoever was next in line becomes P1 when the
+   * host leaves, and a host who was away so long the room was handed on comes back as the next in line.
+   */
+  private makeHost(m: Member | undefined): void {
+    this.hostId = m?.id ?? -1;
+    if (m) this.members = [m, ...this.members.filter((x) => x !== m)];
+  }
   /** Is anyone still connected? */
   anyoneHere(): boolean {
     return this.members.some((m) => m.conn);
@@ -210,9 +219,9 @@ export class Room {
       // a new room: three Normal CPU players to start with, as in a new local lobby; the host can change them
       this.setup = readSetup({}, 'gold', COLOR_IDS);
       this.setup.cpus = [];
-      this.hostId = m.id;
     }
     this.members.push(m);
+    if (msg.create) this.makeHost(m);
     // the robot they asked for, or the first nobody else here has; a CPU player wearing it moves to a colour
     // nobody has (it used to keep it, so a friend joining could play the same robot as a CPU player)
     const want = this.freeColour(typeof msg.colorId === 'string' ? msg.colorId : 'gold', m, false);
@@ -256,7 +265,8 @@ export class Room {
     this.members = this.members.filter((x) => x !== m);
     m.conn?.close(1000, 'Left the room');
     m.conn = null;
-    if (this.hostId === m.id) this.hostId = (this.members.find((x) => x.conn) ?? this.members[0])?.id ?? -1;
+    // the next in line still here takes over (the first who joined after, being connected), and is P1 from now on
+    if (this.hostId === m.id) this.makeHost(this.members.find((x) => x.conn) ?? this.members[0]);
     if (!this.members.length) this.reset();
     else this.sendRoom();
   }
@@ -289,7 +299,7 @@ export class Room {
     if (!host || (!host.conn && now - host.awaySince > HOST_AWAY_MS)) {
       const next = this.members.find((m) => m.conn);
       if (next && next.id !== this.hostId) {
-        this.hostId = next.id;
+        this.makeHost(next);
         changed = true;
       }
     }
@@ -428,7 +438,7 @@ export class Room {
       m.ready = false;
       this.freshInput(m);
     }
-    if (!this.host()) this.hostId = this.members[0]?.id ?? -1;
+    if (!this.host()) this.makeHost(this.members[0]);
     this.makeRoom();
     this.sendRoom();
   }

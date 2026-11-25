@@ -412,6 +412,8 @@ assert.notStrictEqual(back.last('room')!.host, back.last('room')!.you, 'a host a
 assert.ok(back.last('room')!.members.some((m) => !m.on), 'and is shown as away');
 room.housekeep(now + HOST_AWAY_MS + 1000);
 assert.strictEqual(back.last('room')!.host, back.last('room')!.you, 'the friend hosts now');
+assert.strictEqual(back.last('room')!.members[0].id, back.last('room')!.you, 'and is P1: the host is always P1 (the owner, 25 November 2026)');
+assert.strictEqual(back.last('room')!.members[1].id, host.member!.id, 'the old host is next in line, P2');
 assert.strictEqual(back.last('room')!.members.length, 2, 'the old host keeps their place for a good while yet');
 room.housekeep(now + AWAY_MS + 1000);
 assert.strictEqual(back.last('room')!.members.length, 1, 'and is let go in the end');
@@ -840,3 +842,25 @@ console.log('room checks passed');
 }
 
 console.log('room chat checks passed');
+
+// The host is always P1; when the host leaves, the next in line (P2) takes over and becomes P1, the rest moving up
+// one; someone away is passed over for the next one here, who still becomes P1 (the owner, 25 November 2026)
+{
+  const r = new Room('PONE', makeRng(5));
+  const ps = ['a', 'b', 'c', 'd'].map((k) => new Page(k));
+  ps.forEach((p, k) => (p.member = r.hello(p.conn, { t: 'hello', id: p.key, name: p.key.toUpperCase(), colorId: COLOR_IDS[k], dance: 'party', create: k === 0, pv: PROTOCOL }, now)));
+  const order = () => ps[3].last('room')!.members.map((m) => m.name).join('');
+  const hostName = () => { const i = ps[3].last('room')!; return i.members.find((m) => m.id === i.host)!.name; };
+  assert.strictEqual(order(), 'ABCD', 'P1 to P4 in the order they came, the maker first');
+  assert.strictEqual(hostName(), 'A', 'the maker hosts, as P1');
+  r.message(ps[0].member!, { t: 'bye' }, now);
+  assert.strictEqual(order(), 'BCD', 'the host left: the rest move up one');
+  assert.strictEqual(hostName(), 'B', 'P2 took over, and is P1 now');
+  // the next in line is away when the host leaves: the one after hosts, as P1, and the one away is P2
+  r.disconnect(ps[2].member!, ps[2].conn, now);
+  r.message(ps[1].member!, { t: 'bye' }, now);
+  assert.strictEqual(hostName(), 'D', 'C is away, so D hosts');
+  assert.strictEqual(order(), 'DC', 'and D is P1, C P2');
+}
+
+console.log('host is P1 checks passed');
