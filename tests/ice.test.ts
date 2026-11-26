@@ -50,7 +50,7 @@ assert.ok(MAPS.some((m) => m.id === 'ice' && m.name === 'Frozen Lake'), 'a Froze
   assert.ok(!cfg.rails && !cfg.tnt, 'with no railway or TNT');
   assert.equal(createWorld(cfg).ice, true);
 }
-assert.ok(PROTOCOL >= 14, 'online pages from before the ice cannot join a room with it');
+assert.ok(PROTOCOL >= 15, 'online pages from before the ice (or before it was made more slippery) cannot join a room with it');
 
 // ---------------------------------------------------------------- robots
 
