@@ -63,8 +63,7 @@ import {
   blockLandTick,
   CHAIN_TICKS,
   ICE_LAND_SPEED,
-  ICE_DRAG,
-  ICE_STILL,
+  ICE_GRIP,
   BACK,
   slideBomb,
   FLY_TICKS_PER_TILE,
@@ -461,6 +460,34 @@ function slid(world: World, c: Bomb, self: Bomb, fuse: number, from: number): { 
 }
 
 /**
+ * On ice: could sliding bomb `b` blast (tx, ty), wherever it goes off? A robot stepping into its way stops it
+ * there or bounces it back, so it may go off well short of where it would stop by itself (`slid` leaves robots
+ * out, as they move). Each tile on its way is tried in turn as the one a robot is standing on. (A Hard CPU
+ * player on Frozen Lake kicked a bomb down a column at a rival and dropped another behind it; the rival
+ * stepped into the column, the kicked bomb bounced back and set off the one behind it, which caught the bot.)
+ */
+export function slideMayReach(world: World, b: Bomb, tx: number, ty: number): boolean {
+  const free = (x: number, y: number): boolean => tile(world, x, y) === FLOOR && !groundBombAt(world, x, y, b);
+  const reaches = (x: number, y: number): boolean => {
+    if (x !== tx && y !== ty) return false;
+    const d = Math.abs(tx - x) + Math.abs(ty - y);
+    if (d > b.range) return false;
+    const dx = Math.sign(tx - x);
+    const dy = Math.sign(ty - y);
+    for (let i = 1; i < d; i++) if (tile(world, x + dx * i, y + dy * i) !== FLOOR) return false;
+    return true;
+  };
+  const endsAt = (taken: number): boolean => {
+    const c = { ...b };
+    for (let left = Math.max(1, b.fuse); left > 0 && c.slide; left--) slideBomb(c, true, (x, y) => y * world.w + x !== taken && free(x, y));
+    return reaches(c.cx, c.cy);
+  };
+  if (endsAt(-1)) return true;
+  const way = slid(world, { ...b }, b, Math.max(1, b.fuse), 0).path;
+  return way.some(([, idx], i) => i > 0 && endsAt(idx));
+}
+
+/**
  * The tiles a blast from (cx, cy) covers at time `t`, by the same rules as
  * explode() in sim.ts. Bricks stop it unless they will be gone by then; a
  * brick it reaches is noted as gone once it has burnt. A barrel of TNT stops
@@ -845,8 +872,11 @@ function pathTo(reach: Reach, target: number): number[] {
   return out.reverse();
 }
 
-/** Tiles the player can reach that will not be blasted once it is on them, quickest first. */
-function escapeTargets(D: Danger, reach: Reach, margin: number, limit: number, rng?: () => number): number[] {
+/**
+ * Tiles the player can reach that will not be blasted once it is on them, quickest first. `who`: the player
+ * whose way it is, on ice, so the end of each way is played as it really goes (`legOk`: it may slide on past).
+ */
+function escapeTargets(D: Danger, reach: Reach, margin: number, limit: number, rng?: () => number, who?: Who): number[] {
   const found: [number, number][] = [];
   for (let i = 0; i < reach.time.length; i++) {
     const t = reach.time[i];
@@ -855,13 +885,89 @@ function escapeTargets(D: Danger, reach: Reach, margin: number, limit: number, r
     found.push([t + (rng ? rng() * 0.5 : 0), i]);
   }
   found.sort((a, b) => a[0] - b[0]);
-  return found.slice(0, limit).map((f) => f[1]);
+  const out: number[] = [];
+  for (const [, i] of found) {
+    if (out.length >= limit) break;
+    if (who && who.world.ice && !legOkTo(who, D, reach, i, margin, true)) continue;
+    out.push(i);
+  }
+  return out;
 }
 
 /** The quickest of those, or -1. */
-function escapeTarget(D: Danger, reach: Reach, margin: number, rng?: () => number): number {
-  const t = escapeTargets(D, reach, margin, 1, rng);
+function escapeTarget(D: Danger, reach: Reach, margin: number, rng?: () => number, who?: Who): number {
+  const t = escapeTargets(D, reach, margin, 1, rng, who);
   return t.length ? t[0] : -1;
+}
+
+/** A player and what it plans its walking round, for `legOk`. */
+interface Who {
+  world: World;
+  p: Player;
+  walls: Uint8Array;
+}
+
+/** `legOk` for the way to `target` that `explore` found. */
+function legOkTo(who: Who, D: Danger, reach: Reach, target: number, margin: number, safeEnd: boolean): boolean {
+  const path = pathTo(reach, target);
+  return legOk(who, D, path, path.map((t) => reach.time[t]), margin, safeEnd);
+}
+
+/**
+ * On ice: the last straight stretch of a way, played as it really goes. Walking, it lets go as far short of the
+ * end as it slides (`coastTo`) and slides the rest, slower than walking; a stretch too short for that, it slides
+ * on past the end until it stops, or until a block stops it (`glide` in sim.ts). Is each tile it is on in that
+ * time clear while it is on it (`margin` ticks to spare), and the one it stops on clear from then on (`safeEnd`;
+ * otherwise for a moment)? `times`: when it reaches the middle of each tile of `path`, as `explore` works it out.
+ */
+function legOk(who: Who, D: Danger, path: number[], times: number[], margin: number, safeEnd: boolean): boolean {
+  const { world, p, walls } = who;
+  if (!path.length) return true;
+  const seq = [tileOf(world, p), ...path];
+  const at = [0, ...times];
+  const dirOf = (a: number, b: number): Dir => (b === a + 1 ? 4 : b === a - 1 ? 3 : b === a + world.w ? 2 : 1);
+  const n = seq.length - 1;
+  const d = dirOf(seq[n - 1], seq[n]);
+  let j = n - 1;
+  while (j > 0 && dirOf(seq[j - 1], seq[j]) === d) j--;
+  const horizontal = d >= 3;
+  const s = horizontal ? DX[d] : DY[d];
+  const along = (i: number): number => (horizontal ? i % world.w : Math.floor(i / world.w));
+  const across = horizontal ? Math.floor(seq[j] / world.w) : seq[j] % world.w;
+  const tileAt = (a: number): number => (horizontal ? across * world.w + a : a * world.w + across);
+  // from where the stretch starts: the robot itself, or the middle of the tile where it turns into it
+  let pos = j === 0 ? (horizontal ? p.x : p.y) : along(seq[j]);
+  let t = at[j];
+  const end = along(seq[n]);
+  const sp = playerSpeed(p);
+  const slide = iceSlide(sp);
+  let v = sp;
+  let coasting = false;
+  let first = j === 0 && !(p.moving && p.heading === d); // (setting off, the first step is a whole step)
+  let cur = tileAt(Math.round(pos));
+  let entered = t;
+  for (let k = 0; k < 400; k++) {
+    if (!first && !coasting && (end - pos) * s <= slide) coasting = true;
+    first = false;
+    if (coasting) {
+      v -= ICE_GRIP;
+      if (v <= 0) break;
+    }
+    const r = Math.round(pos);
+    let next = pos + s * v;
+    const stop = !!walls[tileAt(r + s)] && (next - r) * s >= 0;
+    if (stop) next = (pos - r) * s >= 0 ? pos : r;
+    pos = next;
+    t++;
+    const now = tileAt(Math.round(pos));
+    if (now !== cur) {
+      if (overlaps(D, cur, entered - margin, t + margin)) return false;
+      cur = now;
+      entered = t;
+    }
+    if (stop) break;
+  }
+  return safeEnd ? safeAfter(D, cur, entered - margin) : !overlaps(D, cur, entered - margin, t + margin + 20);
 }
 
 /** A rival has to be this many ticks later onto a tile of the way out before it stops counting as able to block it. */
@@ -876,6 +982,7 @@ function pathOk(world: World, p: Player, D: Danger, path: number[], margin: numb
   let cur = start;
   let t = 0;
   let entered = 0;
+  const times: number[] = [];
   for (const nb of path) {
     if (walls[nb]) return false;
     const dx = (nb % world.w) - (cur % world.w);
@@ -888,7 +995,9 @@ function pathOk(world: World, p: Player, D: Danger, path: number[], margin: numb
     cur = nb;
     t = arr;
     entered = mid;
+    times.push(arr);
   }
+  if (world.ice && !legOk({ world, p, walls }, D, path, times, margin, safeEnd)) return false;
   return !safeEnd || safeAfter(D, cur, entered - margin);
 }
 
@@ -920,18 +1029,36 @@ function steer(world: World, p: Player, path: number[]): Dir | -1 {
   }
   const nx = path[0] % world.w;
   const ny = (path[0] - nx) / world.w;
-  if (nx === sx + 1 && ny === sy) return 4;
-  if (nx === sx - 1 && ny === sy) return 3;
-  if (ny === sy + 1 && nx === sx) return 2;
-  if (ny === sy - 1 && nx === sx) return 1;
-  return -1;
+  let d: Dir | -1 = -1;
+  if (nx === sx + 1 && ny === sy) d = 4;
+  else if (nx === sx - 1 && ny === sy) d = 3;
+  else if (ny === sy + 1 && nx === sx) d = 2;
+  else if (ny === sy - 1 && nx === sx) d = 1;
+  if (d > 0 && world.ice && p.moving && p.heading === d && coastTo(world, p, path, d)) return 0;
+  return d;
+}
+
+/**
+ * On ice, running straight along the rest of its path to the end of it: has it come near enough to let go and
+ * slide the rest of the way, stopping in the middle of the last tile? (A path that still turns: no. A turn is
+ * taken at once, as on any map, so it only lets go once the last turn is behind it.)
+ */
+function coastTo(world: World, p: Player, path: number[], d: Dir): boolean {
+  const last = path[path.length - 1];
+  const lx = last % world.w;
+  const ly = (last - lx) / world.w;
+  const horizontal = d >= 3;
+  if (horizontal ? ly !== Math.round(p.y) : lx !== Math.round(p.x)) return false;
+  const left = horizontal ? (lx - p.x) * DX[d] : (ly - p.y) * DY[d];
+  return left > 0 && left <= iceSlide(playerSpeed(p));
 }
 
 /**
  * On ice, where a sliding robot comes to rest if it lets go (or turns back) now, and after how many ticks: the
  * same steps as `glide` in sim.ts, stopping in the middle of its tile if a block, brick or bomb is ahead.
+ * `tiles`: the tiles it slides on to on the way, the last one included.
  */
-function glideEnd(world: World, p: Player): { x: number; y: number; ticks: number } {
+function glideEnd(world: World, p: Player): { x: number; y: number; ticks: number; tiles: number[] } {
   const d = p.slipDir;
   const horizontal = DX[d] !== 0;
   const s = horizontal ? DX[d] : DY[d];
@@ -939,9 +1066,10 @@ function glideEnd(world: World, p: Player): { x: number; y: number; ticks: numbe
   let y = p.y;
   let v = p.slip;
   let ticks = 0;
+  const tiles: number[] = [];
   for (;;) {
-    v *= ICE_DRAG;
-    if (v < ICE_STILL || !d) break;
+    v -= ICE_GRIP;
+    if (v <= 0 || !d) break;
     ticks++;
     const pos = horizontal ? x : y;
     const t = Math.round(pos);
@@ -952,14 +1080,17 @@ function glideEnd(world: World, p: Player): { x: number; y: number; ticks: numbe
     if (stop) next = (pos - t) * s >= 0 ? pos : t;
     if (horizontal) x = next;
     else y = next;
+    const at = tileOf(world, { x, y });
+    if (at !== tileOf(world, p) && at !== tiles[tiles.length - 1]) tiles.push(at);
     if (stop) break;
   }
-  return { x, y, ticks };
+  return { x, y, ticks, tiles };
 }
 
-/** About how far a robot walking at `speed` slides on ice once it lets go (`glide` in sim.ts). */
+/** How far a robot going at `speed` slides on ice once it lets go (`glide` in sim.ts: it loses ICE_GRIP a tick). */
 function iceSlide(speed: number): number {
-  return (speed * ICE_DRAG) / (1 - ICE_DRAG);
+  const n = Math.floor(speed / ICE_GRIP);
+  return n * speed - (ICE_GRIP * n * (n + 1)) / 2;
 }
 
 // ---------------------------------------------------------------- trying a move out
@@ -1166,10 +1297,10 @@ export function botInput(world: World, bot: Bot): PlayerInput {
 
   if (me.flying > 0) return pilot(c);
   const soon = Math.min(spec.blockSight, BLOCK_URGENT);
-  // on ice, sliding on to the next tile: it will be there whatever it presses (turning back only slides it on),
+  // on ice, sliding on to the next tiles: it will be on them whatever it presses (turning back only slides it on),
   // so a blast coming there is as urgent as one coming here
-  const ahead = world.ice && me.slip > 0 ? tileOf(world, glideEnd(world, me)) : c.S;
-  const out = me.carrying ? carrying(c) : urgent(c.D, c.S, soon) || (ahead !== c.S && urgent(c.D, ahead, soon)) ? flee(c) : calm(c);
+  const ahead = world.ice && me.slip > 0 ? glideEnd(world, me).tiles : [];
+  const out = me.carrying ? carrying(c) : urgent(c.D, c.S, soon) || ahead.some((t) => urgent(c.D, t, soon)) ? flee(c) : calm(c);
   return out;
 }
 
@@ -1195,7 +1326,7 @@ function flee(c: Ctx): PlayerInput {
       for (const w of own === walls ? [walls] : [own, walls]) {
         for (const margin of [spec.margin, 1, 0]) {
           const reach = explore(world, me, map, margin, w);
-          const target = escapeTarget(map, reach, margin, bot.rng);
+          const target = escapeTarget(map, reach, margin, bot.rng, { world, p: me, walls: w });
           if (target >= 0) {
             bot.path = pathTo(reach, target);
             return;
@@ -1747,7 +1878,8 @@ function chooseGoal(c: Ctx, reach: Reach, enemies: Player[]): Goal | null {
     // nowhere a blast is coming. A spot to bomb a player from may be one a block is due on, if not too soon.
     if (kind === 'hunt' ? urgent(D, t, time + 90) : hasDanger(D, t)) return;
     const score = (worth / (time + SOON)) * (1 + spec.wobble * (bot.rng() - 0.5));
-    if (!best || score > best.score) best = { kind, tile: t, score };
+    // (on ice, only a tile it can stop on without sliding on into a blast)
+    if ((!best || score > best.score) && !(world.ice && t !== S && !legOkTo({ world, p: me, walls: c.own }, D, reach, t, spec.margin, false))) best = { kind, tile: t, score };
   };
 
   for (const it of world.items) if (it.kind !== 'curse') offer('item', it.cy * world.w + it.cx, itemWorth(me, it.kind, spec) * 4);
@@ -1951,6 +2083,8 @@ function placeBomb(c: Ctx): PlayerInput | null {
   const sy = (S - sx) / world.w;
   // (with friendly fire on: not on top of a teammate)
   if (trapsTeammate(c)) return null;
+  // (on ice: not where a sliding bomb could set it off if a robot stopped it, or bounced it back)
+  if (world.ice && world.bombs.some((b) => b.state === 'ground' && b.slide && slideMayReach(world, b, sx, sy))) return null;
   const what = [{ cx: sx, cy: sy, range: me.fire, fuse: FUSE_TICKS }];
   // For getting clear of its own bomb, a tile only has to outlast the blast: a block due on it
   // after that is something to deal with afterwards. (Near the end, no tile lasts much longer.)
@@ -1983,7 +2117,7 @@ function placeBomb(c: Ctx): PlayerInput | null {
 
   for (const margin of [spec.margin + 2, spec.margin]) {
     const reach = explore(world, me, D2, margin, c.own);
-    for (const target of escapeTargets(D2, reach, margin, 6, bot.rng)) {
+    for (const target of escapeTargets(D2, reach, margin, 6, bot.rng, { world, p: me, walls: c.own })) {
       const path = pathTo(reach, target);
       // a rival who can be on the way out before it gets there could drop a bomb and shut it in
       if (rivals.some((r) => path.some((t) => r.reach.enter[t] <= reach.enter[t] + GUARD_SLACK))) continue;
@@ -2035,7 +2169,7 @@ function tryOut(c: Ctx, driver: Driver): PlayerInput[] | null {
     let target = -1;
     for (const margin of [spec.margin, 1]) {
       const reach = explore(w, me, D, margin, walls);
-      target = escapeTarget(D, reach, margin);
+      target = escapeTarget(D, reach, margin, undefined, { world: w, p: me, walls });
       if (target >= 0) {
         path = pathTo(reach, target);
         break;

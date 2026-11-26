@@ -19,7 +19,7 @@ The game runs at a fixed 60 ticks a second. Times below are given in seconds wit
 
 *`movePlayer` in sim.ts. The touch and keyboard side is in [CONTROLS.md](CONTROLS.md).*
 
-- A robot moves up, down, left or right, one direction at a time, and stops the moment no direction is held. It does not finish the step. (On Frozen Lake's ice it slides a little first: below, **Frozen Lake's ice**.)
+- A robot moves up, down, left or right, one direction at a time, and stops the moment no direction is held. It does not finish the step. (On Frozen Lake's ice it slides on first, further the faster it is: below, **Frozen Lake's ice**.)
 - Robots start at 2.55 tiles a second. Each speed power-up adds 0.5 tiles a second, and up to six of them count, which brings a robot to 5.55 tiles a second, 2.18 times its starting speed. Collecting a speed power-up is the only thing that raises a robot's speed. The only thing that lowers it is a curse, for 8 seconds.
 - At the starting speed, getting clear of your own first bomb (two tiles along a lane) takes 0.78 seconds of the bomb's 2.55.
 - The tile a robot **counts as standing on** is the one whose middle it is nearest to. The game draws a ring on yours. That tile decides where your bomb is dropped, whether a blast catches you and which power-up you pick up.
@@ -247,28 +247,39 @@ On the Wild West map, on every size (`rails` and `tnt` in the round's config, se
 
 On the Frozen Lake map, on every size (`ice` in the round's config, set by `worldConfig` for that map; online too, `PROTOCOL` 14), the floor is ice:
 
-**Robots slide a little.** A robot that lets go slides on the way it was going, slowing all the time: about a fifth of a tile at the starting speed, just under half a tile at top speed, over 0.2 to 0.3 seconds. Asked to go back the way it came, it slides on first (looking the new way, leaning back, kicking up frost) and only walks back once it has stopped. A robot let go in the middle of a tile never slides off it.
+**Robots slide.** A robot that lets go slides on the way it was going, losing the same speed every tick until it stops (`ICE_GRIP`). So how far it slides grows with the square of its speed, and every speed power-up makes it slide noticeably further than the one before: about a third of a tile at the starting speed, over a tile and a half at top speed (below). Asked to go back the way it came, it slides on first (looking the new way, leaning back, kicking up frost) and only walks back once it has stopped. Fast enough, it slides off its tile onto the next, or further.
+
+| Speed power-ups | Speed (tiles a second) | Slides | For |
+|---|---|---|---|
+| 0 | 2.55 | 0.36 of a tile | 0.28 s |
+| 1 | 3.05 | 0.51 | 0.35 s |
+| 2 | 3.55 | 0.70 | 0.40 s |
+| 3 | 4.05 | 0.92 | 0.47 s |
+| 4 | 4.55 | 1.16 | 0.52 s |
+| 5 | 5.05 | 1.43 | 0.58 s |
+| 6 | 5.55 | 1.74 | 0.63 s |
+
+A curse (85% of the starting speed) slides about a quarter of a tile.
 
 - It slides along its lane, so it is always in line with its tiles. A block, a brick or a bomb ahead stops it in the middle of its tile, as walking would.
 - A turn to the side works as on any map: it takes the next opening, with no slide across.
 - Starting off is as quick as anywhere: only stopping and turning back slide.
 - Opening a laptop stops it on the spot.
 
-**Bombs slide.** A thrown bomb lands where it would anywhere, then slides on the way it was thrown, about two tiles. A kicked bomb slides at a kick's speed, but slows as it goes, about nine tiles before it crawls. Slowed to a crawl, a bomb carries on to the middle of the next tile and stops there. Its fuse keeps running while it slides.
+**Bombs slide.** A thrown bomb lands where it would anywhere, then slides on the way it was thrown, about three and a half tiles. A kicked bomb slides at a kick's speed, but slows as it goes, about thirteen tiles before it crawls (more than most arenas are wide, so it usually hits something first). Slowed to a crawl, a bomb carries on to the middle of the next tile and stops there. Its fuse keeps running while it slides.
 
 **Bombs bounce.** A sliding bomb that something stops (a block, a brick, another bomb, a barrel or a robot) bounces back the way it came at half the speed it hit at, if it hit at 0.05 tiles a tick or faster (`ICE_BOUNCE_MIN`: fast enough to go back at least a tile) and the tile behind it is free. Slower than that, it stops in the middle of its tile as anywhere. So a bomb kicked at a wall a few tiles away comes back a tile or two; a thrown one bounces only if it lands right against the wall; a slow one just stops. It never slides onto a robot. A bounce sounds like a bomb landing.
 
 | Constant | Value | Meaning |
 |---|---|---|
-| `ICE_DRAG` | 0.84 | A sliding robot keeps this share of its speed each tick: 0.20 of a tile at the starting speed, 0.47 at top speed |
-| `ICE_STILL` | 0.004 | A robot sliding slower than this, tiles a tick, has stopped |
-| `ICE_LAND_SPEED` | 0.065 | A thrown bomb lands sliding at this speed, tiles a tick (in the air it flies at 0.14) |
-| `ICE_FRICTION` | 0.001 | Speed a sliding bomb loses each tick |
+| `ICE_GRIP` | 0.0024 | Speed a sliding robot loses each tick, tiles a tick: it slides about speed² / (2 × 0.0024), the table above |
+| `ICE_LAND_SPEED` | 0.075 | A thrown bomb lands sliding at this speed, tiles a tick (in the air it flies at 0.14): 3.6 tiles |
+| `ICE_FRICTION` | 0.0007 | Speed a sliding bomb loses each tick: a kick goes 13.6 tiles |
 | `ICE_CRAWL` | 0.025 | Slowed to this, a bomb goes on to the middle of the next tile and stops |
 | `ICE_BOUNCE` | 0.5 | A bomb bounces back at this share of the speed it hit at |
 | `ICE_BOUNCE_MIN` | 0.05 | The least speed a bomb bounces at (`ICE_CRAWL` / `ICE_BOUNCE`) |
 
-The numbers are Claude's, to be play-tested.
+The numbers are Claude's, to be play-tested. They were made more slippery on 26 November 2026 at the owner's ask ("more slippery at normal conditions, and every speed boost you slide even more; the bombs should slide more as well"). At first a robot kept 0.84 of its speed each tick (`ICE_DRAG`, stopping under `ICE_STILL` 0.004): a fifth of a tile at the starting speed and under half a tile at top speed, so a robot let go in the middle of a tile never slid off it; a thrown bomb landed at 0.065 and went about two tiles; bombs lost 0.001 a tick, so a kick went about nine tiles.
 
 ## Winning
 

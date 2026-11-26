@@ -965,7 +965,7 @@ function advance(inputs: (PlayerInput | undefined)[]): void {
   }
   if (!iceTipShown && world.ice && world.tick >= TICK_HZ) {
     iceTipShown = true;
-    showTip('Ice! You slide a little, and bombs slide and bounce');
+    showTip('Ice! You slide, more the faster you go. Bombs slide too');
   }
   if (!trainTipShown && world.events.some((e) => e.type === 'bell')) {
     trainTipShown = true;
@@ -1872,7 +1872,7 @@ function showKey(): void {
   }
   if (world.ice) {
     // Frozen Lake's ice
-    row('Ice', 'Robots slide a little when they stop or turn back. Bombs slide on and bounce off walls.', (g, s) => {
+    row('Ice', 'Robots slide when they stop or turn back, further the faster they go. Bombs slide on and bounce off walls.', (g, s) => {
       drawFloor(g, 1, 0, 0, 0, s, 'ice');
       g.strokeStyle = 'rgba(225,245,255,0.8)';
       g.lineCap = 'round';

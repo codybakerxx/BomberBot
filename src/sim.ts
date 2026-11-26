@@ -156,7 +156,7 @@ export interface Player {
   /**
    * On ice (World.ice): the speed it is still sliding at, tiles a tick, along `slipDir`. While it walks this is
    * how far it went on the last tick; once it lets go, or turns back the way it came, it slides on at this speed,
-   * losing ICE_DRAG of it each tick (`glide`). 0 when it has stopped, and always 0 off the ice.
+   * losing ICE_GRIP of it each tick (`glide`). 0 when it has stopped, and always 0 off the ice.
    */
   slip: number;
   slipDir: Dir;
@@ -396,8 +396,8 @@ export interface World {
   /** barrels of TNT that a blast has reached, about to go off */
   tntLit: LitTnt[];
   /**
-   * The floor is ice (the Frozen Lake map; the owner's design, 25 November 2026): robots slide a little when
-   * they let go or turn back (`glide`), and bombs slide on after landing from a throw, slow down, and bounce back
+   * The floor is ice (the Frozen Lake map; the owner's design, 25 November 2026): robots slide when
+   * they let go or turn back, further the faster they go (`glide`), and bombs slide on after landing from a throw, slow down, and bounce back
    * off what stops them if they hit it fast enough (`slideBomb`).
    */
   ice: boolean;
@@ -529,21 +529,22 @@ export const GHOST_TICKS = 300; // `deadTicks` goes on counting this far (5 s), 
 export const CARRY_FUSE_TICKS = 180; // 3 s from the first pick-up, and it keeps ticking
 export const KICK_SPEED = 0.14; // a kicked bomb slides at 8.4 tiles a second
 
-// ice (the Frozen Lake map, World.ice; the owner's design, 25 November 2026: robots slide a little after they
-// let go or turn back; thrown bombs land and slide on; a sliding bomb that hits something fast bounces back).
-// The numbers are Claude's, to be play-tested.
+// ice (the Frozen Lake map, World.ice; the owner's design, 25 November 2026: robots slide after they let go or
+// turn back, further the faster they go; thrown bombs land and slide on; a sliding bomb that hits something fast
+// bounces back). The numbers are Claude's, to be play-tested.
 /**
- * A robot that lets go, or turns back the way it came, slides on, keeping this share of its speed each tick:
- * about a fifth of a tile at the starting speed (0.2 s before it can walk back), and just under half a tile at
- * top speed (0.3 s), so one that lets go in the middle of a tile never slides off it.
+ * A robot that lets go, or turns back the way it came, slides on, losing this much speed every tick (tiles a
+ * tick, each tick) until it stops. Losing the same each tick, how far it slides grows with the square of its
+ * speed, so every speed power-up makes it slide noticeably further: about a third of a tile at the starting
+ * speed (0.3 s before it can walk back), and 1.7 tiles at top speed (0.65 s). (The owner's ask, 26 November
+ * 2026: more slippery, and more so with every speed power-up. It kept 0.84 of its speed a tick at first, ICE_DRAG,
+ * which was a fifth of a tile at the starting speed and under half a tile at top speed.)
  */
-export const ICE_DRAG = 0.84;
-/** a sliding robot going slower than this, tiles a tick, has stopped */
-export const ICE_STILL = 0.004;
-/** a thrown bomb lands on ice sliding at this speed, tiles a tick (under half its speed in the air): two tiles on */
-export const ICE_LAND_SPEED = 0.065;
-/** a bomb sliding on ice loses this much speed every tick: a kick goes about nine tiles before it crawls */
-export const ICE_FRICTION = 0.001;
+export const ICE_GRIP = 0.0024;
+/** a thrown bomb lands on ice sliding at this speed, tiles a tick (half its speed in the air): about four tiles on (it was 0.065, two tiles) */
+export const ICE_LAND_SPEED = 0.075;
+/** a bomb sliding on ice loses this much speed every tick: a kick goes about thirteen tiles before it crawls (it was 0.001, nine tiles) */
+export const ICE_FRICTION = 0.0007;
 /** slowed to this, tiles a tick, a sliding bomb carries on to the middle of the next tile and stops there */
 export const ICE_CRAWL = 0.025;
 /** a bomb that bounces goes back at this share of the speed it hit at */
@@ -1340,13 +1341,13 @@ function movePlayer(world: World, p: Player, dir: Dir): void {
 
 /**
  * On ice (World.ice): with no direction held, or the way back held, the robot slides on the way it was going,
- * keeping ICE_DRAG of its speed each tick (`slip`), until it is slower than ICE_STILL. A block, brick or bomb
- * ahead stops it in the middle of its tile, as walking would. It slides along the lane it is on, so it is
- * always in line with its tiles. Returns whether it moved.
+ * losing ICE_GRIP of its speed each tick (`slip`), until it stops. A block, brick or bomb ahead stops it in the
+ * middle of its tile, as walking would. It slides along the lane it is on, so it is always in line with its
+ * tiles, from tile to tile if it is going fast enough. Returns whether it moved.
  */
 function glide(world: World, p: Player): boolean {
-  p.slip *= ICE_DRAG;
-  if (p.slip < ICE_STILL) {
+  p.slip -= ICE_GRIP;
+  if (p.slip <= 0) {
     p.slip = 0;
     p.moving = false;
     return false;

@@ -136,7 +136,7 @@ Every extra controller can be another player on the same screen.
 2. Swipe the way you want to go. The robot starts moving.
 3. Keep your thumb down to keep going. You do not have to keep swiping.
 4. To turn, swipe another way from wherever your thumb is now.
-5. Lift your thumb to stop. (On Frozen Lake's ice the robot slides a little first: below, **On ice**.)
+5. Lift your thumb to stop. (On Frozen Lake's ice the robot slides on first, further the faster it is: below, **On ice**.)
 
 "Left, then down" in one continuous movement works: the robot turns when your thumb does.
 
@@ -231,7 +231,7 @@ Between two blocks there is one more rule. A **quick swipe** at a block turns th
 
 ## On ice
 
-On the Frozen Lake map (25 November 2026, the owner's design) the robot slides a little when you lift your thumb: about a fifth of a tile at the starting speed, just under half a tile at top speed, over a fifth to a third of a second. Swipe back the way you came and it slides on first, looking the new way, then walks back. A turn to the side works as on any map, and so does starting off. The pad itself reads swipes exactly as everywhere: only what the robot does with them on ice is different (`iceMove` and `glide` in `sim.ts`, the numbers in GAME-RULES.md › Frozen Lake's ice). How it feels has not been tried on a phone yet: if stopping feels sluggish or slippery, `ICE_DRAG` is the number.
+On the Frozen Lake map (25 November 2026, the owner's design) the robot slides when you lift your thumb, further the faster it is: about a third of a tile at the starting speed, then more with every speed power-up, up to 1.7 tiles at top speed, over a quarter to two thirds of a second (made more slippery on 26 November 2026 at the owner's ask; at first it was a fifth of a tile to under half). To stop on a tile at speed, let go before you reach it. Swipe back the way you came and it slides on first, looking the new way, then walks back. A turn to the side works as on any map, and so does starting off: a short tap at top speed still starts at full speed, so it may carry the robot more than a tile. The pad itself reads swipes exactly as everywhere: only what the robot does with them on ice is different (`iceMove` and `glide` in `sim.ts`, the numbers in GAME-RULES.md › Frozen Lake's ice). How it feels has not been tried on a phone yet: if stopping feels sluggish or slippery, `ICE_GRIP` is the number (bigger stops sooner).
 
 ## Tuning it in the code
 

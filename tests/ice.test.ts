@@ -17,7 +17,7 @@ import {
   SPEED_STEP,
   MAX_SPEED_ITEMS,
   KICK_SPEED,
-  ICE_DRAG,
+  ICE_GRIP,
   ICE_LAND_SPEED,
   ICE_CRAWL,
   ICE_BOUNCE,
@@ -25,12 +25,12 @@ import {
   FLOOR,
   HARD,
 } from '../src/sim';
-import { dangerMap, hasDanger, createBot, botInput, BOT_LEVELS } from '../src/bot';
+import { dangerMap, hasDanger, createBot, botInput, BOT_LEVELS, slideMayReach } from '../src/bot';
 import { MAPS, defaultSetup, worldConfig, mapOf } from '../src/setup';
 import { PROTOCOL, decodeWorld, encodeWorld, worldHash } from '../src/net';
 
 /** An empty arena (no bricks, no timer), 13 by 11 inside its wall: row 1 is open from x 1 to 13. */
-const arena = (ice: boolean): World => createWorld({ seed: 3, players: [{ colorId: 'gold' }, { colorId: 'red' }], softDensity: 0, roundTicks: 0, ice });
+const arena = (ice: boolean, cols?: number): World => createWorld({ seed: 3, cols, players: [{ colorId: 'gold' }, { colorId: 'red' }], softDensity: 0, roundTicks: 0, ice });
 const press = (w: World, inp: Partial<PlayerInput>, n = 1): void => {
   for (let i = 0; i < n; i++) step(w, [{ dir: 0, a: false, b: false, ...inp }]);
 };
@@ -56,7 +56,7 @@ assert.ok(PROTOCOL >= 14, 'online pages from before the ice cannot join a room w
 
 /** Walk right for `n` ticks at `speed` power-ups, then let go: how far it slides, and in how many ticks. */
 function letGo(ice: boolean, speed: number, n = 20): { slid: number; ticks: number; w: World } {
-  const w = arena(ice);
+  const w = arena(ice, 21); // (a long open row: a fast robot slides a good way)
   const p = w.players[0];
   p.speed = speed;
   press(w, { dir: 4 }, n);
@@ -75,15 +75,22 @@ function letGo(ice: boolean, speed: number, n = 20): { slid: number; ticks: numb
 // off the ice it stops where it is let go, as always
 assert.equal(letGo(false, 0).slid, 0, 'off the ice a robot stops where it is let go');
 assert.equal(letGo(false, MAX_SPEED_ITEMS).slid, 0);
-// on ice it slides a little: about a fifth of a tile at the starting speed, under half a tile at top speed
+// on ice it slides: about a third of a tile at the starting speed, and further with every speed power-up, each
+// one adding more than the last (it loses the same speed each tick, so the slide grows with the square of the
+// speed): about 1.7 tiles at top speed
 {
-  const slow = letGo(true, 0);
-  const fast = letGo(true, MAX_SPEED_ITEMS);
-  const glide = (v: number): number => (v * ICE_DRAG) / (1 - ICE_DRAG);
-  assert.ok(slow.slid > 0.15 && slow.slid <= glide(BASE_SPEED) + 1e-9, `slides a little at the starting speed (${slow.slid.toFixed(3)} tiles)`);
-  assert.ok(fast.slid > slow.slid && fast.slid < 0.5, `further at top speed, but under half a tile (${fast.slid.toFixed(3)})`);
-  assert.ok(glide(BASE_SPEED + SPEED_STEP * MAX_SPEED_ITEMS) < 0.5, 'so a robot let go in the middle of a tile never slides off it');
-  assert.ok(slow.ticks > 6 && fast.ticks < 25, `and stops within a few tenths of a second (${slow.ticks}, ${fast.ticks} ticks)`);
+  const slides = Array.from({ length: MAX_SPEED_ITEMS + 1 }, (_, k) => letGo(true, k));
+  const slow = slides[0];
+  const fast = slides[MAX_SPEED_ITEMS];
+  assert.ok(slow.slid > 0.3 && slow.slid < 0.45, `about a third of a tile at the starting speed (${slow.slid.toFixed(3)} tiles)`);
+  assert.ok(fast.slid > 1.5 && fast.slid < 2, `about 1.7 tiles at top speed (${fast.slid.toFixed(3)})`);
+  for (let k = 1; k < slides.length; k++) {
+    assert.ok(slides[k].slid > slides[k - 1].slid, `each speed power-up slides further (${k})`);
+    if (k > 1) assert.ok(slides[k].slid - slides[k - 1].slid > slides[k - 1].slid - slides[k - 2].slid, `and by more than the one before (${k})`);
+  }
+  const v = BASE_SPEED + SPEED_STEP * MAX_SPEED_ITEMS;
+  assert.ok(Math.abs(fast.slid - (v * v) / (2 * ICE_GRIP)) < 0.1, 'the square of the speed, over twice the grip');
+  assert.ok(slow.ticks > 12 && fast.ticks < 45, `and stops within two thirds of a second (${slow.ticks}, ${fast.ticks} ticks)`);
   assert.ok(!slow.w.players[0].skid && slow.w.players[0].slip === 0, 'then it has stopped');
 }
 
@@ -101,7 +108,7 @@ assert.equal(letGo(false, MAX_SPEED_ITEMS).slid, 0);
     press(w, { dir: 3 });
     ticks++;
   }
-  assert.ok(ticks > 10 && ticks < 40, `then walks back, a moment later (${ticks} ticks)`);
+  assert.ok(ticks > 15 && ticks < 45, `then walks back, a moment later (${ticks} ticks)`);
   // off the ice it turns back at once
   const o = arena(false);
   press(o, { dir: 4 }, 30);
@@ -180,13 +187,13 @@ function follow(w: World, b: Bomb): { x: number; bounces: number; landed: number
   assert.equal(r.landed, 4);
   assert.equal(r.x, 4, 'off the ice it lies where it lands');
 }
-// on ice it lands and slides on, about two tiles, and stops in the middle of a tile
+// on ice it lands and slides on, about four tiles, and stops in the middle of a tile
 {
   const w = arena(true);
   const b = throwFrom(w, 1);
   const r = follow(w, b);
   assert.equal(r.landed, 4, 'it lands where it would anywhere');
-  assert.ok(r.x >= 5 && r.x <= 7, `then slides on (to ${r.x})`);
+  assert.ok(r.x >= 7 && r.x <= 9, `then slides on (to ${r.x})`);
   assert.equal(r.x, Math.round(r.x), 'and stops in the middle of a tile');
   assert.equal(r.bounces, 0);
   assert.equal(b.slide, 0);
@@ -295,6 +302,19 @@ function kick(ice: boolean, from: number): { b: Bomb; w: World } {
   while (cb.slide) step(copy, [undefined, undefined]);
   assert.ok(cb.x < 13);
   assert.ok(hasDanger(D, cb.cy * w.w + cb.cx), 'the CPU players know where it bounces back to');
+}
+
+{
+  // a CPU player does not drop a bomb behind one sliding away from it: a robot stepping into its way stops it or
+  // bounces it back, and it may go off near enough to set the new one off
+  const w = arena(true);
+  w.bombs.push({ id: 60, owner: 0, x: 3, y: 1, cx: 3, cy: 1, fuse: 35, range: 5, age: 0, state: 'ground', slide: 4, speed: KICK_SPEED, heldBy: -1, lifted: false, fromX: 0, fromY: 0, flyDir: 0, flyDist: 0, flyT: 0 });
+  const b = w.bombs[0];
+  const alone = { ...b };
+  for (let t = 0; t < b.fuse && alone.slide; t++) slideBomb(alone, true, (x, y) => w.tiles[y * w.w + x] === FLOOR);
+  assert.ok(alone.cx - 1 > b.range, `left to itself it goes off out of reach of a bomb dropped behind it (${alone.cx})`);
+  assert.ok(slideMayReach(w, b, 1, 1), 'but a robot in its way could send it back into reach');
+  assert.ok(!slideMayReach(w, b, 2, 3), 'a tile no end of it lines up with is not');
 }
 
 // every level, alone on ice in a full arena of bricks for two minutes, never blasts itself; with a player who

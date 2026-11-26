@@ -101,9 +101,18 @@ export function playMatch(seed: number, levels: (BotLevel | null)[], maxTicks: n
     for (let i = 0; i < bots.length; i++) inputs[i] = bots[i] ? botInput(world, bots[i]!) : undefined;
     const before = world.bombs.map((b) => ({ id: b.id, owner: b.owner, cx: b.cx, cy: b.cy, range: b.range, ground: b.state === 'ground', fuse: b.fuse }));
     // bombs in the air after a throw, and where they are coming down (a bounce carries one on a tile later)
+    // (where it comes down: its distance, or bouncing on a tile at a time while that tile is a block or has a bomb,
+    // as moveBombs does; it was taken at its distance alone, so one bouncing on over bricks was looked for short)
+    const downAt = (b: (typeof world.bombs)[number]): { cx: number; cy: number } => {
+      for (let dist = b.flyDist; ; dist++) {
+        const cx = wrap(b.fromX + DX[b.flyDir] * dist, world.w);
+        const cy = wrap(b.fromY + DY[b.flyDir] * dist, world.h);
+        if (dist > b.flyDist + world.w + world.h || (tileAt(world, cx, cy) === FLOOR && !world.bombs.some((o) => o.state === 'ground' && o.cx === cx && o.cy === cy))) return { cx, cy };
+      }
+    };
     const flying = world.bombs
       .filter((b) => b.state === 'air')
-      .map((b) => ({ id: b.id, owner: b.owner, range: b.range, cx: wrap(b.fromX + DX[b.flyDir] * b.flyDist, world.w), cy: wrap(b.fromY + DY[b.flyDir] * b.flyDist, world.h) }));
+      .map((b) => ({ id: b.id, owner: b.owner, range: b.range, ...downAt(b) }));
     // bombs falling from planes that land on this tick blast like a bomb going off (not on a brick: it only
     // burns), decided by whoever let them go, on the tick they did (ids below 0: they are not in world.bombs)
     const landing = world.drops
@@ -278,7 +287,8 @@ type Threat = { owner: number; cx: number; cy: number; range: number; since: num
  * set off (`tnt`), its own blast reaches as far as that barrel's fire, and the
  * bomb that caught it is the one of its own that went off last; and a train
  * whose warning started after that bomb was dropped (`train`) shuts its line
- * as a rival's blast would.
+ * as a rival's blast would. The search starts both where it was caught and
+ * where it dropped that bomb (on ice it may have slid on since).
  */
 function shutIn(world: World, bombs: Seen[], who: number, px: number, py: number, droppedOn: (id: number) => number, restingSince: (id: number) => number, landedOn: (tile: number) => number, threats: Threat[] = [], tnt?: { tiles: Set<number>; since: number }, train?: { tiles: Set<number>; since: number }): boolean {
   const mine = bombs.filter((b) => b.owner === who && b.ground);
@@ -301,8 +311,10 @@ function shutIn(world: World, bombs: Seen[], who: number, px: number, py: number
   const trainLine = train && train.since >= droppedOn(since) ? train.tiles : null;
   if (!rivals.length && !trainLine) return false;
   const bombAt = (x: number, y: number): Seen | undefined => bombs.find((b) => b.ground && b.cx === x && b.cy === y);
-  const seen = new Set<number>([py * world.w + px]);
-  let edge: [number, number][] = [[px, py]];
+  // from where it was caught, and from where it stood when it dropped that bomb: on ice a robot that finds
+  // its way shut slides on, and may come to rest in a dead end behind its own bomb
+  let edge: [number, number][] = [[px, py], ...mine.filter((b) => caughtBy.includes(b.id)).map((b): [number, number] => [b.cx, b.cy])];
+  const seen = new Set<number>(edge.map(([x, y]) => y * world.w + x));
   for (let depth = 0; depth <= 6 && edge.length; depth++) {
     const next: [number, number][] = [];
     for (const [x, y] of edge) {

@@ -95,7 +95,7 @@ Pure logic like the rules. Given the world, `botInput(world, bot)` returns one `
 | `createBot(id, level, seed)` | Makes the memory for one CPU player |
 | `botInput(world, bot)` | What it presses this tick. Calls `flee` if its tile is going to be blasted, otherwise `calm`. |
 | `dangerMap` | For every tile, when a blast will be on it: chain reactions, bricks that will be gone, sliding and thrown bombs (a sliding bomb's way, `path` from `foresee`/`slid`, so a blast that catches it on the way sets it off where it is then) |
-| `steer`, `stepTimes`, `glideEnd`, `lastDitch`, `scriptOk` | On ice: letting go early so the slide ends in the middle of a tile, turning back costing a slide, and, boxed in or in the middle of a kick or throw that no longer works, playing the nearest ways out forward on a copy of the world |
+| `steer`, `coastTo`, `legOk`, `stepTimes`, `glideEnd`, `slideMayReach`, `lastDitch`, `scriptOk` | On ice: letting go early so the slide ends in the middle of a tile, the end of a way played as it really goes (walking, letting go, sliding on), turning back costing a slide, no bomb dropped where a sliding bomb a robot stopped could set it off, and, boxed in or in the middle of a kick or throw that no longer works, playing the nearest ways out forward on a copy of the world |
 | `explore`, `pathTo`, `escapeTargets` | Where it can walk and how soon, never on a tile while it burns |
 | `decide`, `chooseGoal` | Bomb a player, or pick a power-up, bricks or a player to walk to |
 | `placeBomb` | The three checks before pressing A: a way out, nobody able to shut it, and the move played forward on a copy |
