@@ -88,7 +88,7 @@ Beginner has one weakness left in on purpose. Because it only steps aside from t
 
 The Wild West's railway and TNT (25 November 2026; docs/GAME-RULES.md › The Wild West's railway and TNT) go into the same danger map:
 
-- **A train** is a blast along its line, each tile from just before the train gets there until just after it has gone, a little wider at both ends for a robot walking across. They know of it once its warning starts, as a person does: Hard and Normal at once, give or take their `notice`, a slow level up to two thirds of a second later (`TRAIN_NOTICE`). Never before, not even in a try-out on a copy of the world (`seenCopy` leaves a train whose warning has not started in its tunnel). A robot on its line when the warning starts runs off it like a robot on a bomb's line. They know it sets off a bomb on its line the moment it reaches it.
+- **A train** is a blast along its line, each tile from just before the train gets there until just after it has gone, a little wider at both ends for a robot walking across. They know of it once its warning starts, as a person does: Hard and Normal at once, give or take their `notice`, a slow level up to two thirds of a second later (`TRAIN_NOTICE`). Never before, not even in a try-out on a copy of the world (`seenCopy` leaves a train whose warning has not started in its tunnel). A robot on its line when the warning starts runs off it like a robot on a bomb's line. They know it sets off a bomb on its line the moment it reaches it, and smashes the bricks on it (since the same evening, when bricks were let onto the lines).
 - **A barrel of TNT** is a block they walk round. A blast that will reach one (their own bomb's, or anyone's) lights it in the danger map, and the barrel's blast is added: every way until a wall, a solid block or a brick, setting off the bombs and barrels it reaches. A bomb's worth, when they choose where to drop one, does not count what a barrel would do (they do not set barrels off on purpose), but the safety checks do.
 - The first try had a robot touched by the train within 0.7 of a tile of its line: Beginners resting at the edge of a tile beside a line were run over by the dozen (19 of 48 in twelve rounds), since they counted as standing beside it. The rule is now the same as for a blast: the tile a robot counts as standing on.
 
@@ -194,9 +194,9 @@ A round has no end of its own: the timer runs 1 minute 30, the blocks take 50 se
 |---|---|---|---|---|---|---|---|---|---|
 | Beginner | 0.0% | 0.4% | 42.9% | 0.8% | 0.8% | 1.7% | 0 of 60 | 56 of 60 | 91 s |
 | Normal | 0.0% | 27.9% | 42.1% | 1.3% | 3.3% | 23.8% | 1 of 60 | 2 of 60 | 154 s |
-| Hard | 0.0% | 26.3% | 45.8% | 0.0% | 0.0% | 22.1% | 0 of 60 | 7 of 60 | 133 s |
+| Hard | 0.0% | 27.5% | 45.0% | 0.4% | 0.4% | 22.5% | 1 of 60 | 5 of 60 | 144 s |
 
-(25 November 2026, after try-outs stopped counting on the shield: the Beginner and Normal rows came out the same as the day before to the last figure, and Hard within noise; it was 25.0%, 47.9%, 22.9% won, 5 of 60.)
+(25 November 2026, the evening, after try-outs stopped counting on the shield and a thrown bomb's landing counts one landing ahead of it: the Beginner and Normal rows came out the same as the day before to the last figure, and Hard within noise; it was 25.0%, 47.9%, 22.9% won, 5 of 60.)
 
 - "Shut in by a rival" and "blasted itself" are both a bot caught by its own blast. The script calls it "shut in by a rival" when, within six steps of where the bot stood, there was a tile its own bombs would not have reached that was blocked or about to be blasted by a bomb a rival dropped *after* the bomb that caught it. It looks at the arena as it was when that bomb was dropped, so a tile a block has landed on since still counts as a way out it had. A rival's bomb dropped on the very same tick counts too, and so does one a rival threw or kicked that came to rest on the way out afterwards, a rival's bomb let go from a plane (from the moment it was let go), and a rival's bomb a falling block took away after the bot dropped its own. It is also "shut in by a rival" when the bot's own bomb went off early because a rival's bomb (one from a plane too) set it off, and that rival's bomb was dropped, kicked, thrown or let go after the bot dropped its own, including when the bot's shield took a first blast and its own bomb's blast caught it half a second later. Anything else is "blasted itself".
 - With the laptop in every arena (18 November 2026) the columns moved little: the CPU players fly it now and then, and a plane's bombs add to what catches them. The slower plane with 16 s flights (19 November 2026) moved them little again, and so did power-ups at 60% of bricks rather than 61.25% (the same day), and bricks on 80% of the open floor rather than 78% (the same day: the table above; the arenas differ each time).
@@ -213,22 +213,22 @@ A round has no end of its own: the timer runs 1 minute 30, the blocks take 50 se
 
 | Level | Won | Blasted | Under a block, early | Blasted itself | Rivals it blasted |
 |---|---|---|---|---|---|
-| Beginner | 0.6% | 90.6% | 2.2% | 0.0% | 1 |
-| Normal | 14.4% | 80.6% | 0.6% | 0.0% | 27 |
-| Hard | 75.0% | 20.0% | 0.0% | 0.0% | 246 |
+| Beginner | 0.0% | 93.3% | 0.6% | 0.0% | 1 |
+| Normal | 16.1% | 80.0% | 0.6% | 0.0% | 27 |
+| Hard | 75.0% | 19.4% | 0.0% | 0.0% | 256 |
 
-4 of 180 drawn, 14 left undecided (25 November 2026, try-outs no longer counting on the shield: within noise of the day before, 73.9% for Hard; 24 November 2026, the plane faster and turning tighter: Hard 77.2% the day before; 23 November 2026, Hard made more aggressive: it wins 77% of these rounds, was 39%; the run before gave 8 drawn, 39 undecided; 20 November 2026, the 9 by 7 on Standard: the bigger square leaves many more rounds going; with the 7 by 5 the same morning's arenas gave 6 drawn, 6 undecided; 19 November 2026, bricks at 80%: Normal won 35.6% and Hard 60.6% with bricks at 78% the same day, nothing in the CPU players changed between the two: a different set of arenas swings this table that much; with power-ups at 60%: 1 drawn, 3 undecided; with the slower plane just before: 3 and 4; with the first plane: 7 and 3; before the laptop: 4 and 5; with the 5 by 5 and the 2.5 s fuse: 5 drawn, 2 undecided) (it was 27 before they pressed in the square). The levels are well apart: each wins far more and blasts far more rivals than the one below.
+3 of 180 drawn, 13 left undecided (25 November 2026, the evening, as above: within noise of the day before, 73.9% for Hard; 24 November 2026, the plane faster and turning tighter: Hard 77.2% the day before; 23 November 2026, Hard made more aggressive: it wins 77% of these rounds, was 39%; the run before gave 8 drawn, 39 undecided; 20 November 2026, the 9 by 7 on Standard: the bigger square leaves many more rounds going; with the 7 by 5 the same morning's arenas gave 6 drawn, 6 undecided; 19 November 2026, bricks at 80%: Normal won 35.6% and Hard 60.6% with bricks at 78% the same day, nothing in the CPU players changed between the two: a different set of arenas swings this table that much; with power-ups at 60%: 1 drawn, 3 undecided; with the slower plane just before: 3 and 4; with the first plane: 7 and 3; before the laptop: 4 and 5; with the 5 by 5 and the 2.5 s fuse: 5 drawn, 2 undecided) (it was 27 before they pressed in the square). The levels are well apart: each wins far more and blasts far more rivals than the one below.
 
 **One against one** (`cpu-matches.ts duel`, 60 rounds each, the two taking each corner in turn, the whole round with the timer and the falling blocks; the last columns are what the first-named player did with its kit, a round on average):
 
 | Pairing | Won | Lost | Won by a blast | Before 0:00 | Time to win | Drawn | Not decided | Blasted itself | Bombs | Most out at once | Kicks | Throws | Flights |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| Hard v Beginner | 59 | 1 | 59 | 52 | 66 s | 0 | 0 | 0 | 40 | 5.3 | 0.5 | 10.8 | 0.5 |
-| Hard v Normal | 47 | 12 | 39 | 20 | 92 s | 1 | 0 | 0 | 66 | 5.3 | 1.9 | 30.6 | 0.5 |
-| Hard v Hard | 30 | 27 | 22 | 5 | 109 s | 3 | 0 | 0 | 70 | 4.9 | 2.5 | 37.1 | 0.5 |
+| Hard v Beginner | 59 | 1 | 59 | 52 | 65 s | 0 | 0 | 0 | 39 | 5.4 | 0.5 | 9.9 | 0.5 |
+| Hard v Normal | 45 | 11 | 38 | 21 | 92 s | 4 | 0 | 0 | 65 | 5.1 | 2.1 | 29.9 | 0.5 |
+| Hard v Hard | 33 | 26 | 24 | 9 | 101 s | 1 | 0 | 0 | 57 | 4.8 | 2.1 | 26.6 | 0.4 |
 | Normal v Beginner | 42 | 4 | 39 | 9 | 129 s | 0 | 14 | 0 | 64 | 3.2 | 0.1 | 0 | 0.7 |
 
-(25 November 2026, try-outs no longer counting on the shield; within noise of 24 November, when the plane was made faster and turning tighter: Hard v Normal 49 won, 10 lost; Hard v Hard 33 and 25.)
+(25 November 2026, the evening, as above; within noise of 24 November, when the plane was made faster and turning tighter: Hard v Normal 49 won, 10 lost; Hard v Hard 33 and 25.)
 
 Before Hard was made more aggressive (23 November 2026, 40 rounds each): Hard v Beginner won 23 of 40, 7 before 0:00, in 125 s on average, 17 still going 2 minutes after the blocks stopped, and it never kicked or threw; Hard v Normal won 23 and lost 11. A kick is rarer than a throw: it needs the boot and a lane, the glove only a rival three tiles off.
 
@@ -238,9 +238,9 @@ Before Hard was made more aggressive (23 November 2026, 40 rounds each): Hard v 
 |---|---|---|---|---|---|---|
 | Beginner | 34 of 80 | 119 s | 1 of 80 | 2 of 80 | 75 of 80 | 0 |
 | Normal | 62 of 80 | 115 s | 5 of 80 | 2 of 80 | 12 of 80 | 0 |
-| Hard | 80 of 80 | 45 s | 0 of 80 | 0 of 80 | 2 of 80 | 0 |
+| Hard | 80 of 80 | 50 s | 0 of 80 | 0 of 80 | 4 of 80 | 0 |
 
-(25 November 2026; the day before, with the plane faster and turning tighter, the same but 3 of 80 not decided for Hard.)
+(25 November 2026, the evening; the day before, with the plane faster and turning tighter, 45 s and 3 of 80 not decided for Hard.)
 
 (23 November 2026, Hard made more aggressive: three Hards got the player every time, in 50 s on average; they took 100 s and missed 15 of 80 before.)
 
@@ -268,18 +268,18 @@ This table is noisy, and the stand-in is not a person. Read it loosely.
 
 Most of that time is spent digging through bricks from one corner to the other. With the laptop (19 November 2026, the slower plane and power-ups at 60%; before the laptop: 12 of 40 in 156 s, 133 s, 113 s) it is quicker: a CPU player that finds the laptop can fly over the bricks to a player who stands still. It takes longer than it did, because a blast now starts one tile long. Beginner's figures moved since the last run (11 of 40, then 17) although Beginner was not changed: the arenas are different, because the power-up chances have changed (this run has no timer, so the 7 by 5 plays no part in it).
 
-**On the Wild West** (25 November 2026, `WEST=1` in front of each run: the railway's trains and the TNT in every arena, Standard size, otherwise as above):
+**On the Wild West** (25 November 2026, the evening, `WEST=1` in front of each run: the railway with bricks on it, a train every 8 to 12 s and the TNT in every arena, Standard size, otherwise as above):
 
 | Run | Blasted itself | What else |
 |---|---|---|
-| Four of the same level | 0 for every level | Beginner 42.5% caught in a rival's blast, 50 of 60 not decided; Normal 33.3% shut in by a rival, 39.2% caught; Hard 25.4% and 45.8%, 10 of 60 not decided. 3 robots of 720 hit by a train |
-| One of each level | 0 for every level | Hard won 70.6%, Normal 15.0%, Beginner 1.7%; 2 drawn, 21 of 180 undecided |
-| Against the stand-in | 0 | Three Hards got it 79 of 80 times, in 42 s; Normals 64, Beginners 36. 1 robot hit by a train |
+| Four of the same level | 0 for every level | Beginner 41.7% caught in a rival's blast, 50 of 60 not decided; Normal 32.5% shut in by a rival, 38.8% caught; Hard 18.3% and 54.2%, 3 of 60 not decided |
+| One of each level | 0 for every level | Hard won 81.7%, Normal 14.4%, Beginner 0.6%; none drawn, 6 of 180 undecided. 8 robots hit by a train over these two runs |
+| Against the stand-in | 0 | Three Hards got it 80 of 80 times, in 47 s; Normals 62, Beginners 31. 1 robot hit by a train |
 | Alone among bricks | 0 | All three levels in the square at the end, 40 of 40 |
-| Alone with a still player | 0 | Got it: Beginner 39, Normal 40, Hard 40 of 40, in 111, 71 and 25 s (the railway's open lines make the way to it shorter) |
-| One against one | 0 | Hard beat Beginner 53 to 0 (6 not decided), Normal 45 to 14, Hard v Hard 30 to 28; Normal beat Beginner 42 to 4. 1 robot hit by a train |
+| Alone with a still player | 0 | Got it: Beginner 33, Normal 39, Hard 40 of 40, in 84, 57 and 32 s. 1 robot hit by a train |
+| One against one | 0 | Hard beat Beginner 58 to 2, Normal 53 to 7, Hard v Hard 35 to 23; Normal beat Beginner 39 to 4. 8 robots hit by a train |
 
-A train hits a CPU player now and then: 5 robots in all of these runs together (not replayed to see why).
+A train hits a CPU player now and then: 18 robots in all of these runs together, a few hundred rounds (not replayed to see why).
 
 ### What the replays have caught
 
@@ -305,6 +305,7 @@ The "blasted itself" column is only worth anything because every case that lands
 - **A throw still in the air (19 November 2026, bricks at 80%).** The run against the stand-in put one Hard bot under "blasted itself" (seed 35, the stand-in in seat 3, player 1, 221 s in, in the 7 by 5). Replayed: it dropped a bomb in a dead end at the top right of the 7 by 5 with a clear way out down its column; two ticks later a rival Hard with the glove threw a bomb along the row, coming down (after bouncing off the bot's other bomb) on the very tile of its way out. The bot saw it coming, had no other way, and stood still (`trapped`) until its own earlier bomb went off. The script only counted rival bombs lying on the ground; it now counts a rival's bomb in the air, thrown after the bot dropped its own, as shutting the tile it is coming down on (`flying`, `thrownOn`, `lands` in `shutIn`). The bot's own doing it was not.
 
 - **The Wild West (25 November 2026).** The first runs with the railway and TNT put three bots under "blasted itself". Replayed: (1) four Normals, seed 60: a Normal set off a barrel of TNT with its own bomb, ran up the barrel's column to get clear, and a rival dropped a bomb on the one way off the column; the script measured where its own blast reached from its bomb alone, so it could not see the rival had shut it in. It now counts a barrel the bot's own bomb set off as part of its own blast (`tnt` in `shutIn`, `lastOff` in `playMatch`): shut in by a rival. (2) Hard v Hard, seed 44: a rival kicked a bomb onto a line as the train passed, the train set it off at once, and its blast set off the Hard's own bomb early, with the Hard still in line. The script looked for what set the bomb off where the rival's bomb had been at the start of the tick, a tile short of where the train caught it; it now takes the place it went off (`where` in `playMatch`). And the CPU players now know a train sets off a bomb on its line (`dangerMap`). (3) Hard v Normal, seed 32: a real fault. A Hard kicked its own bomb at a rival, then dropped two more on the run; played forward on a copy, the move only worked because its shield would take the first blast, and the try-out counted that as surviving. Against the documented rule (they do not take risks because they hold a shield), so a try-out that needs the shield now fails (`playOut`). All three gone; every run on both maps reads 0.
+- **The Wild West packed with bricks (25 November 2026, the evening).** With bricks on the railway and trains every 8 to 12 s, three more turned up. (1) The `solo` and `alone` runs counted any robot out as "blasted itself", a train included; they now leave trains out (counted at the end). (2) Four Hards, seed 12: a Hard threw two bombs one after the other along the same row; the first landed where the second was headed, so the second bounced on two tiles further, onto the end of a rival's way out. That rival had worked out where the second would land from the bombs on the ground alone, so it thought the far end safe. A real fault, and not the Wild West's: where a thrown bomb lands now counts another bomb in the air that will land first (`landing` in `foresee`). (3) One of each level, seed 13: a Hard's way out of its own bombs was a pocket of the railway between crates; the train's warning started after it had dropped them, and the pocket became the train's path. The script now counts a train whose warning came after the bomb as shutting the line, like a rival's bomb dropped since (`train` in `shutIn`).
 
 One weakness the replays showed and that is still there: a CPU player with no safe route left stands still. Trying anyway would sometimes save it, and that is not built.
 

@@ -374,6 +374,19 @@ function tileOf(world: World, p: { x: number; y: number }): number {
 }
 
 /** Is a bomb sitting on this tile? */
+/** Where and when a bomb in the air comes down (moveBombs in sim.ts): at its distance, or bouncing on over each tile that is taken (`taken`: besides a block or a bomb on the ground). */
+function landing(world: World, b: Bomb, taken: (x: number, y: number, t: number) => boolean): { cx: number; cy: number; landT: number } {
+  let dist = b.flyDist;
+  let lx = 0;
+  let ly = 0;
+  for (let guard = 0; guard < world.w + world.h + 4; guard++, dist++) {
+    lx = wrap(b.fromX + DX[b.flyDir] * dist, world.w);
+    ly = wrap(b.fromY + DY[b.flyDir] * dist, world.h);
+    if (tile(world, lx, ly) === FLOOR && !groundBombAt(world, lx, ly) && !taken(lx, ly, dist * FLY_TICKS_PER_TILE - b.flyT)) break;
+  }
+  return { cx: lx, cy: ly, landT: Math.max(1, dist * FLY_TICKS_PER_TILE - b.flyT) };
+}
+
 function groundBombAt(world: World, cx: number, cy: number): Bomb | undefined {
   for (const b of world.bombs) if (b.state === 'ground' && b.cx === cx && b.cy === cy) return b;
   return undefined;
@@ -391,17 +404,13 @@ function foresee(world: World, b: Bomb): { cx: number; cy: number; t: number; la
     return { cx: p ? Math.round(p.x) : b.cx, cy: p ? Math.round(p.y) : b.cy, t: Math.max(1, b.fuse), landT: 0 };
   }
   if (b.state === 'air') {
-    // the same rule as moveBombs in sim.ts: land at flyDist, bouncing on while the tile is taken
-    let dist = b.flyDist;
-    let lx = 0;
-    let ly = 0;
-    for (let guard = 0; guard < world.w + world.h + 4; guard++, dist++) {
-      lx = wrap(b.fromX + DX[b.flyDir] * dist, world.w);
-      ly = wrap(b.fromY + DY[b.flyDir] * dist, world.h);
-      if (tile(world, lx, ly) === FLOOR && !groundBombAt(world, lx, ly)) break;
-    }
-    const landT = Math.max(1, dist * FLY_TICKS_PER_TILE - b.flyT);
-    return { cx: lx, cy: ly, t: Math.max(b.fuse, landT + 1), landT };
+    // the same rule as moveBombs in sim.ts: land at flyDist, bouncing on while the tile is taken, by a bomb
+    // on the ground or by another bomb in the air that will have landed there first (two thrown one after
+    // the other along the same line: the second bounces over the first)
+    const first = (o: Bomb): { cx: number; cy: number; landT: number } => landing(world, o, () => false);
+    const others = world.bombs.filter((o) => o !== b && o.state === 'air').map(first);
+    const at = landing(world, b, (x, y, t) => others.some((o) => o.cx === x && o.cy === y && o.landT < t));
+    return { cx: at.cx, cy: at.cy, t: Math.max(b.fuse, at.landT + 1), landT: at.landT };
   }
   if (b.slide) {
     // a kicked bomb: follow its slide until it stops or its fuse runs out
@@ -565,7 +574,13 @@ export function dangerMap(world: World, viewer: Player | null, notice: number, e
       const b = a + (2 * reach + TRAIN_LENGTH) / TRAIN_SPEED;
       const to = tr.enterAt - world.tick + Math.ceil(b) + TRAIN_LEAD;
       if (to <= 0) continue;
-      add(r.dir === 'h' ? r.at * world.w + k : k * world.w + r.at, Math.max(0, tr.enterAt - world.tick + Math.floor(a) - TRAIN_LEAD), to);
+      const idx = r.dir === 'h' ? r.at * world.w + k : k * world.w + r.at;
+      add(idx, Math.max(0, tr.enterAt - world.tick + Math.floor(a) - TRAIN_LEAD), to);
+      // a brick on the line: smashed as the train gets to it
+      if (world.tiles[idx] === SOFT && !gone.has(idx)) {
+        const at = tr.enterAt - world.tick + Math.ceil((tr.dir > 0 ? k - 1 : len - k) / TRAIN_SPEED);
+        if (at >= 0) gone.set(idx, at + FLAME_TICKS);
+      }
     }
   }
 

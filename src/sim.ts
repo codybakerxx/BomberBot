@@ -560,8 +560,8 @@ export const TRAIN_COUPLING = 0.125; // the gap between two cars
 export const TRAIN_LENGTH = TRAIN_CARS.reduce((n, c) => n + c, 0) + TRAIN_COUPLING * (TRAIN_CARS.length - 1); // 6.69 tiles
 export const TRAIN_WARN_TICKS = 150; // the lights, the bell and the gates start 2.5 s before the engine comes out of its tunnel
 export const TRAIN_WHISTLE_TICKS = 45; // and it whistles 0.75 s before
-export const TRAIN_FIRST = [8 * TICK_HZ, 14 * TICK_HZ]; // the first warning comes 8 to 14 s into the round
-export const TRAIN_GAP = [12 * TICK_HZ, 18 * TICK_HZ]; // and the next 12 to 18 s after the one before (about every 15 s, the owner's ask)
+export const TRAIN_FIRST = [6 * TICK_HZ, 10 * TICK_HZ]; // the first warning comes 6 to 10 s into the round
+export const TRAIN_GAP = [8 * TICK_HZ, 12 * TICK_HZ]; // and the next 8 to 12 s after the one before (about every 10 s, the owner's ask of 25 November 2026 evening: it was 12 to 18, about every 15)
 export const TRAIN_NOSE = 0.3; // a robot counting as on the line's tile is hit once the train is within this of it along the line
 export const GATE_TICKS = 30; // the gates take half a second to come down, and go up again this long after the train has gone
 export const BELL_TICKS = 30; // the bell rings twice a second while the lights flash
@@ -699,9 +699,9 @@ export function createWorld(cfg: WorldConfig): World {
     safe.add(s.y * w + s.x);
     for (let d = 1; d <= 4; d++) safe.add((s.y + DY[d]) * w + (s.x + DX[d]));
   }
-  // the railway runs over open ground: no bricks on it
+  // the railway: bricks lie on it as anywhere else (the owner's ask, 25 November 2026: it was kept clear, and the
+  // map had a third fewer bricks than Midnight); a train smashes those on its line (`runTrain`)
   const rails = cfg.rails ? railLines(w, h) : [];
-  for (let y = 1; y < h - 1; y++) for (let x = 1; x < w - 1; x++) if (onRail({ w, h, rails }, x, y)) safe.add(y * w + x);
 
   const hidden = new Map<number, ItemKind>();
   const chances = cfg.itemChance ?? ITEM_CHANCE;
@@ -736,12 +736,17 @@ export function createWorld(cfg: WorldConfig): World {
     if (empty.length) hidden.set(empty[Math.floor(rng() * empty.length)], kind);
   }
   // barrels of TNT in place of one brick in ten, picked at random from the bricks that hide nothing (and only
-  // if there are not enough of those, from the others, whose power-up is then lost)
+  // if there are not enough of those, from the others, whose power-up is then lost); never on the railway
   if (cfg.tnt) {
     const plain: number[] = [];
     const filled: number[] = [];
-    for (let i = 0; i < tiles.length; i++) if (tiles[i] === SOFT) (hidden.has(i) ? filled : plain).push(i);
-    const n = Math.round((plain.length + filled.length) * TNT_SHARE);
+    let bricks = 0;
+    for (let i = 0; i < tiles.length; i++) {
+      if (tiles[i] !== SOFT) continue;
+      bricks++;
+      if (!onRail({ w, h, rails }, i % w, Math.floor(i / w))) (hidden.has(i) ? filled : plain).push(i);
+    }
+    const n = Math.min(plain.length + filled.length, Math.round(bricks * TNT_SHARE));
     for (let k = 0; k < n; k++) {
       const from = plain.length ? plain : filled;
       const i = from.splice(Math.floor(rng() * from.length), 1)[0];
@@ -891,8 +896,8 @@ export function trainSpan(world: World, tr: Train, t: number): [number, number] 
  * every robot it touches: one that counts as standing on a tile of its line (the tile it is drawn ringed on, as
  * for a blast) once the train's front or back is within TRAIN_NOSE of it. Shield or not, like a falling block;
  * not the winner once the round is decided. It sets
- * off the bombs on the line as it reaches them and sweeps the power-ups off it. Once its gates are up the next
- * train is set, 12 to 18 s after this one's warning. Once the round is decided a train still in its tunnel
+ * off the bombs on the line as it reaches them and smashes the bricks on it. Once its gates are up the next
+ * train is set, 8 to 12 s after this one's warning. Once the round is decided a train still in its tunnel
  * stays there, and none comes after it.
  */
 function runTrain(world: World): void {
@@ -924,7 +929,18 @@ function runTrain(world: World): void {
     return (r.dir === 'h' ? cy : cx) === r.at && along > back - 0.5 && along < front + 0.5;
   };
   for (const b of world.bombs) if (b.state === 'ground' && hit(b.cx, b.cy)) b.fuse = Math.min(b.fuse, 1);
-  if (world.items.some((it) => hit(it.cx, it.cy))) world.items = world.items.filter((it) => !hit(it.cx, it.cy));
+  // bricks on its line are smashed as it reaches them: they crumble as a burnt one does, and the power-up one
+  // hid is left on the line (the train runs over power-ups and leaves them be)
+  const len = railLength(world, tr.line);
+  const from = Math.max(1, Math.ceil(back - 0.5));
+  const to = Math.min(len, Math.floor(front + 0.5));
+  for (let k = from; k <= to; k++) {
+    const cx = r.dir === 'h' ? k : r.at;
+    const cy = r.dir === 'h' ? r.at : k;
+    if (tileAt(world, cx, cy) === SOFT && !world.burning.some((b) => b.cx === cx && b.cy === cy) && hit(cx, cy)) {
+      world.burning.push({ cx, cy, ttl: FLAME_TICKS });
+    }
+  }
 }
 
 /**

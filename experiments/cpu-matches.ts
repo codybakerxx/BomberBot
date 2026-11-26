@@ -210,7 +210,14 @@ export function playMatch(seed: number, levels: (BotLevel | null)[], maxTicks: n
         e.cause === 'tnt' && lastOff.has(e.player)
           ? { tiles: new Set(world.flames.filter((f) => f.tnt && f.owner === e.player).map((f) => f.cy * world.w + f.cx)), since: lastOff.get(e.player)! }
           : undefined;
-      const boxed = shutIn(world, before, e.player, px, py, (id) => droppedOn.get(id) ?? 0, (id) => restingAt.get(id)?.since ?? 0, (i) => landedOn.get(i) ?? -1, [...threats, ...landing], tnt);
+      // (on the Wild West, a train on its way: its line is shut to it from when the warning started)
+      const tr = world.train && world.tick >= world.train.warnAt && world.tick <= world.train.exitAt ? world.train : null;
+      const line = tr ? world.rails[tr.line] : null;
+      const train =
+        tr && line
+          ? { since: tr.warnAt, tiles: new Set(Array.from({ length: (line.dir === 'h' ? world.w : world.h) - 2 }, (_, k) => (line.dir === 'h' ? line.at * world.w + k + 1 : (k + 1) * world.w + line.at))) }
+          : undefined;
+      const boxed = shutIn(world, before, e.player, px, py, (id) => droppedOn.get(id) ?? 0, (id) => restingAt.get(id)?.since ?? 0, (i) => landedOn.get(i) ?? -1, [...threats, ...landing], tnt, train);
       const moved = before.some((b) => b.owner === e.player && droppedAt.has(b.id) && (droppedAt.get(b.id) !== b.cy * world.w + b.cx || (rivalMoved.has(b.id) && inBlast(world, b, px, py))));
       // Set off early: the bomb that caught it went off before its fuse ran out, because a rival's bomb reached
       // it, and that rival's bomb was dropped, kicked or thrown after this one was dropped. (A rival's bomb that
@@ -257,9 +264,11 @@ type Threat = { owner: number; cx: number; cy: number; range: number; since: num
  * was let go, and so does one a falling block took away after the bot dropped
  * its own (`threats`). On the Wild West, caught by a barrel of TNT its own bomb
  * set off (`tnt`), its own blast reaches as far as that barrel's fire, and the
- * bomb that caught it is the one of its own that went off last.
+ * bomb that caught it is the one of its own that went off last; and a train
+ * whose warning started after that bomb was dropped (`train`) shuts its line
+ * as a rival's blast would.
  */
-function shutIn(world: World, bombs: Seen[], who: number, px: number, py: number, droppedOn: (id: number) => number, restingSince: (id: number) => number, landedOn: (tile: number) => number, threats: Threat[] = [], tnt?: { tiles: Set<number>; since: number }): boolean {
+function shutIn(world: World, bombs: Seen[], who: number, px: number, py: number, droppedOn: (id: number) => number, restingSince: (id: number) => number, landedOn: (tile: number) => number, threats: Threat[] = [], tnt?: { tiles: Set<number>; since: number }, train?: { tiles: Set<number>; since: number }): boolean {
   const mine = bombs.filter((b) => b.owner === who && b.ground);
   const caughtBy = mine.filter((b) => inBlast(world, b, px, py)).map((b) => b.id);
   if (!caughtBy.length && !tnt) return false;
@@ -276,14 +285,16 @@ function shutIn(world: World, bombs: Seen[], who: number, px: number, py: number
   for (const r of theirs) rivals.push(r);
   const coming = (x: number, y: number): boolean => theirs.some((r) => r.lands && r.cx === x && r.cy === y);
   if (coming(px, py)) return true; // (one coming down on the tile it is crossing: its way out is shut too)
-  if (!rivals.length) return false;
+  // a train whose warning started after that bomb was dropped: its line shuts the way out as a rival's blast does
+  const trainLine = train && train.since >= droppedOn(since) ? train.tiles : null;
+  if (!rivals.length && !trainLine) return false;
   const bombAt = (x: number, y: number): Seen | undefined => bombs.find((b) => b.ground && b.cx === x && b.cy === y);
   const seen = new Set<number>([py * world.w + px]);
   let edge: [number, number][] = [[px, py]];
   for (let depth = 0; depth <= 6 && edge.length; depth++) {
     const next: [number, number][] = [];
     for (const [x, y] of edge) {
-      if (!reaches(x, y) && rivals.some((b) => inBlast(world, b, x, y))) return true;
+      if (!reaches(x, y) && (rivals.some((b) => inBlast(world, b, x, y)) || !!trainLine?.has(y * world.w + x))) return true;
       for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
         const nx = x + dx;
         const ny = y + dy;
@@ -380,7 +391,7 @@ if (process.argv[1] && process.argv[1].endsWith('cpu-matches.ts')) {
       let self = 0, got = 0, sum = 0;
       for (let s = 1; s <= SEEDS; s++) {
         const o = playMatch(s, [lv, null], 3 * 60 * TICK_HZ, false, false);
-        if (o.fate[0] !== 'alive') self++;
+        if (o.fate[0] !== 'alive' && o.fate[0] !== 'train') self++; // (a train is counted at the end)
         if (o.fate[1] !== 'alive') { got++; sum += o.when[1]; }
       }
       console.log(LEVELS[lv].label.padEnd(10) + `${self} of ${SEEDS}`.padStart(16) + `${got} of ${SEEDS}`.padStart(16) + (got ? secs(sum / got) : '-').padStart(26));
@@ -394,7 +405,7 @@ if (process.argv[1] && process.argv[1].endsWith('cpu-matches.ts')) {
       let self = 0, crushed = 0, safe = 0;
       for (let s = 1; s <= SEEDS; s++) {
         const o = playMatch(s, [lv], STOP + 10 * TICK_HZ, false);
-        o.fate[0] === 'alive' ? safe++ : o.fate[0] === 'crushed' ? crushed++ : self++;
+        o.fate[0] === 'alive' ? safe++ : o.fate[0] === 'crushed' ? crushed++ : o.fate[0] === 'train' ? 0 : self++;
       }
       console.log(LEVELS[lv].label.padEnd(10) + `${self} of ${SEEDS}`.padStart(16) + `${crushed} of ${SEEDS}`.padStart(19) + `${safe} of ${SEEDS}`.padStart(26));
     }

@@ -146,9 +146,9 @@ Four of the same level:
 |---|---|---|---|---|---|---|---|---|
 | Beginner | 0.0% | 0.4% | 42.9% | 0.8% | 0.8% | 1.7% | 0 of 60 | 56 of 60 |
 | Normal | 0.0% | 27.9% | 42.1% | 1.3% | 3.3% | 23.8% | 1 of 60 | 2 of 60 |
-| Hard | 0.0% | 26.3% | 45.8% | 0.0% | 0.0% | 22.1% | 0 of 60 | 7 of 60 |
+| Hard | 0.0% | 27.5% | 45.0% | 0.4% | 0.4% | 22.5% | 1 of 60 | 5 of 60 |
 
-(25 November 2026, after try-outs stopped counting on the shield; on the Wild West, `WEST=1`, "blasted itself" is 0 too: docs/CPU-PLAYERS.md. 24 November 2026, the plane faster and turning tighter, Hard 25.0%, 47.9%, 22.9% won, 5 of 60. The Hard row of 23 November 2026, after Hard was made more aggressive, was 20.0%, 52.5%, 21.7% won, 7 of 60 not decided; it was 32.5%, 35.0%, 16.3% won and 20 of 60 not decided.)
+(25 November 2026, the evening, after try-outs stopped counting on the shield and a thrown bomb's landing counts one landing ahead of it; on the Wild West, `WEST=1`, "blasted itself" is 0 too: docs/CPU-PLAYERS.md. 24 November 2026, the plane faster and turning tighter, Hard 25.0%, 47.9%, 22.9% won, 5 of 60. The Hard row of 23 November 2026, after Hard was made more aggressive, was 20.0%, 52.5%, 21.7% won, 7 of 60 not decided; it was 32.5%, 35.0%, 16.3% won and 20 of 60 not decided.)
 
 The other tables are in [docs/CPU-PLAYERS.md](../docs/CPU-PLAYERS.md).
 

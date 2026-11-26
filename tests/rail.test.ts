@@ -40,7 +40,7 @@ const players = (n: number): { colorId: string }[] => Array.from({ length: n }, 
 // ---------------------------------------------------------------- the lines
 
 // on every size, grown or not, with any number of players: four lines on open rows and columns, none through a
-// start tile, with a tunnel (a wall tile) at each end, and nothing but open floor on them at the start
+// start tile, with a tunnel (a wall tile) at each end; bricks on them as anywhere (no barrels of TNT, no blocks)
 for (const a of ARENAS) {
   for (const grow of [0, 2]) {
     for (let n = 2; n <= MAX_PLAYERS; n++) {
@@ -56,7 +56,14 @@ for (const a of ARENAS) {
         assert.equal(w.tiles[r.dir === 'h' ? r.at * w.w + len - 1 : (len - 1) * w.w + r.at], HARD, 'and at the other');
       }
       for (const s of spawnPoints(w.w, w.h, n)) assert.ok(!onRail(w, s.x, s.y), `no robot starts on the railway (${a.id}, ${n} players)`);
-      for (let y = 0; y < w.h; y++) for (let x = 0; x < w.w; x++) if (onRail(w, x, y)) assert.equal(w.tiles[y * w.w + x], FLOOR, 'open ground on the line');
+      let onLine = 0;
+      for (let y = 0; y < w.h; y++)
+        for (let x = 0; x < w.w; x++)
+          if (onRail(w, x, y)) {
+            assert.ok(w.tiles[y * w.w + x] === FLOOR || w.tiles[y * w.w + x] === SOFT, 'floor or bricks on the line, never TNT or a block');
+            if (w.tiles[y * w.w + x] === SOFT) onLine++;
+          }
+      assert.ok(onLine > 0, 'bricks on the railway too');
       // TNT: a tenth of the bricks, hiding nothing
       let bricks = 0;
       let tnt = 0;
@@ -108,15 +115,15 @@ function timetable(w: World, ticks: number): { warnAt: number; enterAt: number; 
   const trains = timetable(w, roundTicks);
   assert.ok(w.players.every((p) => p.alive), 'nobody in the way, nobody hurt');
   trains.push(...timetable(w, 60 * TICK_HZ).filter((t) => !trains.some((o) => o.warnAt === t.warnAt)));
-  assert.ok(trains.length >= 4, `about one every 15 s (${trains.length} in a 1:30 round)`);
-  assert.ok(trains[0].warnAt >= TRAIN_FIRST[0] && trains[0].warnAt <= TRAIN_FIRST[1], 'the first 8 to 14 s in');
+  assert.ok(trains.length >= 7, `about one every 10 s (${trains.length} in a 1:30 round)`);
+  assert.ok(trains[0].warnAt >= TRAIN_FIRST[0] && trains[0].warnAt <= TRAIN_FIRST[1], 'the first 6 to 10 s in');
   for (let i = 0; i < trains.length; i++) {
     const tr = trains[i];
     assert.equal(tr.enterAt - tr.warnAt, TRAIN_WARN_TICKS, 'a warning of 2.5 s before it comes out');
     assert.ok(tr.exitAt + GATE_TICKS < roundTicks, 'gone, gates up, before the blocks start to fall');
     if (i > 0) {
       const gap = tr.warnAt - trains[i - 1].warnAt;
-      assert.ok(gap >= TRAIN_GAP[0] && gap <= TRAIN_GAP[1], `12 to 18 s after the one before (${gap / TICK_HZ} s)`);
+      assert.ok(gap >= TRAIN_GAP[0] && gap <= TRAIN_GAP[1], `8 to 12 s after the one before (${gap / TICK_HZ} s)`);
     }
   }
   assert.ok(new Set(trains.map((t) => t.line)).size > 1, 'not always the same line');
@@ -195,17 +202,33 @@ function runTo(w: World, tick: number, events: GameEvent[] = []): GameEvent[] {
   assert.ok(front > 8 - 0.3 && before <= 8 - 0.3, 'knocked out the tick the front reaches it');
 }
 {
-  // a bomb on the line goes off as the train reaches it, a power-up on it is swept away
+  // a bomb on the line goes off as the train reaches it, a brick on it is smashed (its power-up left on the line),
+  // a power-up lying on it is left be
   const w = trainSoon();
   const line = w.rails[0].at;
+  w.tiles[line * w.w + 11] = SOFT;
+  w.hidden.set(line * w.w + 11, 'speed');
   w.bombs.push({ id: 99, owner: 1, x: 6, y: line, cx: 6, cy: line, fuse: 9999, range: 1, age: 0, state: 'ground', slide: 0, heldBy: -1, lifted: false, fromX: 6, fromY: line, flyDir: 0, flyDist: 0, flyT: 0 });
   w.players[1].activeBombs = 1;
   w.items.push({ cx: 9, cy: line, kind: 'bomb', age: 0 });
   w.players[0].x = 1;
   w.players[0].y = 1;
-  const ev = runTo(w, w.train!.exitAt);
+  const tr = w.train!;
+  // (the brick: not before the train's front gets to it)
+  let smashedAt = -1;
+  const ev: GameEvent[] = [];
+  while (w.tick < tr.exitAt) {
+    step(w, []);
+    ev.push(...w.events);
+    if (smashedAt < 0 && w.burning.some((b) => b.cx === 11 && b.cy === line)) smashedAt = w.tick;
+  }
   assert.ok(ev.some((e) => e.type === 'explode' && e.cx === 6 && e.cy === line), 'the bomb goes off');
-  assert.equal(w.items.length, 0, 'the power-up is gone');
+  assert.ok(smashedAt > 0, 'the brick is smashed');
+  const [, front] = trainSpan(w, tr, smashedAt);
+  assert.ok(front > 11 - 0.5 && front < 11, 'as the front gets to it');
+  assert.equal(w.tiles[line * w.w + 11], FLOOR, 'gone');
+  assert.ok(w.items.some((it) => it.cx === 11 && it.cy === line && it.kind === 'speed'), 'its power-up left on the line');
+  assert.ok(w.items.some((it) => it.cx === 9 && it.cy === line), 'the power-up lying there is left be');
 }
 {
   // once the round is decided, a train still in its tunnel stays there, and none comes after it
