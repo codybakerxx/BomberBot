@@ -208,7 +208,7 @@ function runTo(w: World, tick: number, events: GameEvent[] = []): GameEvent[] {
   const line = w.rails[0].at;
   w.tiles[line * w.w + 11] = SOFT;
   w.hidden.set(line * w.w + 11, 'speed');
-  w.bombs.push({ id: 99, owner: 1, x: 6, y: line, cx: 6, cy: line, fuse: 9999, range: 1, age: 0, state: 'ground', slide: 0, heldBy: -1, lifted: false, fromX: 6, fromY: line, flyDir: 0, flyDist: 0, flyT: 0 });
+  w.bombs.push({ id: 99, owner: 1, x: 6, y: line, cx: 6, cy: line, fuse: 9999, range: 1, age: 0, state: 'ground', slide: 0, speed: 0, heldBy: -1, lifted: false, fromX: 6, fromY: line, flyDir: 0, flyDist: 0, flyT: 0 });
   w.players[1].activeBombs = 1;
   w.items.push({ cx: 9, cy: line, kind: 'bomb', age: 0 });
   w.players[0].x = 1;
@@ -275,7 +275,7 @@ const put = (w: World, x: number, y: number, t: number): void => {
   w.tiles[y * w.w + x] = t;
 };
 function bomb(w: World, owner: number, x: number, y: number, fuse = 1, range = 1): void {
-  w.bombs.push({ id: w.nextBombId++, owner, x, y, cx: x, cy: y, fuse, range, age: 0, state: 'ground', slide: 0, heldBy: -1, lifted: false, fromX: x, fromY: y, flyDir: 0, flyDist: 0, flyT: 0 });
+  w.bombs.push({ id: w.nextBombId++, owner, x, y, cx: x, cy: y, fuse, range, age: 0, state: 'ground', slide: 0, speed: 0, heldBy: -1, lifted: false, fromX: x, fromY: y, flyDir: 0, flyDist: 0, flyT: 0 });
   w.players[owner].activeBombs++;
 }
 {

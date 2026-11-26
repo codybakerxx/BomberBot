@@ -281,7 +281,7 @@ function takeOff(w: World): void {
   const copy = cloneWorld(w);
   run(copy, DROP_TICKS);
   const at = copy.flames.find((f) => f.kind === 'c')!;
-  w.bombs.push({ id: 99, owner: 1, x: at.cx, y: at.cy, cx: at.cx, cy: at.cy, fuse: FUSE_TICKS, range: 2, age: 0, state: 'ground', slide: 0, heldBy: -1, lifted: false, fromX: 0, fromY: 0, flyDir: 0, flyDist: 0, flyT: 0 });
+  w.bombs.push({ id: 99, owner: 1, x: at.cx, y: at.cy, cx: at.cx, cy: at.cy, fuse: FUSE_TICKS, range: 2, age: 0, state: 'ground', slide: 0, speed: 0, heldBy: -1, lifted: false, fromX: 0, fromY: 0, flyDir: 0, flyDist: 0, flyT: 0 });
   w.players[1].activeBombs = 1;
   run(w, DROP_TICKS + 10);
   assert.equal(w.bombs.length, 0, 'set off');
@@ -451,7 +451,7 @@ for (const level of ['hard', 'normal', 'beginner'] as const) {
   step(w, [none]);
   assert.ok(me.flying > 0);
   // a bomb of the rival's right beside its robot
-  w.bombs.push({ id: 77, owner: 1, x: 2, y: 1, cx: 2, cy: 1, fuse: 90, range: 2, age: 200, state: 'ground', slide: 0, heldBy: -1, lifted: false, fromX: 0, fromY: 0, flyDir: 0, flyDist: 0, flyT: 0 });
+  w.bombs.push({ id: 77, owner: 1, x: 2, y: 1, cx: 2, cy: 1, fuse: 90, range: 2, age: 200, state: 'ground', slide: 0, speed: 0, heldBy: -1, lifted: false, fromX: 0, fromY: 0, flyDir: 0, flyDist: 0, flyT: 0 });
   w.players[1].activeBombs = 1;
   for (let t = 0; t < 200 && me.alive; t++) step(w, [botInput(w, bot)]);
   assert.equal(me.alive, true, 'it got away');

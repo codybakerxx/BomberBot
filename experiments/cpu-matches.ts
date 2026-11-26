@@ -15,6 +15,9 @@
  * counted apart ('train'), and a barrel's blast counts as the blast of whoever set it off (so one a robot set
  * off itself is under "blasted itself").
  *
+ * With ICE=1 in front, every arena is Frozen Lake's ice: robots slide a little when they let go or turn back,
+ * and bombs slide on after a throw, slow down, and bounce back off what stops them when they hit it fast.
+ *
  * These are the real CPU players and the real rules, so unlike the thumb
  * experiments this is a measurement, not a model. What it cannot tell you is
  * how they feel to play against.
@@ -24,6 +27,8 @@ import { createBot, botInput, Bot, BotLevel, BOT_LEVELS, LEVELS } from '../src/b
 const wrap = (v: number, n: number): number => ((v % n) + n) % n;
 /** WEST=1: the Wild West's railway and TNT in every arena */
 const WEST = process.env.WEST === '1';
+/** ICE=1: Frozen Lake's ice in every arena */
+const ICE = process.env.ICE === '1';
 /** robots a train hit, over the whole run */
 let ranOver = 0;
 
@@ -62,7 +67,7 @@ export interface Use {
  * blocks fall.
  */
 export function playMatch(seed: number, levels: (BotLevel | null)[], maxTicks: number, stopWhenDecided = true, timer = true): Outcome {
-  const world: World = createWorld({ seed, players: levels.map((_, i) => ({ colorId: String(i) })), roundTicks: timer ? undefined : 0, rails: WEST, tnt: WEST });
+  const world: World = createWorld({ seed, players: levels.map((_, i) => ({ colorId: String(i) })), roundTicks: timer ? undefined : 0, rails: WEST, tnt: WEST, ice: ICE });
   const bots: (Bot | null)[] = levels.map((lv, i) => (lv ? createBot(i, lv, seed * 31 + 7) : null));
   const fate: Outcome['fate'] = levels.map(() => 'alive');
   const when = levels.map(() => -1);
@@ -90,6 +95,7 @@ export function playMatch(seed: number, levels: (BotLevel | null)[], maxTicks: n
   const rivalMoved = new Set<number>();
   // each player's bomb that went off last: on the Wild West, the one that set off a barrel of TNT whose blast caught it
   const lastOff = new Map<number, number>();
+  const burning: (Seen & { tick: number })[] = []; // bombs gone off whose flames still burn, oldest first
   let t = 0;
   for (; t < maxTicks; t++) {
     for (let i = 0; i < bots.length; i++) inputs[i] = bots[i] ? botInput(world, bots[i]!) : undefined;
@@ -115,7 +121,7 @@ export function playMatch(seed: number, levels: (BotLevel | null)[], maxTicks: n
       }
       if (o.state === 'held' && b.state === 'air' && use[o.heldBy]) use[o.heldBy].throws++;
       if (o.state === 'held' && b.state === 'air' && o.heldBy !== b.owner) rivalMoved.add(b.id);
-      if (!o.slide && b.slide) {
+      if (!o.slide && b.slide && o.state === 'ground') {
         // (the kicker: the robot right behind it, the way it is sliding)
         let near = -1;
         let nd = Infinity;
@@ -150,6 +156,10 @@ export function playMatch(seed: number, levels: (BotLevel | null)[], maxTicks: n
       if (tileAt(world, at.cx, at.cy) !== SOFT) threats.push({ owner: d.owner, cx: at.cx, cy: at.cy, range: DROP_FIRE, since: t });
     }
     for (const g of wentOff) if (g.id >= 0) lastOff.set(g.owner, g.id);
+    // bombs that have gone off and whose flames still burn: a robot can still be caught by them (its shield's
+    // half second of safety running out in the middle of them), and needs them to tell whether it was shut in
+    for (const g of wentOff) if (g.id >= 0 && 'ground' in g) burning.push({ ...g, tick: t });
+    while (burning.length && t - burning[0].tick > FLAME_TICKS) burning.shift();
     for (const g of wentOff) {
       const c = cause.get(g.id);
       if (g.id >= 0 && rushed.has(g.id) && c && c.owner !== g.owner && c.tick >= (droppedOn.get(g.id) ?? 0)) setOff.push({ owner: g.owner, cx: g.cx, cy: g.cy, range: g.range, tick: t });
@@ -217,7 +227,9 @@ export function playMatch(seed: number, levels: (BotLevel | null)[], maxTicks: n
         tr && line
           ? { since: tr.warnAt, tiles: new Set(Array.from({ length: (line.dir === 'h' ? world.w : world.h) - 2 }, (_, k) => (line.dir === 'h' ? line.at * world.w + k + 1 : (k + 1) * world.w + line.at))) }
           : undefined;
-      const boxed = shutIn(world, before, e.player, px, py, (id) => droppedOn.get(id) ?? 0, (id) => restingAt.get(id)?.since ?? 0, (i) => landedOn.get(i) ?? -1, [...threats, ...landing], tnt, train);
+      // (bombs gone off a moment ago still burn: its own, which can still catch it, and rivals', which can still shut it in)
+      const still = burning.filter((b) => b.tick < t && !before.some((o) => o.id === b.id));
+      const boxed = shutIn(world, [...before, ...still], e.player, px, py, (id) => droppedOn.get(id) ?? 0, (id) => restingAt.get(id)?.since ?? 0, (i) => landedOn.get(i) ?? -1, [...threats, ...landing], tnt, train);
       const moved = before.some((b) => b.owner === e.player && droppedAt.has(b.id) && (droppedAt.get(b.id) !== b.cy * world.w + b.cx || (rivalMoved.has(b.id) && inBlast(world, b, px, py))));
       // Set off early: the bomb that caught it went off before its fuse ran out, because a rival's bomb reached
       // it, and that rival's bomb was dropped, kicked or thrown after this one was dropped. (A rival's bomb that

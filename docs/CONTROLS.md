@@ -136,7 +136,7 @@ Every extra controller can be another player on the same screen.
 2. Swipe the way you want to go. The robot starts moving.
 3. Keep your thumb down to keep going. You do not have to keep swiping.
 4. To turn, swipe another way from wherever your thumb is now.
-5. Lift your thumb to stop.
+5. Lift your thumb to stop. (On Frozen Lake's ice the robot slides a little first: below, **On ice**.)
 
 "Left, then down" in one continuous movement works: the robot turns when your thumb does.
 
@@ -228,6 +228,10 @@ One thing looks odd until you know why: if the robot is **standing still** betwe
 The robot **looks** the way you swiped straight away, even at a block and even while it is still on its way to the opening.
 
 Between two blocks there is one more rule. A **quick swipe** at a block turns the robot to look at it and does not move it, which is how you aim a throw over a block. A swipe **held** for longer than 0.15 seconds sends it to the opening on the next tile and round the block, as before. The pause is `LOOK_TICKS` in `sim.ts`. It only applies when the robot is standing still and would have to leave its tile; a running robot, or one with an opening on its own tile, turns without any pause.
+
+## On ice
+
+On the Frozen Lake map (25 November 2026, the owner's design) the robot slides a little when you lift your thumb: about a fifth of a tile at the starting speed, just under half a tile at top speed, over a fifth to a third of a second. Swipe back the way you came and it slides on first, looking the new way, then walks back. A turn to the side works as on any map, and so does starting off. The pad itself reads swipes exactly as everywhere: only what the robot does with them on ice is different (`iceMove` and `glide` in `sim.ts`, the numbers in GAME-RULES.md › Frozen Lake's ice). How it feels has not been tried on a phone yet: if stopping feels sluggish or slippery, `ICE_DRAG` is the number.
 
 ## Tuning it in the code
 

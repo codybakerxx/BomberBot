@@ -287,6 +287,35 @@ async def main():
         await page.wait_for_timeout(60)
         await page.screenshot(path=str(OUT / "play-west.png"))
         await context.close()
+
+        # --- Frozen Lake (25 November 2026): the ice, a robot sliding to a stop, a bomb sliding, ice blocks breaking
+        context, page = await phone(browser, 393, 740)
+        await page.tap("#colOk")
+        await page.tap("#colOk")  # Next ›
+        await page.tap("#arenaNext")
+        await page.wait_for_timeout(700)
+        await page.tap("#arenaNext")
+        await page.wait_for_timeout(300)
+        await page.screenshot(path=str(OUT / "lobby-ice.png"))
+        await start_round(page)
+        await page.wait_for_timeout(200)
+        await page.evaluate(
+            """() => {
+              const w = __game.world, open = (x, y) => { w.tiles[y * w.w + x] = 0; w.hidden.delete(y * w.w + x); };
+              for (let x = 1; x < w.w - 1; x++) open(x, 1);
+              for (const [x, y] of [[1,2],[1,3],[3,3],[5,3],[2,3],[4,3]]) open(x, y);
+              __game.bots.length = 0;
+              const me = w.players[0];
+              me.x = 4.3; me.y = 1; me.slip = 0.07; me.slipDir = 4; me.facing = 3; me.moving = true; me.skid = true; me.speed = 4;
+              w.bombs.push({ id: 900, owner: 1, x: 8.4, y: 1, cx: 8, cy: 1, fuse: 140, range: 2, age: 20, state: 'ground', slide: 4, speed: 0.06, heldBy: -1, lifted: true, fromX: 5, fromY: 1, flyDir: 4, flyDist: 3, flyT: 21 });
+              w.players[1].activeBombs++;
+              let n = 0;
+              for (let i = 0; i < w.tiles.length && n < 3; i++) if (w.tiles[i] === 2 && Math.floor(i / w.w) > 4) { w.burning.push({ cx: i % w.w, cy: Math.floor(i / w.w), ttl: 12 }); n++; }
+            }"""
+        )
+        await page.wait_for_timeout(50)
+        await page.screenshot(path=str(OUT / "play-ice.png"))
+        await context.close()
         await browser.close()
     print("saved", ", ".join(sorted(f.name for f in OUT.glob("*.png"))))
 

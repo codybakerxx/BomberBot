@@ -96,7 +96,7 @@ const run = (w: World, n: number, inputs: (PlayerInput | undefined)[] = []): voi
   const s = w.spawns[0];
   blast(w, 0, 1);
   run(w, FLAME_TICKS + 1); // (the blast gone, or it would set the bomb off)
-  w.bombs.push({ id: 99, owner: 1, x: s.x, y: s.y, cx: s.x, cy: s.y, fuse: 9999, range: 1, age: 0, state: 'ground', slide: 0, heldBy: -1, lifted: false, fromX: 0, fromY: 0, flyDir: 0, flyDist: 0, flyT: 0 });
+  w.bombs.push({ id: 99, owner: 1, x: s.x, y: s.y, cx: s.x, cy: s.y, fuse: 9999, range: 1, age: 0, state: 'ground', slide: 0, speed: 0, heldBy: -1, lifted: false, fromX: 0, fromY: 0, flyDir: 0, flyDist: 0, flyT: 0 });
   run(w, RESPAWN_TICKS - FLAME_TICKS);
   const p = w.players[0];
   assert.ok(p.alive && Math.abs(p.x - s.x) + Math.abs(p.y - s.y) === 1, 'on a free tile beside its corner');

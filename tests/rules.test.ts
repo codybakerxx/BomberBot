@@ -630,7 +630,7 @@ for (let seed = 1; seed <= 40; seed++) {
     const w = mk();
     const p = w.players[0];
     p.x = 7;
-    w.bombs.push({ id: 99, owner: 1, x: 7, y: 1, cx: 7, cy: 1, fuse: 10_000, range: 2, age: 0, state: 'ground', slide: 0, heldBy: -1, lifted: true, fromX: 0, fromY: 0, flyDir: 0, flyDist: 0, flyT: 0 });
+    w.bombs.push({ id: 99, owner: 1, x: 7, y: 1, cx: 7, cy: 1, fuse: 10_000, range: 2, age: 0, state: 'ground', slide: 0, speed: 0, heldBy: -1, lifted: true, fromX: 0, fromY: 0, flyDir: 0, flyDist: 0, flyT: 0 });
     run(w, ticks(40), right);
     assert.ok(p.x > 8);
     run(w, ticks(60), left);

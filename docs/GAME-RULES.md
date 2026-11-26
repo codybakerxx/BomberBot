@@ -8,7 +8,7 @@ The game runs at a fixed 60 ticks a second. Times below are given in seconds wit
 
 *`createWorld` in sim.ts*
 
-- The usual arena (Classic) is 15 tiles wide and 13 tall. The outer ring is wall, leaving 13 by 11 to play in. The lobby also offers Compact (11 by 9 to play in) and Big (15 by 13): the same build in other sizes. It also offers two maps, Midnight (steel blocks and bricks) and Wild West (red rock and wooden crates). Midnight is only a look. The Wild West also has a railway with trains and barrels of TNT (below, **The Wild West's railway and TNT**); every other rule here is the same on both.
+- The usual arena (Classic) is 15 tiles wide and 13 tall. The outer ring is wall, leaving 13 by 11 to play in. The lobby also offers Compact (11 by 9 to play in) and Big (15 by 13): the same build in other sizes. It also offers three maps, Midnight (steel blocks and bricks), Wild West (red rock and wooden crates) and Frozen Lake (snowy boulders and blocks of ice on a frozen lake). Midnight is only a look. The Wild West also has a railway with trains and barrels of TNT (below, **The Wild West's railway and TNT**); Frozen Lake's floor is ice, where robots and bombs slide (below, **Frozen Lake's ice**). Every other rule here is the same on all three.
 - **Solid blocks** never break. They are the outer wall plus a pillar on every second tile in both directions. The pillars turn the arena into a grid of lanes.
 - **Bricks** can be blasted away. At the start each open tile has an 80% chance of holding a brick (`SOFT_DENSITY`). The lobby's Brick density setting changes that, from 0% to 100% in steps of 5% (it was 78% until 19 November 2026).
 - Each player's starting tile and the tiles next to it are always left clear, so nobody starts boxed in.
@@ -19,7 +19,7 @@ The game runs at a fixed 60 ticks a second. Times below are given in seconds wit
 
 *`movePlayer` in sim.ts. The touch and keyboard side is in [CONTROLS.md](CONTROLS.md).*
 
-- A robot moves up, down, left or right, one direction at a time, and stops the moment no direction is held. It does not finish the step.
+- A robot moves up, down, left or right, one direction at a time, and stops the moment no direction is held. It does not finish the step. (On Frozen Lake's ice it slides a little first: below, **Frozen Lake's ice**.)
 - Robots start at 2.55 tiles a second. Each speed power-up adds 0.5 tiles a second, and up to six of them count, which brings a robot to 5.55 tiles a second, 2.18 times its starting speed. Collecting a speed power-up is the only thing that raises a robot's speed. The only thing that lowers it is a curse, for 8 seconds.
 - At the starting speed, getting clear of your own first bomb (two tiles along a lane) takes 0.78 seconds of the bomb's 2.55.
 - The tile a robot **counts as standing on** is the one whose middle it is nearest to. The game draws a ring on yours. That tile decides where your bomb is dropped, whether a blast catches you and which power-up you pick up.
@@ -149,7 +149,7 @@ Each brick hides at most one power-up. You pick one up by standing on its tile. 
 
 - You need the **boot**. Without it a bomb in your way just blocks you.
 - Walk into a bomb from the tile next to it and it slides away in that direction at 8.4 tiles a second. That includes pushing back into a bomb you have only just stepped off.
-- It keeps sliding until the next tile is not free, then stops in the middle of the last free tile. A solid block, a brick, another bomb or a robot stops it.
+- It keeps sliding until the next tile is not free, then stops in the middle of the last free tile. A solid block, a brick, another bomb or a robot stops it. (On Frozen Lake's ice it slows down as it goes, and may bounce back: below.)
 - A bomb with something directly behind it cannot be kicked.
 - Its fuse keeps running while it slides.
 
@@ -164,6 +164,7 @@ Each brick hides at most one power-up. You pick one up by standing on its tile. 
 - **B** again throws it the way you are facing. It lands 3 tiles away.
 - If the landing tile is a block, a brick or another bomb, it bounces on one tile at a time until it finds free floor. A robot does not stop it landing.
 - Thrown off the edge of the arena, it comes back in on the opposite side.
+- On Frozen Lake's ice it does not stay where it lands: it slides on the way it was thrown (below).
 - If the 3 seconds run out **in your hands**, it goes off on your tile and knocks you out. If they run out **in the air**, it goes off the moment it lands.
 - If the bot carrying a bomb is knocked out, the bomb drops where it stood.
 
@@ -239,6 +240,35 @@ On the Wild West map, on every size (`rails` and `tnt` in the round's config, se
 | `GATE_TICKS`, `BELL_TICKS` | 30, 30 | The gates take half a second; the bell rings every half second |
 | `TNT_SHARE` | 0.1 | Share of the bricks that are barrels of TNT |
 | `TNT_FUSE_TICKS` | 8 (0.13 s) | A barrel goes off this long after a blast reaches it |
+
+## Frozen Lake's ice
+
+*`iceMove`, `glide` and `slideBomb` in sim.ts; the CPU players' side in `steer`, `stepTimes`, `glideEnd` and `foresee` in bot.ts. The owner's design, 25 November 2026.*
+
+On the Frozen Lake map, on every size (`ice` in the round's config, set by `worldConfig` for that map; online too, `PROTOCOL` 14), the floor is ice:
+
+**Robots slide a little.** A robot that lets go slides on the way it was going, slowing all the time: about a fifth of a tile at the starting speed, just under half a tile at top speed, over 0.2 to 0.3 seconds. Asked to go back the way it came, it slides on first (looking the new way, leaning back, kicking up frost) and only walks back once it has stopped. A robot let go in the middle of a tile never slides off it.
+
+- It slides along its lane, so it is always in line with its tiles. A block, a brick or a bomb ahead stops it in the middle of its tile, as walking would.
+- A turn to the side works as on any map: it takes the next opening, with no slide across.
+- Starting off is as quick as anywhere: only stopping and turning back slide.
+- Opening a laptop stops it on the spot.
+
+**Bombs slide.** A thrown bomb lands where it would anywhere, then slides on the way it was thrown, about two tiles. A kicked bomb slides at a kick's speed, but slows as it goes, about nine tiles before it crawls. Slowed to a crawl, a bomb carries on to the middle of the next tile and stops there. Its fuse keeps running while it slides.
+
+**Bombs bounce.** A sliding bomb that something stops (a block, a brick, another bomb, a barrel or a robot) bounces back the way it came at half the speed it hit at, if it hit at 0.05 tiles a tick or faster (`ICE_BOUNCE_MIN`: fast enough to go back at least a tile) and the tile behind it is free. Slower than that, it stops in the middle of its tile as anywhere. So a bomb kicked at a wall a few tiles away comes back a tile or two; a thrown one bounces only if it lands right against the wall; a slow one just stops. It never slides onto a robot. A bounce sounds like a bomb landing.
+
+| Constant | Value | Meaning |
+|---|---|---|
+| `ICE_DRAG` | 0.84 | A sliding robot keeps this share of its speed each tick: 0.20 of a tile at the starting speed, 0.47 at top speed |
+| `ICE_STILL` | 0.004 | A robot sliding slower than this, tiles a tick, has stopped |
+| `ICE_LAND_SPEED` | 0.065 | A thrown bomb lands sliding at this speed, tiles a tick (in the air it flies at 0.14) |
+| `ICE_FRICTION` | 0.001 | Speed a sliding bomb loses each tick |
+| `ICE_CRAWL` | 0.025 | Slowed to this, a bomb goes on to the middle of the next tile and stops |
+| `ICE_BOUNCE` | 0.5 | A bomb bounces back at this share of the speed it hit at |
+| `ICE_BOUNCE_MIN` | 0.05 | The least speed a bomb bounces at (`ICE_CRAWL` / `ICE_BOUNCE`) |
+
+The numbers are Claude's, to be play-tested.
 
 ## Winning
 

@@ -179,6 +179,7 @@ export function setMap(id: MapId): void {
 /** Solid block: fills its whole tile. `joined`: another solid block is right below it (its front is hidden). `deco`: see drawRock. */
 export function drawHard(ctx: Ctx, px: number, py: number, T: number, map: MapId = mapNow, joined = false, deco = 1): void {
   if (map === 'western') drawRock(ctx, px, py, T, joined, deco);
+  else if (map === 'ice') drawSnowRock(ctx, px, py, T, joined, deco);
   else drawSteel(ctx, px, py, T);
 }
 
@@ -187,6 +188,7 @@ export function drawSoft(ctx: Ctx, px: number, py: number, T: number, map: MapId
   // a whole size (every tile of an arena): stamped from a picture made once. Any other size: drawn here.
   if (Number.isInteger(T) && T <= 200) ctx.drawImage(softSprite(map, T, variant & 3), px, py);
   else if (map === 'western') drawCrate(ctx, px, py, T);
+  else if (map === 'ice') drawIceBlock(ctx, px, py, T, variant & 3);
   else drawBricks(ctx, px, py, T, variant & 3);
 }
 
@@ -194,6 +196,10 @@ export function drawSoft(ctx: Ctx, px: number, py: number, T: number, map: MapId
 export function drawFloor(ctx: Ctx, x: number, y: number, px: number, py: number, T: number, map: MapId = mapNow): void {
   if (map === 'western') {
     drawSand(ctx, x, y, px, py, T);
+    return;
+  }
+  if (map === 'ice') {
+    drawLakeIce(ctx, x, y, px, py, T);
     return;
   }
   ctx.fillStyle = '#0e1220';
@@ -519,6 +525,243 @@ function drawCrate(ctx: Ctx, px: number, py: number, T: number): void {
   ctx.fillRect(lx + f - t, fy, t, fh);
   ctx.fillRect(lx + lw - f, fy, t, fh);
 }
+// Frozen Lake (the owner's ask, 25 November 2026: an ice level, where robots and bombs slide): a frozen lake at
+// night. The ice is kept dark, like the other maps' floors, so blasts, soles, rings and ghosts still glow
+// against it; boulders of dark rock capped with snow stand on it, and the blocks to break are clear blue ice.
+const FROST = {
+  ice: ['#16314d', '#142d47'], // two tones, tile about (a hint of a checker, as on the other maps)
+  crack: 'rgba(196,230,255,0.30)',
+  crackDeep: 'rgba(3,10,24,0.45)',
+  sheen: 'rgba(170,215,255,0.07)',
+  bubble: 'rgba(205,236,255,0.35)',
+  snowDust: 'rgba(225,240,255,0.16)',
+  rockTop: '#5b6880',
+  rockLit: '#8796b0',
+  rockShade: '#38425a',
+  rockFront: '#2a3245',
+  rockBand: '#3a4560',
+  rockFoot: '#141a28',
+  snow: '#eef5fd',
+  snowShade: '#b4c6de',
+  snowLit: '#ffffff',
+  icicle: 'rgba(196,232,255,0.92)',
+  cube: '#7dc3e8',
+  cubeLit: '#d6f2ff',
+  cubeDeep: '#4b97c7',
+  cubeEdge: '#0f3554',
+  cubeFront: '#3a83b5',
+  cubeFrontDeep: '#2b6c9c',
+};
+
+/**
+ * Lake ice: two close dark blues, now and then a crack (a pale line with a dark one beside it, so it looks cut
+ * into the ice), a few frozen air bubbles, a faint sheen, and specks of blown snow.
+ */
+function drawLakeIce(ctx: Ctx, x: number, y: number, px: number, py: number, T: number): void {
+  ctx.fillStyle = FROST.ice[(x + y) & 1];
+  ctx.fillRect(px, py, T, T);
+  // blown snow
+  for (let k = 0; k < 4; k++) {
+    const n = (x * 73 + y * 131 + k * 197) % 97;
+    const d = Math.max(1, Math.round(T * 0.035));
+    ctx.fillStyle = FROST.snowDust;
+    ctx.fillRect(Math.round(px + (((n * 37) % 89) / 89) * T * 0.9), Math.round(py + (((n * 53) % 83) / 83) * T * 0.9), d, d);
+  }
+  const h = scatter(x * 31.7 + y * 57.3 + 9.3);
+  const r1 = scatter(x * 7.9 + y * 3.3 + 1.1);
+  const r2 = scatter(x * 2.1 + y * 9.7 + 2.2);
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  if (h < 0.3) {
+    // a crack running across the tile, with a short branch
+    const pts: [number, number][] = [];
+    const across = r1 < 0.5;
+    for (let i = 0; i <= 4; i++) {
+      const along = i / 4;
+      const wob = (scatter(x * 5.1 + y * 8.3 + i * 1.7) - 0.5) * 0.22;
+      const a = along;
+      const c = 0.25 + r2 * 0.5 + wob;
+      pts.push(across ? [px + a * T, py + c * T] : [px + c * T, py + a * T]);
+    }
+    for (const [col, off] of [[FROST.crackDeep, 1], [FROST.crack, 0]] as [string, number][]) {
+      ctx.strokeStyle = col;
+      ctx.lineWidth = Math.max(1, T * 0.025);
+      ctx.beginPath();
+      ctx.moveTo(pts[0][0] + off, pts[0][1] + off);
+      for (const [qx, qy] of pts.slice(1)) ctx.lineTo(qx + off, qy + off);
+      const [bx, by] = pts[2];
+      ctx.moveTo(bx + off, by + off);
+      ctx.lineTo(bx + off + (across ? T * 0.12 : T * 0.18) * (r1 < 0.25 || r1 > 0.75 ? 1 : -1), by + off + (across ? T * 0.18 : T * 0.12));
+      ctx.stroke();
+    }
+  } else if (h < 0.45) {
+    // frozen air bubbles: a few small rings
+    ctx.strokeStyle = FROST.bubble;
+    ctx.lineWidth = Math.max(1, T * 0.018);
+    for (let k = 0; k < 3; k++) {
+      const bx = px + T * (0.25 + 0.5 * scatter(x * 3.3 + y * 1.9 + k * 4.1));
+      const by = py + T * (0.25 + 0.5 * scatter(x * 6.7 + y * 2.3 + k * 2.9));
+      ctx.beginPath();
+      ctx.arc(bx, by, T * (0.025 + 0.025 * scatter(k + x + y * 3)), 0, Math.PI * 2);
+      ctx.stroke();
+    }
+  } else if (h < 0.6) {
+    // a faint sheen where the ice is smooth: a soft streak from upper left to lower right
+    ctx.strokeStyle = FROST.sheen;
+    ctx.lineWidth = Math.max(1, T * 0.1);
+    ctx.beginPath();
+    ctx.moveTo(px + T * (0.15 + r1 * 0.2), py + T * 0.2);
+    ctx.lineTo(px + T * (0.55 + r1 * 0.2), py + T * 0.75);
+    ctx.stroke();
+  }
+  ctx.lineCap = 'butt';
+  ctx.lineJoin = 'miter';
+}
+
+/**
+ * A boulder of dark rock capped with snow: its top (a rim of rock round a cap of snow, lit from the upper left)
+ * and, unless another block is right below it, its front face, darker, with the snow hanging over its top edge
+ * and a few icicles. `deco` (0 to 1, the same for the same tile) gives each block its own icicles.
+ */
+function drawSnowRock(ctx: Ctx, px: number, py: number, T: number, joined: boolean, deco = 1): void {
+  const e = Math.max(1, Math.round(T * 0.07));
+  const top = joined ? T : Math.round(T * 0.74);
+  ctx.fillStyle = FROST.rockTop;
+  ctx.fillRect(px, py, T, top);
+  ctx.fillStyle = FROST.rockLit;
+  ctx.fillRect(px, py, T, e);
+  ctx.fillRect(px, py, e, top);
+  ctx.fillStyle = FROST.rockShade;
+  ctx.fillRect(px + T - e, py, e, top);
+  if (joined) ctx.fillRect(px, py + T - e, T, e);
+  // the snow cap: a soft heap set in from the rim, shaded on its lower right, a gleam on its upper left
+  const i = Math.round(T * 0.12);
+  const cw = T - i * 2;
+  const ch = top - i * (joined ? 2 : 1);
+  const r = T * 0.16;
+  ctx.fillStyle = FROST.snowShade;
+  rr(ctx, px + i, py + i, cw, ch, r);
+  ctx.fill();
+  ctx.fillStyle = FROST.snow;
+  rr(ctx, px + i, py + i, cw - e * 0.8, ch - e * 0.8, r);
+  ctx.fill();
+  ctx.fillStyle = FROST.snowLit;
+  ctx.beginPath();
+  ctx.ellipse(px + i + cw * 0.3, py + i + ch * 0.28, cw * 0.18, ch * 0.1, -0.5, 0, Math.PI * 2);
+  ctx.fill();
+  if (joined) return;
+  // the front face: darker rock, a band through it, a dark foot
+  const fh = T - top;
+  ctx.fillStyle = FROST.rockFront;
+  ctx.fillRect(px, py + top, T, fh);
+  ctx.fillStyle = FROST.rockBand;
+  ctx.fillRect(px, py + top + Math.round(fh * 0.45), T, Math.max(1, Math.round(fh * 0.2)));
+  ctx.fillStyle = FROST.rockFoot;
+  ctx.fillRect(px, py + T - e, T, e);
+  // snow hanging over the top edge, in soft scallops
+  ctx.fillStyle = FROST.snow;
+  const lip = Math.max(1, Math.round(T * 0.05));
+  ctx.fillRect(px + i * 0.5, py + top - lip, T - i, lip);
+  for (let k = 0; k < 3; k++) {
+    ctx.beginPath();
+    ctx.arc(px + T * (0.25 + k * 0.25), py + top, T * 0.07, 0, Math.PI);
+    ctx.fill();
+  }
+  // icicles: two or three thin ones under the snow
+  ctx.fillStyle = FROST.icicle;
+  for (let k = 0; k < 3; k++) {
+    const q = scatter(deco * 41.3 + k * 7.1);
+    if (k === 2 && q < 0.5) continue;
+    const ix = px + T * (0.18 + k * 0.3 + (q - 0.5) * 0.1);
+    const len = fh * (0.35 + 0.45 * q);
+    const w = T * 0.035;
+    ctx.beginPath();
+    ctx.moveTo(ix - w, py + top + lip * 0.5);
+    ctx.lineTo(ix + w, py + top + lip * 0.5);
+    ctx.lineTo(ix, py + top + len);
+    ctx.closePath();
+    ctx.fill();
+  }
+}
+
+/**
+ * A block of clear blue ice, standing up off the lake like the boulders: its top (glossy, lit along the top and
+ * left, shaded along the bottom and right, a frosted square in it and a gleam across it), a crack or a frozen
+ * bubble or two (`variant`, 0 to 3, so neighbours differ), and its front face, a deeper blue with light running
+ * down it. A dark edge all round, so blocks side by side read as blocks.
+ */
+function drawIceBlock(ctx: Ctx, px: number, py: number, T: number, variant = 0): void {
+  const g = Math.max(1, Math.round(T * 0.04));
+  const top = Math.round(T * 0.76);
+  const e = Math.max(1, Math.round(T * 0.06));
+  ctx.fillStyle = FROST.cubeEdge;
+  ctx.fillRect(px, py, T, T);
+  // the top
+  const lx = px + g;
+  const ly = py + g;
+  const lw = T - g * 2;
+  const lh = top - g;
+  ctx.fillStyle = FROST.cube;
+  ctx.fillRect(lx, ly, lw, lh);
+  ctx.fillStyle = FROST.cubeLit;
+  ctx.fillRect(lx, ly, lw, e);
+  ctx.fillRect(lx, ly, e, lh);
+  ctx.fillStyle = FROST.cubeDeep;
+  ctx.fillRect(lx, ly + lh - e, lw, e);
+  ctx.fillRect(lx + lw - e, ly, e, lh);
+  // a frosted square in the middle, lighter
+  const m = Math.round(T * 0.2);
+  ctx.fillStyle = 'rgba(225,245,255,0.28)';
+  ctx.fillRect(lx + m, ly + m, lw - m * 2, lh - m * 2);
+  // the gleam: a bright streak across the top, from upper right down to the left
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(lx, ly, lw, lh);
+  ctx.clip();
+  ctx.strokeStyle = 'rgba(255,255,255,0.55)';
+  ctx.lineWidth = Math.max(1, T * 0.07);
+  line(ctx, lx + lw * 0.78, ly + lh * 0.12, lx + lw * 0.42, ly + lh * 0.6);
+  ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+  ctx.lineWidth = Math.max(1, T * 0.03);
+  line(ctx, lx + lw * 0.92, ly + lh * 0.3, lx + lw * 0.62, ly + lh * 0.72);
+  // a crack, or a couple of frozen bubbles
+  const r = scatter(variant * 13.7 + 0.31);
+  ctx.lineCap = 'round';
+  if (variant % 2 === 0) {
+    ctx.strokeStyle = 'rgba(255,255,255,0.6)';
+    ctx.lineWidth = Math.max(1, T * 0.02);
+    ctx.beginPath();
+    const sx = lx + lw * (0.2 + r * 0.25);
+    ctx.moveTo(sx, ly + lh * 0.82);
+    ctx.lineTo(sx + lw * 0.1, ly + lh * 0.6);
+    ctx.lineTo(sx + lw * 0.04, ly + lh * 0.45);
+    ctx.lineTo(sx + lw * 0.16, ly + lh * 0.3);
+    ctx.stroke();
+  } else {
+    ctx.strokeStyle = 'rgba(255,255,255,0.55)';
+    ctx.lineWidth = Math.max(1, T * 0.018);
+    for (let k = 0; k < 2; k++) {
+      ctx.beginPath();
+      ctx.arc(lx + lw * (0.25 + 0.2 * k + r * 0.1), ly + lh * (0.7 - 0.15 * k), T * (0.03 - 0.008 * k), 0, Math.PI * 2);
+      ctx.stroke();
+    }
+  }
+  ctx.lineCap = 'butt';
+  ctx.restore();
+  // the front face: a deeper blue, light running down it in a few streaks
+  const fy = py + top;
+  const fh = T - top - g;
+  ctx.fillStyle = FROST.cubeFront;
+  ctx.fillRect(lx, fy, lw, fh);
+  ctx.fillStyle = FROST.cubeFrontDeep;
+  ctx.fillRect(lx, fy + Math.round(fh * 0.6), lw, fh - Math.round(fh * 0.6));
+  ctx.fillStyle = 'rgba(214,242,255,0.35)';
+  const t = Math.max(1, Math.round(T * 0.03));
+  for (const k of [0.2, 0.5, 0.74]) ctx.fillRect(Math.round(lx + lw * k), fy + 1, t, Math.max(1, fh - 2));
+  ctx.fillStyle = FROST.cubeLit; // the edge where top meets front catches the light
+  ctx.fillRect(lx, fy, lw, Math.max(1, Math.round(t * 0.7)));
+}
+
 /** A breakable block is drawn once at each size and stamped from then on (an arena has a hundred of them). */
 const softs = new Map<string, HTMLCanvasElement>();
 function softSprite(map: MapId, T: number, variant = 0): HTMLCanvasElement {
@@ -531,6 +774,7 @@ function softSprite(map: MapId, T: number, variant = 0): HTMLCanvasElement {
     c.width = c.height = T;
     const g = c.getContext('2d')!;
     if (map === 'western') drawCrate(g, 0, 0, T);
+    else if (map === 'ice') drawIceBlock(g, 0, 0, T, v);
     else drawBricks(g, 0, 0, T, v);
     softs.set(key, c);
   }
@@ -761,6 +1005,7 @@ function flameLine(f: World['flames'][number], T: number): [number, number, numb
  */
 function drawCrumble(ctx: Ctx, b: { cx: number; cy: number; ttl: number }, T: number, time: number): void {
   const west = mapNow === 'western';
+  const ice = mapNow === 'ice';
   const e = 1 - b.ttl / FLAME_TICKS; // 0 as it is hit, 1 as it is gone
   const x0 = b.cx * T;
   const y0 = b.cy * T;
@@ -777,7 +1022,7 @@ function drawCrumble(ctx: Ctx, b: { cx: number; cy: number; ttl: number }, T: nu
     const dy = Math.round(Math.cos(time * 77 + seed) * j);
     if (img) ctx.drawImage(img, x0 + dx, y0 + dy);
     else drawSoft(ctx, x0 + dx, y0 + dy, T, mapNow, v);
-    ctx.strokeStyle = west ? 'rgba(40,20,6,0.85)' : 'rgba(12,14,30,0.85)';
+    ctx.strokeStyle = west ? 'rgba(40,20,6,0.85)' : ice ? 'rgba(235,250,255,0.9)' : 'rgba(12,14,30,0.85)';
     ctx.lineWidth = Math.max(1, T * 0.03);
     ctx.lineCap = 'round';
     const grow = Math.min(1, e / CRACK + 0.25);
@@ -796,7 +1041,7 @@ function drawCrumble(ctx: Ctx, b: { cx: number; cy: number; ttl: number }, T: nu
   }
   const u = (e - CRACK) / (1 - CRACK); // 0 as it bursts, 1 as the last of it fades
   // dust rolling out from where it stood
-  const dust = west ? [196, 160, 110] : [128, 140, 182];
+  const dust = west ? [196, 160, 110] : ice ? [205, 232, 252] : [128, 140, 182];
   for (let d = 0; d < 4; d++) {
     const a = (d / 4) * Math.PI * 2 + scatter(seed + d * 3) * 1.4;
     const r = T * (0.1 + 0.25 * Math.sqrt(u));
@@ -900,7 +1145,7 @@ function drawCrumble(ctx: Ctx, b: { cx: number; cy: number; ttl: number }, T: nu
     ctx.setTransform(base);
   }
   // a few small pieces knocked off, skittering out in other directions
-  ctx.fillStyle = west ? '#c99554' : '#8d9cd0';
+  ctx.fillStyle = west ? '#c99554' : ice ? '#c6ecff' : '#8d9cd0';
   for (let c = 0; c < 6; c++) {
     const s = seed + c * 9.7;
     const a = ((c + scatter(s) * 0.8) / 6) * Math.PI * 2; // (spread round every side)
@@ -1231,7 +1476,7 @@ function drawFire(ctx: Ctx, world: World, T: number, time: number, west: boolean
  * bricks alone were over two thousand rectangles.
  */
 export function drawGround(ctx: Ctx, world: World, T: number): void {
-  ctx.fillStyle = mapNow === 'western' ? 'rgba(38,14,4,0.42)' : 'rgba(0,0,0,0.38)';
+  ctx.fillStyle = mapNow === 'western' ? 'rgba(38,14,4,0.42)' : mapNow === 'ice' ? 'rgba(2,8,20,0.42)' : 'rgba(0,0,0,0.38)';
   for (let y = 0; y < world.h - 1; y++) {
     for (let x = 0; x < world.w; x++) {
       if (world.tiles[y * world.w + x] !== FLOOR && world.tiles[(y + 1) * world.w + x] === FLOOR) {
@@ -2004,6 +2249,30 @@ function dullWash(hex: string): string {
   return w;
 }
 
+/**
+ * Frost kicked up by a robot sliding on ice: a spray of small pale specks from its feet, thrown ahead the way it
+ * slides, fewer and fainter as it slows. Drawn from the clock alone (nothing kept between frames).
+ */
+function drawFrost(ctx: Ctx, p: Player, x: number, y: number, T: number, time: number): void {
+  const dx = DX[p.slipDir];
+  const dy = DY[p.slipDir];
+  const strength = Math.min(1, p.slip / 0.04);
+  ctx.save();
+  ctx.fillStyle = '#e6f6ff';
+  for (let k = 0; k < 8; k++) {
+    const ph = (time * 5 + k / 8 + p.id * 0.37) % 1;
+    const side = (scatter(k * 3.1 + p.id) - 0.5) * 0.36;
+    const out = (0.08 + 0.3 * ph) * T;
+    const up = Math.sin(ph * Math.PI) * T * 0.09;
+    const fx = x + dx * out + (dy ? side * T : 0);
+    const fy = y - T * 0.04 + dy * out * 0.6 + (dx ? side * T * 0.35 : 0) - up;
+    const sz = Math.max(1, T * (0.035 + 0.03 * (1 - ph)));
+    ctx.globalAlpha = (1 - ph) * 0.85 * strength;
+    ctx.fillRect(fx - sz / 2, fy - sz / 2, sz, sz);
+  }
+  ctx.restore();
+}
+
 /** A robot on its tile; the winner celebrating; or, for a moment after being knocked out, its remains and its ghost. */
 function drawPlayer(ctx: Ctx, world: World, p: Player, T: number, time: number, celebrate?: Celebration, crowned: (id: number) => boolean = NO_CROWN): void {
   const col = colorById(p.colorId);
@@ -2023,11 +2292,16 @@ function drawPlayer(ctx: Ctx, world: World, p: Player, T: number, time: number, 
         ctx.save();
         ctx.globalAlpha = 0.3;
       }
+      // sliding on ice: feet still, leaning back against the slide, kicking up frost (`skid` in sim.ts)
+      const skid = p.skid && p.moving;
+      const tilt = skid && DX[p.slipDir] ? -DX[p.slipDir] * 0.13 * Math.min(1, p.slip / 0.04) : 0;
+      if (skid && p.slipDir === 1) drawFrost(ctx, p, x, y, T, time);
       if (p.zombie) {
-        drawRobot(ctx, x, y, T, zombieOf(col), p.facing, p.walk, p.moving, { arms: zombieArms(p.facing), lean: zombieLean(p) });
+        drawRobot(ctx, x, y, T, zombieOf(col), p.facing, p.walk, p.moving && !skid, { arms: zombieArms(p.facing), lean: zombieLean(p) + tilt });
         drawSparks(ctx, p, x, y, T, time);
       }
-      else drawRobot(ctx, x, y, T, col, p.facing, p.walk, p.moving, crowned(p.id) ? { crown: true } : undefined);
+      else drawRobot(ctx, x, y, T, col, p.facing, p.walk, p.moving && !skid, { ...(crowned(p.id) ? { crown: true } : {}), ...(tilt ? { lean: tilt } : {}) });
+      if (skid && p.slipDir !== 1) drawFrost(ctx, p, x, y, T, time);
       if (p.laptop) drawLaptopHeld(ctx, p, x, y, T, time);
       if (blink) ctx.restore();
     }

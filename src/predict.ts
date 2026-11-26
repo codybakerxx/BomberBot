@@ -291,6 +291,7 @@ export class Predictor {
       case 'lift':
       case 'throw':
       case 'land':
+      case 'bounce':
       case 'block':
       case 'tnt':
       case 'bell':

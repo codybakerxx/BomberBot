@@ -62,7 +62,11 @@ import {
   keptOpen,
   blockLandTick,
   CHAIN_TICKS,
-  KICK_SPEED,
+  ICE_LAND_SPEED,
+  ICE_DRAG,
+  ICE_STILL,
+  BACK,
+  slideBomb,
   FLY_TICKS_PER_TILE,
   playerSpeed,
   makeRng,
@@ -306,7 +310,9 @@ export interface Bot {
   /** its current plan knowingly walks through a curse, because nothing was worth doing on this side of it */
   throughCurse: boolean;
   /** what it was doing on its last tick, for tests and debugging */
-  doing: 'idle' | 'flee' | 'travel' | 'bomb' | 'script' | 'trapped' | 'angel' | 'pilot';
+  doing: 'idle' | 'flee' | 'travel' | 'bomb' | 'script' | 'trapped' | 'escape' | 'angel' | 'pilot';
+  /** on ice, boxed in: the world tick it last played its way out forward on a copy of the world (`lastDitch`) */
+  ditchAt: number;
   /** as an angel: the world tick it may next throw from (it rests between throws, longer at easy levels) */
   angelRest: number;
   /** flying a plane: how far off its aim is (tiles) and its feel for how far a bomb carries on, the same for the whole flight, and at which rival */
@@ -335,6 +341,7 @@ export function createBot(id: number, level: BotLevel, seed: number): Bot {
     stuck: 0,
     throughCurse: false,
     doing: 'idle',
+    ditchAt: -LAST_DITCH_GAP,
     angelRest: 0,
     aimOff: [0, 0],
     aimCarry: 0,
@@ -387,8 +394,8 @@ function landing(world: World, b: Bomb, taken: (x: number, y: number, t: number)
   return { cx: lx, cy: ly, landT: Math.max(1, dist * FLY_TICKS_PER_TILE - b.flyT) };
 }
 
-function groundBombAt(world: World, cx: number, cy: number): Bomb | undefined {
-  for (const b of world.bombs) if (b.state === 'ground' && b.cx === cx && b.cy === cy) return b;
+function groundBombAt(world: World, cx: number, cy: number, not?: Bomb): Bomb | undefined {
+  for (const b of world.bombs) if (b !== not && b.state === 'ground' && b.cx === cx && b.cy === cy) return b;
   return undefined;
 }
 
@@ -397,8 +404,13 @@ function tile(world: World, cx: number, cy: number): number {
   return world.tiles[cy * world.w + cx];
 }
 
-/** Where a bomb will be when it goes off, and when. `landT` is when it will be on the floor. */
-function foresee(world: World, b: Bomb): { cx: number; cy: number; t: number; landT: number } {
+/**
+ * Where a bomb will be when it goes off, and when. `landT` is when it will be on the floor. `path`, for one that
+ * slides (kicked, or on ice after a throw): from what time it is on which tile, [time, tile index] in order, so a
+ * blast that catches it on the way sets it off where it is then (`dangerMap`).
+ */
+type Foreseen = { cx: number; cy: number; t: number; landT: number; path?: [number, number][] };
+function foresee(world: World, b: Bomb): Foreseen {
   if (b.state === 'held') {
     const p = world.players[b.heldBy];
     return { cx: p ? Math.round(p.x) : b.cx, cy: p ? Math.round(p.y) : b.cy, t: Math.max(1, b.fuse), landT: 0 };
@@ -410,33 +422,42 @@ function foresee(world: World, b: Bomb): { cx: number; cy: number; t: number; la
     const first = (o: Bomb): { cx: number; cy: number; landT: number } => landing(world, o, () => false);
     const others = world.bombs.filter((o) => o !== b && o.state === 'air').map(first);
     const at = landing(world, b, (x, y, t) => others.some((o) => o.cx === x && o.cy === y && o.landT < t));
-    return { cx: at.cx, cy: at.cy, t: Math.max(b.fuse, at.landT + 1), landT: at.landT };
+    const t = Math.max(b.fuse, at.landT + 1);
+    if (world.ice) {
+      // on ice it lands sliding on the way it was thrown (moveBombs): follow that too
+      const on = slid(world, { ...b, state: 'ground', x: at.cx, y: at.cy, cx: at.cx, cy: at.cy, slide: b.flyDir, speed: ICE_LAND_SPEED }, b, t - at.landT - 1, at.landT + 1);
+      return { ...on, landT: at.landT };
+    }
+    return { cx: at.cx, cy: at.cy, t, landT: at.landT };
   }
   if (b.slide) {
-    // a kicked bomb: follow its slide until it stops or its fuse runs out
-    const dx = DX[b.slide];
-    const dy = DY[b.slide];
-    let pos = dx !== 0 ? b.x : b.y;
-    let cx = b.cx;
-    let cy = b.cy;
-    const dir = dx !== 0 ? dx : dy;
-    for (let k = 0; k < b.fuse; k++) {
-      const centre = Math.round(pos);
-      let next = pos + dir * KICK_SPEED;
-      if ((pos - centre) * dir <= 0 && (next - centre) * dir >= 0) {
-        if (tile(world, cx + dx, cy + dy) !== FLOOR || groundBombAt(world, cx + dx, cy + dy)) {
-          next = centre;
-          pos = next;
-          break;
-        }
-      }
-      pos = next;
-      if (dx !== 0) cx = Math.round(pos);
-      else cy = Math.round(pos);
-    }
-    return { cx, cy, t: Math.max(1, b.fuse), landT: 0 };
+    // a kicked bomb (or, on ice, one sliding on from a throw or bouncing): follow it until it stops or goes off
+    return { ...slid(world, { ...b }, b, Math.max(1, b.fuse), 0), landT: 0 };
   }
   return { cx: b.cx, cy: b.cy, t: Math.max(1, b.fuse), landT: 0 };
+}
+
+/**
+ * A copy of sliding bomb `c`, `from` ticks from now, followed by the rules' own slideBomb (sim.ts) until it
+ * would go off, `fuse` ticks later: where it is then, and when (ticks from now). It stops at blocks and at bombs
+ * on the ground (not `self`, the bomb it is a copy of); robots are left out, as they move. Sliding through a
+ * blast still burning sets it off moments later, as it does in the rules.
+ */
+function slid(world: World, c: Bomb, self: Bomb, fuse: number, from: number): { cx: number; cy: number; t: number; path: [number, number][] } {
+  const free = (x: number, y: number): boolean => tile(world, x, y) === FLOOR && !groundBombAt(world, x, y, self);
+  const path: [number, number][] = [[from, c.cy * world.w + c.cx]];
+  let left = fuse;
+  let k = 0;
+  while (left > 0 && c.slide) {
+    k++;
+    slideBomb(c, world.ice, free);
+    left--;
+    const idx = c.cy * world.w + c.cx;
+    if (idx !== path[path.length - 1][1]) path.push([from + k, idx]);
+    // (a flame `ttl` ticks from going out is still there on the ttl-th tick from now)
+    if (left > CHAIN_TICKS && world.flames.some((f) => f.cx === c.cx && f.cy === c.cy && f.ttl >= from + k)) left = CHAIN_TICKS;
+  }
+  return { cx: c.cx, cy: c.cy, t: Math.max(1, from + k + left), path };
 }
 
 /**
@@ -584,7 +605,7 @@ export function dangerMap(world: World, viewer: Player | null, notice: number, e
     }
   }
 
-  const pending: { cx: number; cy: number; t: number; landT: number; range: number; done: boolean; tnt?: boolean }[] = [];
+  const pending: { cx: number; cy: number; t: number; landT: number; range: number; done: boolean; tnt?: boolean; path?: [number, number][] }[] = [];
   // a barrel of TNT that goes off at `t`: noted as gone then, and its blast added (or brought forward)
   const lightAt = (idx: number, t: number): void => {
     const cx = idx % world.w;
@@ -642,6 +663,26 @@ export function dangerMap(world: World, viewer: Player | null, notice: number, e
     for (const idx of tiles) add(idx, b.t, b.t + FLAME_TICKS);
     for (const o of pending) {
       if (o.done || o.landT > b.t + FLAME_TICKS) continue;
+      if (o.path) {
+        // a sliding bomb: the blast sets it off if it catches it anywhere on its way, and it goes off moments later
+        // where it has slid to by then (not where it would have stopped)
+        const end = b.t + FLAME_TICKS;
+        for (let i = 0; i < o.path.length; i++) {
+          const a = Math.max(o.path[i][0], b.t, o.landT);
+          const z = Math.min(i + 1 < o.path.length ? o.path[i + 1][0] : Infinity, end);
+          if (a >= z || !tiles.includes(o.path[i][1])) continue;
+          const t = a + CHAIN_TICKS;
+          if (t < o.t) {
+            o.t = t;
+            let j = i;
+            while (j + 1 < o.path.length && o.path[j + 1][0] <= t) j++;
+            o.cx = o.path[j][1] % world.w;
+            o.cy = (o.path[j][1] - o.cx) / world.w;
+          }
+          break;
+        }
+        continue;
+      }
       if (tiles.includes(o.cy * world.w + o.cx)) o.t = Math.min(o.t, Math.max(b.t, o.landT) + CHAIN_TICKS);
     }
   }
@@ -701,7 +742,17 @@ function safeAfter(D: Danger, idx: number, a: number): boolean {
 function wallsOf(world: World): Uint8Array {
   const out = new Uint8Array(world.w * world.h);
   for (let i = 0; i < out.length; i++) if (world.tiles[i] !== FLOOR) out[i] = 1;
-  for (const b of world.bombs) if (b.state === 'ground') out[b.cy * world.w + b.cx] = 1;
+  for (const b of world.bombs) {
+    if (b.state !== 'ground') continue;
+    // On ice a sliding bomb is in no tile's way for long: it may crawl through one for a second, but it moves
+    // on, and where it comes to rest depends on who is in its way by then. So it is not counted as in the way
+    // until it stops: a way out past it is taken, and if it does stop across it, the next look sees that.
+    // (Counting the tile it is crossing shut a Normal in for good; counting where it would stop shut a Hard in
+    // whose kicked bomb bounced back, a second before it got there. Off the ice a kicked bomb is gone from its
+    // tile in a moment either way.)
+    if (b.slide && world.ice) continue;
+    out[b.cy * world.w + b.cx] = 1;
+  }
   return out;
 }
 
@@ -724,9 +775,17 @@ function stepTimes(world: World, p: Player, sp: number, start: number, from: num
   if (from !== start) return [tFrom + 0.5 / sp, tFrom + 1 / sp];
   const sx = start % world.w;
   const sy = (start - sx) / world.w;
+  const horizontal = d >= 3;
+  if (world.ice && p.slip > 0 && d === BACK[p.slipDir]) {
+    // on ice, turning back while sliding: it slides on first, and only then walks back (iceMove in sim.ts).
+    // If that would carry it on to the next tile, it is not a way it can go from this tile.
+    const g = glideEnd(world, p);
+    if (tileOf(world, g) !== start) return [Infinity, Infinity];
+    const dist = Math.abs(horizontal ? sx + DX[d] - g.x : sy + DY[d] - g.y);
+    return [g.ticks + Math.max(0, dist - 0.5) / sp, g.ticks + dist / sp];
+  }
   const offX = p.x - sx;
   const offY = p.y - sy;
-  const horizontal = d >= 3;
   const across = Math.abs(horizontal ? offY : offX);
   if (across > 1e-6) return [(across + 0.5) / sp, (across + 1) / sp]; // line up with the tile first
   const dist = Math.abs(horizontal ? sx + DX[d] - p.x : sy + DY[d] - p.y);
@@ -850,7 +909,9 @@ function steer(world: World, p: Player, path: number[]): Dir | -1 {
   const sx = Math.round(p.x);
   const sy = Math.round(p.y);
   if (!path.length) {
-    const sp = playerSpeed(p);
+    // On ice it slides on after letting go (`glide` in sim.ts): it lets go that far short of the middle, and does
+    // not walk back for less, or it would slide past the middle and back for ever.
+    const sp = playerSpeed(p) + (world.ice ? iceSlide(playerSpeed(p)) : 0);
     if (p.x - sx > sp) return 3;
     if (sx - p.x > sp) return 4;
     if (p.y - sy > sp) return 1;
@@ -864,6 +925,41 @@ function steer(world: World, p: Player, path: number[]): Dir | -1 {
   if (ny === sy + 1 && nx === sx) return 2;
   if (ny === sy - 1 && nx === sx) return 1;
   return -1;
+}
+
+/**
+ * On ice, where a sliding robot comes to rest if it lets go (or turns back) now, and after how many ticks: the
+ * same steps as `glide` in sim.ts, stopping in the middle of its tile if a block, brick or bomb is ahead.
+ */
+function glideEnd(world: World, p: Player): { x: number; y: number; ticks: number } {
+  const d = p.slipDir;
+  const horizontal = DX[d] !== 0;
+  const s = horizontal ? DX[d] : DY[d];
+  let x = p.x;
+  let y = p.y;
+  let v = p.slip;
+  let ticks = 0;
+  for (;;) {
+    v *= ICE_DRAG;
+    if (v < ICE_STILL || !d) break;
+    ticks++;
+    const pos = horizontal ? x : y;
+    const t = Math.round(pos);
+    let next = pos + s * v;
+    const ax = horizontal ? t + s : Math.round(x);
+    const ay = horizontal ? Math.round(y) : t + s;
+    const stop = (tile(world, ax, ay) !== FLOOR || !!groundBombAt(world, ax, ay)) && (next - t) * s >= 0;
+    if (stop) next = (pos - t) * s >= 0 ? pos : t;
+    if (horizontal) x = next;
+    else y = next;
+    if (stop) break;
+  }
+  return { x, y, ticks };
+}
+
+/** About how far a robot walking at `speed` slides on ice once it lets go (`glide` in sim.ts). */
+function iceSlide(speed: number): number {
+  return (speed * ICE_DRAG) / (1 - ICE_DRAG);
 }
 
 // ---------------------------------------------------------------- trying a move out
@@ -1022,6 +1118,20 @@ export function botInput(world: World, bot: Bot): PlayerInput {
     return me.angel ? angelInput(world, bot, me) : NONE;
   }
   if (me.flying > 0) bot.script = []; // (flying its plane: nothing planned on foot applies)
+  // On ice a kick or a throw takes longer to carry out (turning back slides first), so the world has longer to
+  // change under it: now and then the rest of it is played forward again, and if it no longer works out (a rival
+  // stepped into the lane a bomb was to be kicked down, say) and some other way does, it takes that instead.
+  // (A combo given up half way can leave it worse off than finishing it: then it finishes it.)
+  if (bot.script.length && world.ice && world.tick % SCRIPT_CHECK === 0 && !scriptOk(world, bot)) {
+    const other = wayAround(world, me);
+    if (other) {
+      bot.script = [];
+      bot.path = other;
+      bot.doing = 'escape';
+      const d = steer(world, me, bot.path);
+      return d < 0 ? NONE : go(d);
+    }
+  }
   if (bot.script.length) {
     bot.doing = 'script';
     bot.path = [];
@@ -1055,7 +1165,11 @@ export function botInput(world: World, bot: Bot): PlayerInput {
   bot.lastY = me.y;
 
   if (me.flying > 0) return pilot(c);
-  const out = me.carrying ? carrying(c) : urgent(c.D, c.S, Math.min(spec.blockSight, BLOCK_URGENT)) ? flee(c) : calm(c);
+  const soon = Math.min(spec.blockSight, BLOCK_URGENT);
+  // on ice, sliding on to the next tile: it will be there whatever it presses (turning back only slides it on),
+  // so a blast coming there is as urgent as one coming here
+  const ahead = world.ice && me.slip > 0 ? tileOf(world, glideEnd(world, me)) : c.S;
+  const out = me.carrying ? carrying(c) : urgent(c.D, c.S, soon) || (ahead !== c.S && urgent(c.D, ahead, soon)) ? flee(c) : calm(c);
   return out;
 }
 
@@ -1072,7 +1186,9 @@ function flee(c: Ctx): PlayerInput {
     if (act) return act;
   }
   advance(world, me, bot.path);
-  if (!bot.path.length || bot.doing !== 'flee' || !pathOk(world, me, D, bot.path, Math.min(spec.margin, 2), own, true)) {
+  // (a way out found by playing it forward on a copy of the world, `lastDitch`: the danger map cannot see it, so it is not checked against it)
+  const escaping = bot.doing === 'escape' && bot.path.length > 0;
+  if (!escaping && (!bot.path.length || bot.doing !== 'flee' || !pathOk(world, me, D, bot.path, Math.min(spec.margin, 2), own, true))) {
     bot.path = [];
     // round any curse if it can; through one rather than stay in a blast
     const find = (map: Danger): void => {
@@ -1104,9 +1220,23 @@ function flee(c: Ctx): PlayerInput {
         bot.doing = 'script';
         return bot.script.shift()!;
       }
-      bot.doing = 'trapped';
-      return go(steer(world, me, []));
+      const ditch = world.ice ? lastDitch(c) : null;
+      if (!ditch) {
+        bot.doing = 'trapped';
+        return go(steer(world, me, []));
+      }
+      bot.path = ditch;
+      bot.doing = 'escape';
+      bot.goal = 'none';
+      const d = steer(world, me, bot.path);
+      return d < 0 ? NONE : go(d);
     }
+  }
+  if (bot.doing === 'escape' && bot.path.length) {
+    const d = steer(world, me, bot.path);
+    if (d >= 0) return go(d);
+    bot.path = [];
+    return NONE;
   }
   bot.doing = 'flee';
   bot.goal = 'none';
@@ -1116,6 +1246,51 @@ function flee(c: Ctx): PlayerInput {
     return NONE;
   }
   return go(d);
+}
+
+/** On ice, how often a kick or a throw under way is played forward again (ticks). */
+const SCRIPT_CHECK = 6;
+
+/** The rest of the bot's script, played forward on a copy of the world as `tryOut` does: does it still leave it a safe way out? */
+function scriptOk(world: World, bot: Bot): boolean {
+  const me = world.players[bot.id];
+  const spec = LEVELS[bot.level];
+  const walls = wallsOf(world);
+  const c: Ctx = { world, me, bot, spec, D: dangerMap(world, me, spec.notice), walls, own: walls, S: tileOf(world, me), sight: PLAIN_SIGHT, bold: false };
+  const rest = bot.script.slice();
+  return !!tryOut(c, (_w, _m, t) => (t < rest.length ? rest[t] : 'done'));
+}
+
+/** How often, at most, a boxed-in CPU player on ice plays its way out forward on a copy of the world (ticks). */
+const LAST_DITCH_GAP = 20;
+/** How many of the nearest tiles it tries. */
+const LAST_DITCH_TRIES = 6;
+
+/**
+ * On ice, with no way out it can see on the danger map: before standing still, play it forward on a copy of the
+ * world, with the real rules, as it does before pressing A. If standing still is not safe, try walking to each of
+ * the nearest tiles it can reach, and take the first way that leaves it standing. On ice the danger map sees
+ * least well (bombs slide on, bounce back and stop where robots are), and a way out it cannot see is often there.
+ */
+function lastDitch(c: Ctx): number[] | null {
+  const { world, me, bot, own } = c;
+  if (world.tick - bot.ditchAt < LAST_DITCH_GAP) return null;
+  bot.ditchAt = world.tick;
+  if (survives(world, me.id, [], [])) return null;
+  return wayAround(world, me, own);
+}
+
+/** The nearest few tiles it can walk to, tried in turn on a copy of the world: the first way that leaves it standing, or null. */
+function wayAround(world: World, me: Player, own = wallsOf(world)): number[] | null {
+  const reach = explore(world, me, NO_DANGER, 0, own);
+  const near: [number, number][] = [];
+  for (let i = 0; i < reach.time.length; i++) if (i !== reach.start && reach.time[i] < Infinity) near.push([reach.time[i], i]);
+  near.sort((a, b) => a[0] - b[0]);
+  for (const [, t] of near.slice(0, LAST_DITCH_TRIES)) {
+    const path = pathTo(reach, t);
+    if (survives(world, me.id, [], path)) return path;
+  }
+  return null;
 }
 
 /** A bomb lying next to it with a rival further along the lane: kick it at them, if that plays out safely. */

@@ -27,6 +27,8 @@ export type Dir = 0 | 1 | 2 | 3 | 4;
 /** One tile's step in x and y for each direction, indexed by Dir. */
 export const DX = [0, 0, 0, -1, 1];
 export const DY = [0, -1, 1, 0, 0];
+/** The way back, for each direction (none stays none). */
+export const BACK: Dir[] = [0, 2, 1, 4, 3];
 
 /**
  * What a tile can be: open floor, a solid block (never breaks), a brick (a blast breaks it), or a barrel of TNT
@@ -151,6 +153,15 @@ export interface Player {
   /** bombs it still has to drop, and ticks before the next one can go */
   planeBombs: number;
   planeCool: number;
+  /**
+   * On ice (World.ice): the speed it is still sliding at, tiles a tick, along `slipDir`. While it walks this is
+   * how far it went on the last tick; once it lets go, or turns back the way it came, it slides on at this speed,
+   * losing ICE_DRAG of it each tick (`glide`). 0 when it has stopped, and always 0 off the ice.
+   */
+  slip: number;
+  slipDir: Dir;
+  /** it slid on the last tick (no feet moving: it is drawn standing, leaning, kicking up frost) */
+  skid: boolean;
 }
 
 export interface Bomb {
@@ -170,8 +181,10 @@ export interface Bomb {
   age: number;
   /** on the floor, carried over someone's head, or flying after a throw */
   state: 'ground' | 'held' | 'air';
-  /** direction it is sliding after a kick, 0 if still */
+  /** direction it is sliding after a kick (or, on ice, after landing from a throw), 0 if still */
   slide: Dir;
+  /** how fast it slides, tiles a tick: KICK_SPEED, except on ice, where it slows down (ICE_FRICTION) and bounces (`slideBomb`) */
+  speed: number;
   /** id of the player carrying it, or -1 */
   heldBy: number;
   /** true once it has been picked up, so the carry timer is only set once */
@@ -242,6 +255,8 @@ export type GameEvent =
   | { type: 'lift' }
   | { type: 'throw' }
   | { type: 'land' }
+  /** on ice, a sliding bomb bounced back off what stopped it */
+  | { type: 'bounce' }
   /** a bomb went off on this tile */
   | { type: 'explode'; cx: number; cy: number }
   | { type: 'pickup'; player: number; kind: ItemKind }
@@ -380,6 +395,12 @@ export interface World {
   trainSeed: number;
   /** barrels of TNT that a blast has reached, about to go off */
   tntLit: LitTnt[];
+  /**
+   * The floor is ice (the Frozen Lake map; the owner's design, 25 November 2026): robots slide a little when
+   * they let go or turn back (`glide`), and bombs slide on after landing from a throw, slow down, and bounce back
+   * off what stops them if they hit it fast enough (`slideBomb`).
+   */
+  ice: boolean;
 }
 
 /** Knocked-out players as angels: off, on (they throw bombs in), or on and able to come back (`revive`). */
@@ -441,6 +462,8 @@ export interface WorldConfig {
   rails?: boolean;
   /** Barrels of TNT in place of some bricks (TNT_SHARE; the Wild West map). Default false. */
   tnt?: boolean;
+  /** The floor is ice (World.ice; the Frozen Lake map). Default false. */
+  ice?: boolean;
 }
 
 // ---------------------------------------------------------------- constants
@@ -505,6 +528,28 @@ export const DEATH_TICKS = 90; // length of the knocked-out animation (1.5 s)
 export const GHOST_TICKS = 300; // `deadTicks` goes on counting this far (5 s), so the ghost can be drawn floating all the way off the top of the screen
 export const CARRY_FUSE_TICKS = 180; // 3 s from the first pick-up, and it keeps ticking
 export const KICK_SPEED = 0.14; // a kicked bomb slides at 8.4 tiles a second
+
+// ice (the Frozen Lake map, World.ice; the owner's design, 25 November 2026: robots slide a little after they
+// let go or turn back; thrown bombs land and slide on; a sliding bomb that hits something fast bounces back).
+// The numbers are Claude's, to be play-tested.
+/**
+ * A robot that lets go, or turns back the way it came, slides on, keeping this share of its speed each tick:
+ * about a fifth of a tile at the starting speed (0.2 s before it can walk back), and just under half a tile at
+ * top speed (0.3 s), so one that lets go in the middle of a tile never slides off it.
+ */
+export const ICE_DRAG = 0.84;
+/** a sliding robot going slower than this, tiles a tick, has stopped */
+export const ICE_STILL = 0.004;
+/** a thrown bomb lands on ice sliding at this speed, tiles a tick (under half its speed in the air): two tiles on */
+export const ICE_LAND_SPEED = 0.065;
+/** a bomb sliding on ice loses this much speed every tick: a kick goes about nine tiles before it crawls */
+export const ICE_FRICTION = 0.001;
+/** slowed to this, tiles a tick, a sliding bomb carries on to the middle of the next tile and stops there */
+export const ICE_CRAWL = 0.025;
+/** a bomb that bounces goes back at this share of the speed it hit at */
+export const ICE_BOUNCE = 0.5;
+/** it bounces only when it hits at this speed or faster: fast enough to go back at least a tile (ICE_CRAWL) */
+export const ICE_BOUNCE_MIN = ICE_CRAWL / ICE_BOUNCE;
 export const THROW_TILES = 3; // a thrown bomb lands this many tiles away
 export const FLY_TICKS_PER_TILE = 7; // how long a thrown bomb takes over each tile
 
@@ -807,6 +852,9 @@ export function createWorld(cfg: WorldConfig): World {
     planeDir: 0,
     planeBombs: 0,
     planeCool: 0,
+    slip: 0,
+    slipDir: 0,
+    skid: false,
   }));
 
   const world: World = {
@@ -843,6 +891,7 @@ export function createWorld(cfg: WorldConfig): World {
     train: null,
     trainSeed: (cfg.seed ^ 0x5bd1e995) >>> 0,
     tntLit: [],
+    ice: !!cfg.ice,
   };
   if (rails.length) world.train = trainFrom(world, TRAIN_FIRST[0] + Math.floor(trainRand(world) * (TRAIN_FIRST[1] - TRAIN_FIRST[0] + 1)));
   return world;
@@ -1247,6 +1296,7 @@ function movePlayer(world: World, p: Player, dir: Dir): void {
         const b = bombAt(world, bx, by);
         if (p.canKick && b && b.slide === 0 && freeForBomb(world, bx + dx, by + dy)) {
           b.slide = dir;
+          b.speed = KICK_SPEED;
           kicked = true;
           world.events.push({ type: 'kick' });
         }
@@ -1286,6 +1336,44 @@ function movePlayer(world: World, p: Player, dir: Dir): void {
   p.facing = dir;
   p.moving = moved;
   if (moved) p.walk += sp * 5.2;
+}
+
+/**
+ * On ice (World.ice): with no direction held, or the way back held, the robot slides on the way it was going,
+ * keeping ICE_DRAG of its speed each tick (`slip`), until it is slower than ICE_STILL. A block, brick or bomb
+ * ahead stops it in the middle of its tile, as walking would. It slides along the lane it is on, so it is
+ * always in line with its tiles. Returns whether it moved.
+ */
+function glide(world: World, p: Player): boolean {
+  p.slip *= ICE_DRAG;
+  if (p.slip < ICE_STILL) {
+    p.slip = 0;
+    p.moving = false;
+    return false;
+  }
+  const d = p.slipDir;
+  const horizontal = DX[d] !== 0;
+  const s = horizontal ? DX[d] : DY[d];
+  const pos = horizontal ? p.x : p.y;
+  const t = Math.round(pos);
+  let next = pos + s * p.slip;
+  const ahead = horizontal ? blocked(world, p, t + s, Math.round(p.y)) : blocked(world, p, Math.round(p.x), t + s);
+  if (ahead && (next - t) * s >= 0) {
+    // no further than the middle of its own tile (and if it was past it already, it stays where it is)
+    next = (pos - t) * s >= 0 ? pos : t;
+    p.slip = 0;
+  }
+  const moved = next !== pos;
+  if (horizontal) p.x = next;
+  else p.y = next;
+  if (moved) {
+    p.heading = d;
+    if (horizontal) p.mvx = s;
+    else p.mvy = s;
+  }
+  p.moving = moved;
+  p.skid = moved;
+  return moved;
 }
 
 function flameAt(world: World, cx: number, cy: number): boolean {
@@ -1361,6 +1449,7 @@ function placeBomb(world: World, p: Player): void {
     age: 0,
     state: 'ground',
     slide: 0,
+    speed: 0,
     heldBy: -1,
     lifted: false,
     fromX: 0,
@@ -1460,6 +1549,11 @@ function moveBombs(world: World): void {
           b.x = b.cx = lx;
           b.y = b.cy = ly;
           world.events.push({ type: 'land' });
+          if (world.ice) {
+            // on ice it lands sliding on the way it was thrown
+            b.slide = b.flyDir;
+            b.speed = ICE_LAND_SPEED;
+          }
         } else if (b.flyDist > THROW_TILES + world.w + world.h) {
           // nowhere to land at all: fizzle out
           world.bombs.splice(world.bombs.indexOf(b), 1);
@@ -1468,26 +1562,49 @@ function moveBombs(world: World): void {
         } else b.flyDist++; // bounce on to the next tile
       }
     } else if (b.slide) {
-      const dx = DX[b.slide];
-      const dy = DY[b.slide];
-      const horizontal = dx !== 0;
-      const stepDir = horizontal ? dx : dy;
-      const pos = horizontal ? b.x : b.y;
-      const centre = Math.round(pos);
-      let next = pos + stepDir * KICK_SPEED;
-      // at each tile centre, look at the tile ahead before carrying on
-      if ((pos - centre) * stepDir <= 0 && (next - centre) * stepDir >= 0) {
-        if (!freeForBomb(world, b.cx + dx, b.cy + dy)) {
-          next = centre;
-          b.slide = 0;
-        }
-      }
-      if (horizontal) b.x = next;
-      else b.y = next;
-      b.cx = Math.round(b.x);
-      b.cy = Math.round(b.y);
+      if (slideBomb(b, world.ice, (cx, cy) => freeForBomb(world, cx, cy))) world.events.push({ type: 'bounce' });
     }
   }
+}
+
+/**
+ * One tick of a sliding bomb (moveBombs; the CPU players' `foresee` follows a slide with it too). At the middle
+ * of each tile it looks at the tile ahead (`free`: no block, bomb or robot there) and stops if it cannot go on.
+ * Off the ice it slides at KICK_SPEED until something stops it. On ice it loses ICE_FRICTION of its speed a tick;
+ * slowed to ICE_CRAWL it stops in the middle of the tile it reaches next; and stopped by something while going
+ * at ICE_BOUNCE_MIN or faster, it bounces back the way it came at ICE_BOUNCE of its speed, if the tile behind it
+ * is free. Returns true on a bounce.
+ */
+export function slideBomb(b: Bomb, ice: boolean, free: (cx: number, cy: number) => boolean): boolean {
+  const dx = DX[b.slide];
+  const dy = DY[b.slide];
+  const horizontal = dx !== 0;
+  const stepDir = horizontal ? dx : dy;
+  const pos = horizontal ? b.x : b.y;
+  const centre = Math.round(pos);
+  const speed = ice ? b.speed : KICK_SPEED;
+  let next = pos + stepDir * speed;
+  let bounced = false;
+  // at each tile centre, look at the tile ahead before carrying on
+  if ((pos - centre) * stepDir <= 0 && (next - centre) * stepDir >= 0) {
+    if (!free(b.cx + dx, b.cy + dy)) {
+      next = centre;
+      if (ice && speed >= ICE_BOUNCE_MIN && free(b.cx - dx, b.cy - dy)) {
+        b.slide = BACK[b.slide];
+        b.speed = speed * ICE_BOUNCE;
+        bounced = true;
+      } else b.slide = 0;
+    } else if (ice && speed <= ICE_CRAWL) {
+      next = centre; // (slowed right down: it stops here)
+      b.slide = 0;
+    }
+  }
+  if (ice && b.slide && !bounced) b.speed = Math.max(ICE_CRAWL, speed - ICE_FRICTION);
+  if (horizontal) b.x = next;
+  else b.y = next;
+  b.cx = Math.round(b.x);
+  b.cy = Math.round(b.y);
+  return bounced;
 }
 
 // ---------------------------------------------------------------- blasts
@@ -1616,6 +1733,7 @@ function launch(world: World, p: Player): void {
   p.planeBombs = PLANE_BOMBS;
   p.planeCool = PLANE_FIRST_GAP;
   p.moving = false;
+  p.slip = 0; // (on ice: it stops to open the laptop)
   p.askDir = 0;
   p.askTicks = 0;
   world.events.push({ type: 'launch', player: p.id });
@@ -1757,6 +1875,8 @@ function knockOut(world: World, p: Player, cause: KnockCause, by: number): void 
   p.laptop = false;
   p.alive = false;
   p.moving = false;
+  p.slip = 0;
+  p.skid = false;
   p.deadTicks = 0;
   p.safeTicks = 0;
   if (p.zombie) {
@@ -1865,6 +1985,9 @@ function bringBack(world: World, p: Player, x: number, y: number): void {
     flying: 0,
     planeBombs: 0,
     planeCool: 0,
+    slip: 0,
+    slipDir: 0,
+    skid: false,
   } satisfies Partial<Player>);
 }
 
@@ -2048,6 +2171,7 @@ function angelStep(world: World, p: Player, inp: PlayerInput | undefined): void 
         age: 0,
         state: 'air',
         slide: 0,
+        speed: 0,
         heldBy: -1,
         lifted: false,
         fromX: aim.cx,
@@ -2063,6 +2187,32 @@ function angelStep(world: World, p: Player, inp: PlayerInput | undefined): void 
   }
   if (!a) p.angelHeld = 0;
   p.prevA = a;
+}
+
+/**
+ * Moving on ice. Asked the way back while still sliding, the robot slides on first (looking the new way), and
+ * only walks back once it has stopped. Let go, it slides on. Asked any other way it walks as anywhere (a turn
+ * still takes the next opening), and if that does not move it, it slides on. Whatever it walked this tick is
+ * the speed it slides at once it lets go.
+ */
+function iceMove(world: World, p: Player, asked: Dir): void {
+  if (!asked) {
+    if (p.slip > 0) glide(world, p);
+    else p.moving = false;
+    return;
+  }
+  if (p.slip > 0 && asked === BACK[p.slipDir]) {
+    glide(world, p);
+    p.facing = asked;
+    return;
+  }
+  const ox = p.x;
+  const oy = p.y;
+  movePlayer(world, p, asked);
+  if (p.moving) {
+    p.slipDir = p.heading;
+    p.slip = Math.abs(p.x - ox) + Math.abs(p.y - oy);
+  } else if (p.slip > 0) glide(world, p);
 }
 
 // ---------------------------------------------------------------- one tick
@@ -2114,7 +2264,9 @@ export function step(world: World, inputs: (PlayerInput | undefined)[]): void {
       p.askDir = asked;
       p.askTicks = 0;
     } else if (asked) p.askTicks++;
-    if (inp && inp.dir) movePlayer(world, p, inp.dir);
+    p.skid = false;
+    if (world.ice) iceMove(world, p, asked);
+    else if (inp && inp.dir) movePlayer(world, p, inp.dir);
     else if (world.stepAssist) coast(world, p);
     else p.moving = false;
     const a = !!inp?.a;

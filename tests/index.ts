@@ -11,6 +11,7 @@ import './lives.test';
 import './laptop.test';
 import './itemdrop.test';
 import './rail.test';
+import './ice.test';
 import './room.test';
 import './predict.test';
 import './push.test';

@@ -54,8 +54,9 @@ The whole game as pure logic. No drawing, no sound, no browser calls, no `Math.r
 | `step(world, inputs)` | Advances the world one tick. The only function the rest of the game calls during play. |
 | `ticksLeft(world)`, `blockLandTick(world, k)` | What the timer shows, and when each falling block lands |
 | `movePlayer` | Walking, lining up with openings, turning, kicking |
+| `iceMove`, `glide` | On ice (`World.ice`, Frozen Lake): sliding on after letting go or turning back (`Player.slip`, `slipDir`, `skid`) |
 | `placeBomb`, `useAction` | The A and B buttons |
-| `moveBombs` | Carried bombs follow, thrown bombs fly, kicked bombs slide |
+| `moveBombs`, `slideBomb` | Carried bombs follow, thrown bombs fly, kicked bombs slide. `slideBomb` is one tick of a slide (on ice: slowing, stopping, bouncing; `Bomb.speed`), shared with the CPU players' `foresee` |
 | `explode` | A blast: reach, what stops it, chain reactions |
 | `knockOut`, `bringBack`, `comeBackTile` | Losing a life: coming back at the start, or out of the round (an angel, with angels on) |
 | `angelStep`, `perimeterAt`, `angelAim`, `angelReach` | Angels: gliding round the outer wall, winding up and throwing a bomb in |
@@ -93,7 +94,8 @@ Pure logic like the rules. Given the world, `botInput(world, bot)` returns one `
 | `LEVELS` | The settings of the three levels, one line each |
 | `createBot(id, level, seed)` | Makes the memory for one CPU player |
 | `botInput(world, bot)` | What it presses this tick. Calls `flee` if its tile is going to be blasted, otherwise `calm`. |
-| `dangerMap` | For every tile, when a blast will be on it: chain reactions, bricks that will be gone, sliding and thrown bombs |
+| `dangerMap` | For every tile, when a blast will be on it: chain reactions, bricks that will be gone, sliding and thrown bombs (a sliding bomb's way, `path` from `foresee`/`slid`, so a blast that catches it on the way sets it off where it is then) |
+| `steer`, `stepTimes`, `glideEnd`, `lastDitch`, `scriptOk` | On ice: letting go early so the slide ends in the middle of a tile, turning back costing a slide, and, boxed in or in the middle of a kick or throw that no longer works, playing the nearest ways out forward on a copy of the world |
 | `explore`, `pathTo`, `escapeTargets` | Where it can walk and how soon, never on a tile while it burns |
 | `decide`, `chooseGoal` | Bomb a player, or pick a power-up, bricks or a player to walk to |
 | `placeBomb` | The three checks before pressing A: a way out, nobody able to shut it, and the move played forward on a copy |
@@ -166,7 +168,7 @@ Everything on the canvas is drawn with shapes in code. There are no image files.
 | Function | Draws |
 |---|---|
 | `drawStatic` | Floor and solid blocks. Drawn once onto a hidden canvas and reused every frame. |
-| `setMap`, `drawFloor`, `drawHard`, `drawSoft` | The map being drawn (`MAPS` in setup.ts): each map has its own floor, solid block and breakable block. Midnight: `drawSteel`, `drawBricks`. Wild West: `drawSand`, `drawRock` (a front face unless a block is right below; a cactus on some), `drawCrate` (stamped from a picture made once per size), with its colours in `WEST`. main.ts (`redrawStatic`) and the lobby's arena picture call `setMap` before drawing. A new map is a new id in `MAPS` and a branch in these three. |
+| `setMap`, `drawFloor`, `drawHard`, `drawSoft` | The map being drawn (`MAPS` in setup.ts): each map has its own floor, solid block and breakable block. Midnight: `drawSteel`, `drawBricks`. Wild West: `drawSand`, `drawRock` (a front face unless a block is right below; a cactus on some), `drawCrate` (stamped from a picture made once per size), with its colours in `WEST`. Frozen Lake: `drawLakeIce`, `drawSnowRock` (a snow cap, and a front face with icicles unless a block is right below), `drawIceBlock` (four variants), with its colours in `FROST`; a robot sliding on it is drawn by `drawFrost`. main.ts (`redrawStatic`) and the lobby's arena picture call `setMap` before drawing. A new map is a new id in `MAPS` and a branch in these three. |
 | `drawDynamic` | Everything else, every frame: shadows, power-ups, bricks, the ring under your robot, bombs, blasts, robots, carried and flying bombs |
 | `drawItemIcon` | The eight power-up icons |
 | `danceFrame` (in `dances.ts`) | The winner's victory dance at a moment: facing, steps, slide and `Pose` |

@@ -70,6 +70,7 @@ export type ArenaId = (typeof ARENAS)[number]['id'];
 export const MAPS = [
   { id: 'midnight', name: 'Midnight', solid: 'steel blocks', soft: 'bricks' },
   { id: 'western', name: 'Wild West', solid: 'red rock', soft: 'wooden crates' },
+  { id: 'ice', name: 'Frozen Lake', solid: 'snowy rock', soft: 'ice blocks' },
 ] as const;
 export type MapId = (typeof MAPS)[number]['id'];
 export function mapOf(s: MatchSetup): (typeof MAPS)[number] {
@@ -890,6 +891,8 @@ export function worldConfig(s: MatchSetup, myColor: string, seed: number, guests
     itemDrop: s.itemDrop,
     // the Wild West's railway and TNT (the owner's ask, 25 November 2026): part of the map, on every size
     ...(s.map === 'western' ? { rails: true, tnt: true } : {}),
+    // Frozen Lake's ice (the owner's ask, 25 November 2026): robots and bombs slide, bombs bounce
+    ...(s.map === 'ice' ? { ice: true } : {}),
   };
 }
 

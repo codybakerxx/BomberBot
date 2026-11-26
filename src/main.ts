@@ -12,7 +12,7 @@
  */
 import { createWorld, step, ticksLeft, World, PlayerInput, type Player, Dir, TICK_HZ, DEATH_TICKS, type GameEvent, type ItemKind } from './sim';
 import { Bot, BotLevel, BOT_LEVELS, LEVELS, createBot, botInput } from './bot';
-import { COLORS, NOBODY, botName, colorById, drawAngels, drawBarrel, drawSignalIcon, drawGround, drawHead, drawItemTile, drawStatic, drawDynamic, drawGhosts, groundKey, setMap, setOrangeFire, warmSprites } from './render';
+import { COLORS, NOBODY, botName, colorById, drawAngels, drawBarrel, drawFloor, drawSignalIcon, drawGround, drawHead, drawItemTile, drawStatic, drawDynamic, drawGhosts, groundKey, setMap, setOrangeFire, warmSprites } from './render';
 import { Input, PadReader, pilotAim, typing } from './input';
 import { drawTitle, closeTitle, drawIcon } from './title';
 import { initAudio, preview, setSound, sfx, wakeAudio } from './audio';
@@ -131,6 +131,7 @@ let angelTipShown = false;
 let laptopTipShown = false;
 /** the tip that a train is coming has been shown this match (the first time its bell rings) */
 let trainTipShown = false;
+let iceTipShown = false;
 const playTip = $('playTip');
 /** The bubbles over the robots: what each said in the quick chat (quick.ts) */
 const bubbles = createBubbles($('bubbles'), (i) => colorById(world.players[i]?.colorId ?? 'gold').glow);
@@ -903,7 +904,7 @@ function soundOf(e: GameEvent): void {
   else if (e.type === 'pickup') e.kind === 'curse' ? sfx.curse() : sfx.pickup();
   else if (e.type === 'shield') sfx.shield();
   else if (e.type === 'kick' || e.type === 'throw') sfx.kick();
-  else if (e.type === 'lift' || e.type === 'land') sfx.lift();
+  else if (e.type === 'lift' || e.type === 'land' || e.type === 'bounce') sfx.lift(); // (a bomb bouncing off a wall on ice: Lift and land's clunk)
   else if (e.type === 'block') sfx.block();
   else if (e.type === 'respawn' || e.type === 'revive') sfx.shield(); // back in the round
   else if (e.type === 'rise') sfx.curse(); // a zombie gets up
@@ -961,6 +962,10 @@ function advance(inputs: (PlayerInput | undefined)[]): void {
   if (firstZombie >= 0 && !angelTipShown) {
     angelTipShown = true;
     showTip(couch() ? `${nameOf(firstZombie)}: a zombie! Small bombs only` : 'You are a zombie! Drop small bombs in their way');
+  }
+  if (!iceTipShown && world.ice && world.tick >= TICK_HZ) {
+    iceTipShown = true;
+    showTip('Ice! You slide a little, and bombs slide and bounce');
   }
   if (!trainTipShown && world.events.some((e) => e.type === 'bell')) {
     trainTipShown = true;
@@ -1542,6 +1547,7 @@ function newMatch(again = true): void {
   angelTipShown = false;
   laptopTipShown = false;
   trainTipShown = false;
+  iceTipShown = false;
   start();
 }
 /** Start the next round of the match in a fresh arena. */
@@ -1862,6 +1868,21 @@ function showKey(): void {
       g.fillStyle = '#93714a';
       g.fillRect(0, 0, s, s);
       drawBarrel(g, 0, 0, s);
+    });
+  }
+  if (world.ice) {
+    // Frozen Lake's ice
+    row('Ice', 'Robots slide a little when they stop or turn back. Bombs slide on and bounce off walls.', (g, s) => {
+      drawFloor(g, 1, 0, 0, 0, s, 'ice');
+      g.strokeStyle = 'rgba(225,245,255,0.8)';
+      g.lineCap = 'round';
+      g.lineWidth = Math.max(1, s * 0.07);
+      for (const [y, x0, x1] of [[0.32, 0.2, 0.62], [0.5, 0.12, 0.8], [0.68, 0.26, 0.66]]) {
+        g.beginPath();
+        g.moveTo(s * x0, s * y);
+        g.lineTo(s * x1, s * y);
+        g.stroke();
+      }
     });
   }
   row('Crown', 'The player in the lead', (g, s) => {
@@ -2210,7 +2231,7 @@ function onRound(w: World, s: Seat[], score: Score, fresh: boolean): void {
     redrawStatic();
     return;
   }
-  if (fresh && roundNo <= 1) angelTipShown = laptopTipShown = trainTipShown = false; // a new match
+  if (fresh && roundNo <= 1) angelTipShown = laptopTipShown = trainTipShown = iceTipShown = false; // a new match
   blastedBy = -1;
   hurried = false;
   overShown = false;
