@@ -864,14 +864,16 @@ for (let seed = 1; seed <= 40; seed++) {
 // 18. how rare each power-up is
 {
   const chance = Object.fromEntries(ITEM_CHANCE) as Record<string, number>;
-  assert.deepEqual(ITEM_CHANCE.map(([k]) => k), ['bomb', 'fire', 'speed', 'kick', 'grab', 'shield', 'curse', 'laptop']);
+  assert.deepEqual(ITEM_CHANCE.map(([k]) => k), ['bomb', 'fire', 'speed', 'kick', 'grab', 'shield', 'curse', 'laptop', 'decoy', 'wire']);
   assert.equal(ITEM_SHARE, 0.6);
   assert.ok(Math.abs(ITEM_CHANCE.reduce((s, [, c]) => s + c, 0) - ITEM_SHARE) < 1e-12, '60% of bricks hide something');
   assert.equal(chance.shield, chance.curse);
   assert.equal(chance.laptop, chance.shield);
-  assert.ok(Math.abs(chance.shield - 0.0122) < 0.0001, `a shield is under about 1.2% of bricks (${chance.shield})`);
+  assert.equal(chance.decoy, chance.shield);
+  assert.equal(chance.wire, chance.shield);
+  assert.ok(Math.abs(chance.shield - 0.0118) < 0.0001, `a shield is under about 1.2% of bricks (${chance.shield})`);
   for (const k of ['bomb', 'fire', 'speed']) assert.ok(chance[k] >= 10 * chance.shield, `${k} is far commoner than a shield or a curse`);
-  assert.ok(Math.abs(chance.kick - 0.0306) < 0.0001, `a boot is under about 3.1% of bricks (${chance.kick})`);
+  assert.ok(Math.abs(chance.kick - 0.0294) < 0.0001, `a boot is under about 2.9% of bricks (${chance.kick})`);
   assert.equal(chance.grab, chance.kick);
   for (const k of ['kick', 'grab']) assert.ok(chance[k] > 2 * chance.shield, `${k} is rare, but not as rare as a shield or a curse`);
   for (const k of ['bomb', 'fire', 'speed']) assert.ok(chance[k] >= 4 * chance.kick, `${k} is at least four times as common as a boot or a glove`);
@@ -890,14 +892,16 @@ for (let seed = 1; seed <= 40; seed++) {
   }
   for (const [k, c] of ITEM_CHANCE) {
     const share = total[k] / bricks;
-    // boots, gloves and laptops run over, because every arena is given one if the dice gave none (the laptop,
-    // the rarest of the three, most: about four arenas in ten get theirs that way)
-    const over = k === 'laptop' ? 0.007 : 0.004;
+    // boots, gloves, laptops, decoys and trip wires run over, because every arena is given one if the dice gave
+    // none (the rarest most: about four arenas in ten get theirs that way)
+    const over = k === 'laptop' || k === 'decoy' || k === 'wire' ? 0.007 : 0.004;
     assert.ok(share - c > -0.004 && share - c < over, `${k}: ${(share * 100).toFixed(2)}% of bricks, meant to be ${(c * 100).toFixed(2)}%`);
   }
   assert.equal(arenasWith.kick, N, 'every arena has a boot');
   assert.equal(arenasWith.grab, N, 'every arena has a glove');
   assert.equal(arenasWith.laptop, N, 'every arena has a laptop');
+  assert.equal(arenasWith.decoy, N, 'every arena has a decoy');
+  assert.equal(arenasWith.wire, N, 'every arena has a trip wire');
   for (const k of ['shield', 'curse']) {
     const share = arenasWith[k] / N;
     assert.ok(share > 0.52 && share < 0.72, `${k} turns up in about six arenas in ten (${(share * 100).toFixed(0)}%)`);

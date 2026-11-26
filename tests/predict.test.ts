@@ -51,6 +51,8 @@ class Page {
   up: Link;
   down: Link;
   conn: Conn = { send: (t) => this.down.send(t), close: () => {} };
+  /** done to the round's world as it is made, on the server and on each page alike */
+  prepare: (w: World) => void = () => {};
   constructor(
     public key: string,
     public room: Room,
@@ -74,6 +76,7 @@ class Page {
       const m = JSON.parse(t) as ServerMsg;
       if (m.t === 'round' || m.t === 'snap') {
         this.world = m.t === 'round' ? roundWorld(m.cfg) : decodeWorld(m.world);
+        if (m.t === 'round') this.prepare(this.world);
         this.seat = m.seats.findIndex((s) => s.member === this.member!.id);
         this.pred = new Predictor(
           {
@@ -116,7 +119,7 @@ interface Walk {
  * The host walks right and left along the top row and the friend down and up, as a person would with a
  * thumb: 330 ms each way with a rest between. Returns what the host saw of both robots.
  */
-function play(seed: number, link: [number, number, number], hostFrameMs: number, secs: number) {
+function play(seed: number, link: [number, number, number], hostFrameMs: number, secs: number, decoy = false) {
   now = 0;
   const rng = makeRng(seed);
   const room = new Room('BCDF', makeRng(seed + 1));
@@ -124,8 +127,18 @@ function play(seed: number, link: [number, number, number], hostFrameMs: number,
   const friend = new Page('friend', room, rng, link, 1000 / 60);
   host.member = room.hello(host.conn, { t: 'hello', id: 'host', name: '', colorId: 'gold', dance: 'party', create: true, pv: PROTOCOL }, now);
   friend.member = room.hello(friend.conn, { t: 'hello', id: 'friend', name: '', colorId: 'blue', dance: 'party', create: false, pv: PROTOCOL }, now);
-  room.message(host.member!, { t: 'setup', setup: { ...room.setup, cpus: [], timerOn: false, lives: 5, arena: 'compact' } }, now);
+  room.message(host.member!, { t: 'setup', setup: { ...room.setup, cpus: [], timerOn: false, lives: 5, arena: 'compact', ...(decoy ? { brickShare: 0 } : {}) } }, now);
   room.message(host.member!, { t: 'start' }, now);
+  // (with `decoy`: a decoy power-up on the tile above the friend's corner, which it walks up into)
+  const prepare = (w: World): void => {
+    if (decoy) w.items.push({ cx: w.players[1].x, cy: w.players[1].y - 1, kind: 'decoy', age: 0 });
+  };
+  prepare(room.world!);
+  host.prepare = friend.prepare = prepare;
+  // the friend's robot less its decoy (the one walking the same way), on the server, tick by tick
+  const gaps = new Set<number>();
+  let decoyFrames = 0;
+  let decoyOff = 0;
 
   const RIGHT = packInput({ dir: 4, a: false, b: false });
   const LEFT = packInput({ dir: 3, a: false, b: false });
@@ -172,6 +185,8 @@ function play(seed: number, link: [number, number, number], hostFrameMs: number,
     if (now >= serverAt) {
       serverAt += 8;
       room.advance(now);
+      const d = room.world!.decoys.find((o) => o.id === 1 && !o.mirror && o.popped < 0);
+      if (d) gaps.add(room.world!.players[1].y - d.y);
     }
     host.pump();
     friend.pump();
@@ -207,6 +222,12 @@ function play(seed: number, link: [number, number, number], hostFrameMs: number,
           own.frames++;
         }
       }
+      // the friend's decoy on the host's screen: where it was at the same moment as the friend's robot shown
+      const d = host.pred.view().decoys.find((o) => o.id === 1 && !o.mirror && o.popped < 0);
+      if (d) {
+        decoyFrames++;
+        if (!gaps.has(host.pred.view().players[1].y - d.y)) decoyOff++;
+      }
       // the friend's robot on the host's screen
       const y = host.pred.view().players[1].y;
       if (!Number.isNaN(lastY)) {
@@ -219,7 +240,17 @@ function play(seed: number, link: [number, number, number], hostFrameMs: number,
     }
   }
   judge();
-  return { room, host, friend, own, other, pressDelay, presses };
+  return { room, host, friend, own, other, pressDelay, presses, decoyFrames, decoyOff };
+}
+
+// ---------------------------------------------------------------- another player's decoys
+
+{
+  // drawn where they were at the same moment as their robot (a few ticks back), so neither moves first
+  const r = play(5, [45, 35, 0.02], 1000 / 60, 8, true);
+  assert.ok(r.decoyFrames > 100, `the friend's decoys were seen (${r.decoyFrames} frames)`);
+  assert.equal(r.decoyOff, 0, `and always with their robot (${r.decoyOff} frames out of step)`);
+  console.log(`  another player's decoys: ${r.decoyFrames} frames, all in step with their robot`);
 }
 
 // ---------------------------------------------------------------- a good connection, a poor one, a bad one

@@ -292,6 +292,45 @@ const sounds = {
     voice({ type: 'sawtooth', from: 70, to: 150, dur: 0.6, vol: 0.06, at: 0.08, lp: 700, attack: 0.08 });
     hiss({ kind: 'lowpass', from: 240, to: 380, dur: 0.6, vol: 0.12, at: 0.08, attack: 0.1 });
   },
+  /** decoys appear: a shimmering swirl that rises, and a soft puff */
+  decoy: (): void => {
+    for (const [f, at] of [
+      [523, 0],
+      [659, 0.05],
+      [784, 0.1],
+      [1047, 0.15],
+    ] as const) {
+      voice({ type: 'sine', from: f, to: f * 1.5, dur: 0.22, vol: 0.07, at, wobble: [18, 22] });
+      voice({ type: 'triangle', from: f * 0.5, to: f * 0.75, dur: 0.18, vol: 0.05, at });
+    }
+    hiss({ kind: 'bandpass', from: 800, to: 3200, q: 1.2, dur: 0.35, vol: 0.1, attack: 0.08 });
+  },
+  /** a decoy popped: a soft pop and a puff of smoke */
+  poof: (): void => {
+    const p = vary(0.08);
+    voice({ type: 'sine', from: 420 * p, to: 160 * p, dur: 0.09, vol: 0.22 });
+    hiss({ kind: 'bandpass', from: 2200, to: 500, q: 0.9, dur: 0.28, vol: 0.18, attack: 0.01 });
+    hiss({ kind: 'lowpass', from: 900, to: 200, dur: 0.4, vol: 0.08, at: 0.04, attack: 0.05 });
+  },
+  /** a trip wire strung: a taut wire plucked, ringing a little */
+  wire: (): void => {
+    voice({ type: 'triangle', from: 196, to: 192, dur: 0.5, vol: 0.18, wobble: [9, 3] });
+    voice({ type: 'sawtooth', from: 392, to: 386, dur: 0.32, vol: 0.05, lp: 2400, lpTo: 600 });
+    voice({ type: 'sine', from: 1180, to: 1150, dur: 0.12, vol: 0.05 });
+    hiss({ kind: 'highpass', from: 5000, dur: 0.03, vol: 0.1 });
+  },
+  /** a trip wire set off: the wire snapping, then a blast rolling away down the lane */
+  trip: (): void => {
+    voice({ type: 'sawtooth', from: 900, to: 140, dur: 0.12, vol: 0.12, lp: 3000 });
+    hiss({ kind: 'highpass', from: 3500, dur: 0.05, vol: 0.25 });
+    const p = vary(0.06);
+    voice({ type: 'sine', from: 100 * p, to: 30, dur: 0.9, vol: 0.9, at: 0.05 });
+    voice({ type: 'triangle', from: 66 * p, to: 28, dur: 0.6, vol: 0.45, grit: true, at: 0.05 });
+    hiss({ kind: 'lowpass', from: 4000 * p, to: 160, dur: 0.9, vol: 0.75, grit: true, at: 0.05 });
+    // the fire racing off along the lane both ways: two whooshes falling away
+    hiss({ kind: 'bandpass', from: 1800, to: 300, q: 1.4, dur: 0.8, vol: 0.2, at: 0.12, attack: 0.05 });
+    hiss({ kind: 'lowpass', from: 600, to: 80, dur: 1.4, vol: 0.35, at: 0.1, attack: 0.1 });
+  },
   /** knocked out: a robot powering down, wobbling as it goes */
   death: (): void => {
     voice({ type: 'sawtooth', from: 640, to: 55, dur: 0.75, vol: 0.14, lp: 2600, lpTo: 220, wobble: [11, 30] });

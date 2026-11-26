@@ -42,9 +42,11 @@ export const TNT = 3;
 /**
  * Power-ups: one more bomb at a time, a longer blast, faster walking,
  * the boot (kick bombs), the glove (lift and throw bombs), the shield, the
- * curse, and the laptop (B flies a plane that drops bombs: see `launch`).
+ * curse, the laptop (B flies a plane that drops bombs: see `launch`), the decoy (two copies of the robot
+ * that walk when it walks: `makeDecoys`) and the trip wire (B strings it across a gap between two solid blocks;
+ * a robot walking into it sets off a blast the length of the lane: `tripWire`).
  */
-export type ItemKind = 'bomb' | 'fire' | 'speed' | 'kick' | 'grab' | 'shield' | 'curse' | 'laptop';
+export type ItemKind = 'bomb' | 'fire' | 'speed' | 'kick' | 'grab' | 'shield' | 'curse' | 'laptop' | 'decoy' | 'wire';
 
 /**
  * What one player is asking for on one tick. Buttons are sent as "held or
@@ -54,7 +56,10 @@ export interface PlayerInput {
   dir: Dir;
   /** A button: drop a bomb (flying a plane: drop one of its bombs) */
   a: boolean;
-  /** B button: lift a bomb, or throw the one being carried (needs the glove); holding a laptop, fly the plane; flying, bring it home */
+  /**
+   * B button: lift a bomb, or throw the one being carried (needs the glove); holding a trip wire, between two solid
+   * blocks, string it there; holding a laptop, fly the plane; flying, bring it home
+   */
   b: boolean;
   /**
    * Only while flying a plane: the way to steer it, in AIM_STEPS steps of a turn clockwise from right (screen
@@ -167,6 +172,42 @@ export interface Player {
    * 0 none yet. Standing still in the middle of a crossing, it rides on the same way (`beltDir`).
    */
   ride?: number;
+  /** trip wires held (the trip wire power-up, up to MAX_WIRES): B strings one across a gap between two solid blocks (`wireSpot`) */
+  wires: number;
+}
+
+/**
+ * A decoy (the decoy power-up; the owner's design, 26 November 2026): a copy of a robot, drawn just like it, that
+ * walks whenever it walks: one the way it is asked to go, the other (`mirror`) the opposite way. It is the
+ * robot's own copy, so `id` is its owner's. It drops no bombs, picks nothing up and sets off no trip wire; any
+ * blast, a falling block or the train pops it in a puff of smoke, and it vanishes by itself at `until`.
+ */
+export interface Decoy extends Player {
+  mirror: boolean;
+  /** the tick it appeared */
+  born: number;
+  /** the tick it vanishes, if nothing has popped it before */
+  until: number;
+  /** the tick it went up in a puff of smoke; -1 while it is up. It is drawn as the puff for POOF_TICKS, then gone */
+  popped: number;
+}
+
+/**
+ * A trip wire (the trip wire power-up; the owner's design, 26 November 2026), strung across tile (cx, cy) from one
+ * solid block to the one opposite: `dir` 'h' from the block on its left to the one on its right (the way through,
+ * its lane, runs up and down), 'v' from the block above to the one below (the lane runs across). Any robot
+ * walking into it, the one who strung it too, sets it off (`tripWire`): a blast the whole length of its lane.
+ */
+export interface Wire {
+  cx: number;
+  cy: number;
+  dir: 'h' | 'v';
+  /** who strung it: the blast is theirs */
+  owner: number;
+  /** false until its tile is clear of robots (the one who strung it, standing on it, walks off first) */
+  armed: boolean;
+  /** the tick it was strung */
+  at: number;
 }
 
 export interface Bomb {
@@ -217,6 +258,8 @@ export interface Flame {
   tip: Dir;
   /** part of a barrel of TNT's blast: it burns with plain orange fire, whoever set it off */
   tnt?: boolean;
+  /** part of a trip wire's blast (`tripWire`) */
+  wire?: boolean;
 }
 
 /** A brick that a blast has reached. It turns to floor when ttl runs out. */
@@ -297,10 +340,18 @@ export type GameEvent =
   /** a plane let one of its bombs go */
   | { type: 'drop'; player: number }
   /** a plane's flight is over (it came home, or its pilot was knocked out) */
-  | { type: 'home'; player: number };
+  | { type: 'home'; player: number }
+  /** this player picked up a decoy: its two copies have appeared */
+  | { type: 'decoy'; player: number }
+  /** one of this player's decoys went up in a puff of smoke at (x, y) (a blast, a block or the train, or its time was up) */
+  | { type: 'poof'; player: number; x: number; y: number }
+  /** this player strung a trip wire on tile (cx, cy) */
+  | { type: 'wire'; player: number; cx: number; cy: number }
+  /** `player` walked into `owner`'s trip wire on tile (cx, cy): its blast runs the length of the lane */
+  | { type: 'trip'; player: number; owner: number; cx: number; cy: number };
 
 /** What can knock a robot out. */
-export type KnockCause = 'blast' | 'block' | 'train' | 'tnt';
+export type KnockCause = 'blast' | 'block' | 'train' | 'tnt' | 'wire';
 
 /** One line of the railway (Wild West): along row `at` ('h') or down column `at` ('v'), from tunnel to tunnel. */
 export interface Rail {
@@ -436,6 +487,10 @@ export interface World {
   beltSeed: number;
   /** how far the belts have run since the round began, in tiles (the way they started counts up): for drawing them */
   beltRun: number;
+  /** the decoys out (and those just popped, for their puff of smoke) */
+  decoys: Decoy[];
+  /** the trip wires strung */
+  wires: Wire[];
 }
 
 /** Knocked-out players as angels: off, on (they throw bombs in), or on and able to come back (`revive`). */
@@ -468,8 +523,8 @@ export interface WorldConfig {
    */
   itemChance?: [ItemKind, number][];
   /**
-   * The kinds every arena gets at least one of, when their chance is above 0 (default: the boot, the glove
-   * and the laptop). The lobby leaves out one set to Rare in a custom mix, so Rare is rare (the owner's ask,
+   * The kinds every arena gets at least one of, when their chance is above 0 (default SURE_KINDS: the boot, the
+   * glove, the laptop, the decoy and the trip wire). The lobby leaves out one set to Rare in a custom mix, so Rare is rare (the owner's ask,
    * 23 November 2026: the glove very rare in Hardcore).
    */
   sure?: ItemKind[];
@@ -534,6 +589,8 @@ export const ITEM_WEIGHT: [ItemKind, number][] = [
   ['shield', 4], // very rare (2%): in about six arenas in ten
   ['curse', 4], // very rare: in about six arenas in ten
   ['laptop', 4], // very rare, but every arena gets at least one (the owner's ask, 18 November 2026): see createWorld
+  ['decoy', 4], // very rare, but every arena gets at least one (added 26 November 2026, the owner's design)
+  ['wire', 4], // likewise
 ];
 /** The chance under each brick of each kind, for a mix of weights and the share of bricks that hide one. */
 export function itemMix(weights: [ItemKind, number][], share: number): [ItemKind, number][] {
@@ -541,7 +598,7 @@ export function itemMix(weights: [ItemKind, number][], share: number): [ItemKind
   const of = Math.max(0, Math.min(1, share));
   return weights.map(([k, w]) => [k, sum > 0 ? (Math.max(0, w) / sum) * of : 0]);
 }
-/** The usual chance under each brick of each power-up (bomb and flame 18.4%, speed 13.5%, boot and glove 3.1%, shield, curse and laptop 1.2%) */
+/** The usual chance under each brick of each power-up (bomb and flame 17.6%, speed 12.9%, boot and glove 2.9%, shield, curse, laptop, decoy and trip wire 1.2%) */
 export const ITEM_CHANCE: [ItemKind, number][] = itemMix(ITEM_WEIGHT, ITEM_SHARE);
 export const SHIELD_TICKS = 30 * TICK_HZ; // a shield that is not used wears off after 30 s
 export const SHIELD_GRACE_TICKS = 30; // after a shield takes a blast, blasts do no harm for 0.5 s: long enough for that blast to clear
@@ -667,6 +724,20 @@ export const BELT_STOP_TICKS = 30; // in the last half second of it the belts st
 export const BELT_ALARM_TICKS = 30; // the alarm buzzes twice a second
 
 /**
+ * The decoy (the owner's design, 26 November 2026): two copies of the robot that picks it up appear on the
+ * nearest free tiles and walk whenever it does, one the same way, one the opposite way, until a blast, a falling
+ * block or the train pops them, or their time is up. The trip wire: B strings it across a gap one tile wide
+ * between two solid blocks; whoever walks into it, the one who strung it included, sets off a blast that runs
+ * the length of the lane both ways, through bricks and all, to the walls. The numbers are Claude's.
+ */
+export const DECOY_TICKS = 15 * TICK_HZ; // the decoys vanish after 15 s (the owner's pick)
+export const DECOY_COUNT = 2; // two of them (the owner's ask)
+export const DECOY_REACH = 6; // they appear on the free tiles nearest the robot, at most this many steps away
+export const POOF_TICKS = 24; // a decoy appearing or popped is a puff of smoke for 0.4 s
+export const MAX_WIRES = 3; // trip wires a robot can hold at once (each power-up is one more)
+export const WIRE_REACH = 0.3; // a robot on the wire's tile sets it off once it is this close to the string, which runs across the tile's middle
+
+/**
  * The way a plane flies for each of its TURN_STEPS headings: [x, y] per tick of PLANE_SPEED, clockwise from
  * right (y is down). Worked out with + - * / only, from the series for sine and cosine, never Math.sin or
  * Math.cos: engines may round those differently, and every copy of a round (the server's, each page's) must
@@ -790,6 +861,9 @@ export function beltLines(w: number, h: number): Belt[] {
  * left clear so nobody starts boxed in. On the Wild West map the railway is
  * left clear too, and some of the bricks are barrels of TNT.
  */
+/** The kinds every arena gets at least one of, unless the round's config says otherwise (WorldConfig.sure). */
+export const SURE_KINDS: readonly ItemKind[] = ['kick', 'grab', 'laptop', 'decoy', 'wire'];
+
 export function createWorld(cfg: WorldConfig): World {
   const w = (cfg.cols ?? 13) + 2;
   const h = (cfg.rows ?? 11) + 2;
@@ -829,9 +903,10 @@ export function createWorld(cfg: WorldConfig): World {
       }
     }
   }
-  // every arena has at least one kick, one grab and one laptop power-up somewhere (unless the lobby has switched
-  // them off; the laptop since 18 November 2026, the owner's ask)
-  for (const kind of cfg.sure ?? (['kick', 'grab', 'laptop'] as const)) {
+  // every arena has at least one kick, one grab, one laptop, one decoy and one trip wire power-up somewhere (unless
+  // the lobby has switched them off; the laptop since 18 November 2026, the owner's ask; the decoy and the trip
+  // wire since they came, 26 November 2026)
+  for (const kind of cfg.sure ?? SURE_KINDS) {
     if (!chances.some(([k, c]) => k === kind && c > 0)) continue;
     if ([...hidden.values()].includes(kind)) continue;
     const empty: number[] = [];
@@ -913,6 +988,7 @@ export function createWorld(cfg: WorldConfig): World {
     slip: 0,
     slipDir: 0,
     skid: false,
+    wires: 0,
   }));
 
   const world: World = {
@@ -955,6 +1031,8 @@ export function createWorld(cfg: WorldConfig): World {
     beltFlip: 0,
     beltSeed: (cfg.seed ^ 0x27d4eb2f) >>> 0,
     beltRun: 0,
+    decoys: [],
+    wires: [],
   };
   if (world.belts.length) world.beltFlip = BELT_FIRST[0] + Math.floor(beltRand(world) * (BELT_FIRST[1] - BELT_FIRST[0] + 1));
   if (rails.length) world.train = trainFrom(world, TRAIN_FIRST[0] + Math.floor(trainRand(world) * (TRAIN_FIRST[1] - TRAIN_FIRST[0] + 1)));
@@ -1167,11 +1245,18 @@ function runTrain(world: World): void {
     const on = Math.round(r.dir === 'h' ? p.y : p.x) === r.at;
     if (on && along > back - TRAIN_NOSE && along < front + TRAIN_NOSE) knockOut(world, p, 'train', -1);
   }
+  for (const d of world.decoys) {
+    if (d.popped >= 0) continue;
+    const along = r.dir === 'h' ? d.x : d.y;
+    if (Math.round(r.dir === 'h' ? d.y : d.x) === r.at && along > back - TRAIN_NOSE && along < front + TRAIN_NOSE) popDecoy(world, d);
+  }
   const hit = (cx: number, cy: number): boolean => {
     const along = r.dir === 'h' ? cx : cy;
     return (r.dir === 'h' ? cy : cx) === r.at && along > back - 0.5 && along < front + 0.5;
   };
   for (const b of world.bombs) if (b.state === 'ground' && hit(b.cx, b.cy)) b.fuse = Math.min(b.fuse, 1);
+  // a trip wire across its line is torn away (it does not go off: nobody walked into it)
+  if (world.wires.length) world.wires = world.wires.filter((o) => !hit(o.cx, o.cy));
   // bricks on its line are smashed as it reaches them: they crumble as a burnt one does, and the power-up one
   // hid is left on the line (the train runs over power-ups and leaves them be)
   const len = railLength(world, tr.line);
@@ -1273,6 +1358,17 @@ function fallBlocks(world: World): void {
     world.flames = world.flames.filter((fl) => fl.cx !== cx || fl.cy !== cy);
     world.burning = world.burning.filter((b) => b.cx !== cx || b.cy !== cy);
     world.tntLit = world.tntLit.filter((b) => b.cx !== cx || b.cy !== cy); // (a barrel under it is crushed, and does not go off)
+    world.wires = world.wires.filter((o) => o.cx !== cx || o.cy !== cy); // (and a trip wire, without going off)
+    for (const d of world.decoys) {
+      if (d.popped >= 0) continue;
+      const dx = Math.round(d.x);
+      const dy = Math.round(d.y);
+      if (dx === cx && dy === cy) popDecoy(world, d);
+      else if (Math.abs(d.x - cx) < 1 && Math.abs(d.y - cy) < 1) {
+        if (dx !== cx) d.x = dx;
+        if (dy !== cy) d.y = dy;
+      }
+    }
     for (const b of [...world.bombs]) {
       if (b.state !== 'ground') continue;
       if (b.cx === cx && b.cy === cy) {
@@ -1329,6 +1425,8 @@ export function cloneWorld(w: World): World {
     drops: w.drops.map((d) => ({ ...d })),
     train: w.train ? { ...w.train } : null,
     tntLit: w.tntLit.map((t) => ({ ...t })),
+    decoys: w.decoys.map((d) => ({ ...d })),
+    wires: w.wires.map((o) => ({ ...o })),
     events: [],
     over: w.over ? { ...w.over } : null,
   };
@@ -1657,8 +1755,9 @@ function placeBomb(world: World, p: Player): void {
 }
 
 /**
- * B button. Carrying a bomb: throw it the way you are facing. Holding a laptop:
- * fly its plane (`launch`). Otherwise, with the glove: lift a bomb from your
+ * B button. Carrying a bomb: throw it the way you are facing. Holding a trip wire,
+ * on a tile between two solid blocks: string it there (`wireSpot`). Holding a
+ * laptop: fly its plane (`launch`). Otherwise, with the glove: lift a bomb from your
  * own tile, else the tile you face, else any tile next to you. The first lift
  * of a bomb sets its fuse to 3 seconds.
  */
@@ -1678,6 +1777,16 @@ function useAction(world: World, p: Player): void {
     b.flyT = 0;
     world.events.push({ type: 'throw' });
     return;
+  }
+  // holding a trip wire, between two solid blocks: string it across (anywhere else B does what it always does)
+  if (p.wires > 0) {
+    const dir = wireSpot(world, cx, cy);
+    if (dir) {
+      world.wires.push({ cx, cy, dir, owner: p.id, armed: false, at: world.tick });
+      p.wires--;
+      world.events.push({ type: 'wire', player: p.id, cx, cy });
+      return;
+    }
   }
   // holding a laptop, B flies the plane: the glove waits until the laptop is used (the owner's design)
   if (p.laptop) {
@@ -1913,7 +2022,199 @@ function applyItem(p: Player, kind: ItemKind): void {
   else if (kind === 'shield') p.shieldTicks = SHIELD_TICKS; // a second one only starts the 30 s again
   else if (kind === 'curse') p.curseTicks = CURSE_TICKS; // likewise
   else if (kind === 'laptop') p.laptop = true; // (one at a time: a second one is just picked up)
+  else if (kind === 'wire') p.wires = Math.min(MAX_WIRES, p.wires + 1);
+  else if (kind === 'decoy') return; // (makeDecoys, from step: it needs the world)
   else p.speed = Math.min(MAX_SPEED_ITEMS, p.speed + 1);
+}
+
+// ---------------------------------------------------------------- decoys and trip wires
+
+/**
+ * Can a trip wire be strung on tile (cx, cy), and which way? A tile of open floor (no bomb, no wire already) with
+ * a solid block on each side, left and right ('h', strung across from one to the other; the way through runs up
+ * and down) or above and below ('v'). In an arena's lanes that is every tile between two pillars.
+ */
+export function wireSpot(world: World, cx: number, cy: number): 'h' | 'v' | null {
+  if (tileAt(world, cx, cy) !== FLOOR || bombAt(world, cx, cy) || world.wires.some((o) => o.cx === cx && o.cy === cy)) return null;
+  if (tileAt(world, cx - 1, cy) === HARD && tileAt(world, cx + 1, cy) === HARD) return 'h';
+  if (tileAt(world, cx, cy - 1) === HARD && tileAt(world, cx, cy + 1) === HARD) return 'v';
+  return null;
+}
+
+/** The trip wire strung on this tile, if there is one. */
+export function wireAt(world: World, cx: number, cy: number): Wire | undefined {
+  for (const o of world.wires) if (o.cx === cx && o.cy === cy) return o;
+  return undefined;
+}
+
+/**
+ * The tiles a trip wire's blast covers: its own, then along its lane both ways, through bricks, barrels of TNT,
+ * bombs and power-ups, until a solid block (the outer wall, or a block that has fallen) stops it.
+ */
+export function wireLane(world: World, o: Wire): [number, number][] {
+  const out: [number, number][] = [[o.cx, o.cy]];
+  for (const d of o.dir === 'h' ? [1, 2] : [3, 4]) {
+    for (let i = 1; ; i++) {
+      const cx = o.cx + DX[d] * i;
+      const cy = o.cy + DY[d] * i;
+      if (tileAt(world, cx, cy) === HARD) break;
+      out.push([cx, cy]);
+    }
+  }
+  return out;
+}
+
+/**
+ * A robot has walked into a trip wire (the owner's design, 26 November 2026): it is gone, and its blast runs the
+ * whole length of its lane, both ways, to the walls. Nothing but a solid block stops it: it burns every brick on
+ * the way (and carries on), sets off barrels of TNT and bombs, and destroys power-ups lying there. It is the
+ * blast of whoever strung the wire, in their colour.
+ */
+function tripWire(world: World, o: Wire, by: number): void {
+  world.wires.splice(world.wires.indexOf(o), 1);
+  world.events.push({ type: 'trip', player: by, owner: o.owner, cx: o.cx, cy: o.cy });
+  const kind = o.dir === 'h' ? 'v' : 'h';
+  const ends: Flame[] = [];
+  const lane = wireLane(world, o);
+  for (let k = 0; k < lane.length; k++) {
+    const [cx, cy] = lane[k];
+    const t = tileAt(world, cx, cy);
+    if (t === SOFT && !world.burning.some((b) => b.cx === cx && b.cy === cy)) world.burning.push({ cx, cy, ttl: FLAME_TICKS });
+    if (t === TNT) lightTnt(world, cx, cy, o.owner);
+    const item = world.items.findIndex((it) => it.cx === cx && it.cy === cy);
+    if (item >= 0) world.items.splice(item, 1);
+    const other = bombAt(world, cx, cy);
+    if (other) other.fuse = Math.min(other.fuse, CHAIN_TICKS);
+    const f: Flame = { cx, cy, ttl: FLAME_TICKS, owner: o.owner, kind, tip: 0, wire: true };
+    addFlame(world, f);
+    // the last tile each way is the tip of the blast
+    const next = lane[k + 1];
+    if (k > 0 && (!next || Math.abs(next[0] - cx) + Math.abs(next[1] - cy) !== 1)) ends.push(f);
+  }
+  for (const f of ends) f.tip = (o.dir === 'h' ? (f.cy < o.cy ? 1 : 2) : f.cx < o.cx ? 3 : 4) as Dir;
+}
+
+/**
+ * Trip wires after everyone has moved. A wire is armed once nobody stands on its tile; after that, any robot
+ * (standing, or a zombie) that comes within WIRE_REACH of the string sets it off. Decoys do not. Once the round
+ * is decided nothing sets one off.
+ */
+function checkWires(world: World): void {
+  if (world.over) return;
+  for (const o of [...world.wires]) {
+    let on = false;
+    let by = -1;
+    for (const p of world.players) {
+      if (!p.alive || Math.round(p.x) !== o.cx || Math.round(p.y) !== o.cy) continue;
+      on = true;
+      const off = o.dir === 'h' ? Math.abs(p.y - o.cy) : Math.abs(p.x - o.cx);
+      if (by < 0 && off <= WIRE_REACH) by = p.id;
+    }
+    if (!o.armed) o.armed = !on;
+    else if (by >= 0) tripWire(world, o, by);
+  }
+}
+
+/**
+ * The decoy power-up: two copies of `p` appear on the free tiles nearest it (open floor with no bomb, blast or
+ * block about to land, found step by step across the floor), the nearer walking the way it walks, the other the
+ * opposite way. Decoys it already had go first.
+ */
+function makeDecoys(world: World, p: Player): void {
+  for (const d of world.decoys) if (d.id === p.id && d.popped < 0) popDecoy(world, d);
+  const w = world.w;
+  const start = Math.round(p.y) * w + Math.round(p.x);
+  const free = (i: number): boolean => {
+    const x = i % w;
+    const y = (i - x) / w;
+    return !bombAt(world, x, y) && !flameAt(world, x, y) && !world.falling.some((f) => f.cx === x && f.cy === y) && !world.decoys.some((d) => d.popped < 0 && Math.round(d.x) === x && Math.round(d.y) === y);
+  };
+  const spots: number[] = [];
+  const seen = new Set([start]);
+  let ring = [start];
+  for (let n = 0; n < DECOY_REACH && spots.length < DECOY_COUNT && ring.length; n++) {
+    const next: number[] = [];
+    for (const i of ring) {
+      for (let d = 1; d <= 4; d++) {
+        const j = i + DX[d] + DY[d] * w;
+        if (seen.has(j) || world.tiles[j] !== FLOOR) continue;
+        seen.add(j);
+        next.push(j);
+        if (spots.length < DECOY_COUNT && free(j)) spots.push(j);
+      }
+    }
+    ring = next;
+  }
+  spots.forEach((i, k) => {
+    const x = i % w;
+    world.decoys.push({
+      ...p,
+      x,
+      y: (i - x) / w,
+      moving: false,
+      walk: 0,
+      mvx: 0,
+      mvy: 0,
+      askDir: 0,
+      askTicks: 0,
+      carrying: 0,
+      activeBombs: 0,
+      canKick: false,
+      canGrab: false,
+      flying: 0,
+      slip: 0,
+      skid: false,
+      wires: 0,
+      prevA: true,
+      prevB: true,
+      mirror: k === 1,
+      born: world.tick,
+      until: world.tick + DECOY_TICKS,
+      popped: -1,
+    });
+  });
+  world.events.push({ type: 'decoy', player: p.id });
+}
+
+/** A decoy goes up in a puff of smoke. */
+function popDecoy(world: World, d: Decoy): void {
+  d.popped = world.tick;
+  d.moving = false;
+  d.skid = false;
+  world.events.push({ type: 'poof', player: d.id, x: d.x, y: d.y });
+}
+
+/**
+ * The decoys walk: each one is asked for the way its owner is asked to go this tick (the opposite way if it is
+ * the mirror), and moves by the same rules as a robot, ice and belts included. It shows the same kit as its
+ * owner (shield, curse, laptop) so nothing gives it away. Its owner out of the round, or its time up, it goes.
+ */
+function moveDecoys(world: World, inputs: (PlayerInput | undefined)[]): void {
+  for (const d of world.decoys) {
+    if (d.popped >= 0) continue;
+    const o = world.players[d.id];
+    if (!o || !o.alive || world.tick >= d.until) {
+      popDecoy(world, d);
+      continue;
+    }
+    d.speed = o.speed;
+    d.curseTicks = o.curseTicks;
+    d.shieldTicks = o.shieldTicks;
+    d.graceTicks = o.graceTicks;
+    d.safeTicks = o.safeTicks;
+    d.laptop = o.laptop;
+    const want: Dir = world.over || o.flying > 0 ? 0 : inputs[o.id]?.dir ?? 0;
+    const asked: Dir = d.mirror ? BACK[want] : want;
+    if (asked !== d.askDir) {
+      d.askDir = asked;
+      d.askTicks = 0;
+    } else if (asked) d.askTicks++;
+    d.skid = false;
+    if (world.ice) iceMove(world, d, asked);
+    else if (asked) movePlayer(world, d, asked);
+    else d.moving = false;
+    if (world.belts.length) beltCarry(world, d);
+  }
 }
 
 // ---------------------------------------------------------------- the laptop's plane
@@ -2066,7 +2367,9 @@ function moveDrops(world: World): void {
 function knockOut(world: World, p: Player, cause: KnockCause, by: number): void {
   if (p.flying) endFlight(world, p); // (its plane goes too; bombs already falling still land)
   if (world.itemDrop && !p.zombie) dropKit(world, p);
+  for (const d of world.decoys) if (d.id === p.id && d.popped < 0) popDecoy(world, d); // (its decoys go with it)
   p.laptop = false;
+  p.wires = 0;
   p.alive = false;
   p.moving = false;
   p.slip = 0;
@@ -2101,7 +2404,7 @@ export const DROP_REACH = 4;
 
 /**
  * Item Drop (the owner's ask, 24 November 2026): a robot knocked out leaves behind every power-up it collected
- * (bombs and blast over its start, speed power-ups, the boot, the glove, a laptop it has not flown), on the
+ * (bombs and blast over its start, speed power-ups, the boot, the glove, a laptop it has not flown, trip wires it has not strung), on the
  * open floor nearest where it fell, one to a tile, for anyone to pick up. Nearest first, in a fixed order, so
  * every copy of the world agrees; what finds no room within DROP_REACH steps is lost. Not the shield or curse.
  */
@@ -2113,6 +2416,7 @@ function dropKit(world: World, p: Player): void {
   if (p.canKick) kit.push('kick');
   if (p.canGrab) kit.push('grab');
   if (p.laptop && !p.flying) kit.push('laptop');
+  for (let i = 0; i < p.wires; i++) kit.push('wire');
   if (!kit.length) return;
   // the tools first, so they are the ones nearest where it fell
   kit.reverse();
@@ -2182,6 +2486,7 @@ function bringBack(world: World, p: Player, x: number, y: number): void {
     slip: 0,
     slipDir: 0,
     skid: false,
+    wires: 0,
   } satisfies Partial<Player>);
 }
 
@@ -2409,6 +2714,25 @@ function iceMove(world: World, p: Player, asked: Dir): void {
   } else if (p.slip > 0) glide(world, p);
 }
 
+/**
+ * One tick of a robot walking with `asked` held (0: nothing held), on ice and belts too, as `step` moves it. The CPU
+ * players also play it on a copy of their robot (with `canKick` off, so the world is not touched) to see where a move
+ * takes them.
+ */
+export function walkRobot(world: World, p: Player, asked: Dir): void {
+  if (asked !== p.askDir) {
+    p.askDir = asked;
+    p.askTicks = 0;
+  } else if (asked) p.askTicks++;
+  p.skid = false;
+  if (world.ice) iceMove(world, p, asked);
+  else if (asked) movePlayer(world, p, asked);
+  else if (world.stepAssist) coast(world, p);
+  else p.moving = false;
+  // a belt under it carries it along
+  if (world.belts.length) beltCarry(world, p);
+}
+
 // ---------------------------------------------------------------- one tick
 
 /**
@@ -2457,18 +2781,7 @@ export function step(world: World, inputs: (PlayerInput | undefined)[]): void {
       if (world.belts.length) beltCarry(world, p, true);
       continue;
     }
-    const asked: Dir = inp ? inp.dir : 0;
-    if (asked !== p.askDir) {
-      p.askDir = asked;
-      p.askTicks = 0;
-    } else if (asked) p.askTicks++;
-    p.skid = false;
-    if (world.ice) iceMove(world, p, asked);
-    else if (inp && inp.dir) movePlayer(world, p, inp.dir);
-    else if (world.stepAssist) coast(world, p);
-    else p.moving = false;
-    // a belt under it carries it along
-    if (world.belts.length) beltCarry(world, p);
+    walkRobot(world, p, inp ? inp.dir : 0);
     const a = !!inp?.a;
     if (a && !p.prevA) placeBomb(world, p);
     p.prevA = a;
@@ -2476,6 +2789,9 @@ export function step(world: World, inputs: (PlayerInput | undefined)[]): void {
     if (bBtn && !p.prevB) useAction(world, p);
     p.prevB = bBtn;
   }
+  // decoys walk with their robots; a robot that has walked into a trip wire sets it off
+  if (world.decoys.length) moveDecoys(world, inputs);
+  if (world.wires.length) checkWires(world);
 
   // bombs: the fuse keeps burning while carried or thrown
   moveBombs(world);
@@ -2541,7 +2857,7 @@ export function step(world: World, inputs: (PlayerInput | undefined)[]): void {
         p.graceTicks = SHIELD_GRACE_TICKS;
         world.events.push({ type: 'shield', player: p.id });
       } else {
-        knockOut(world, p, flame.tnt ? 'tnt' : 'blast', flame.owner);
+        knockOut(world, p, flame.tnt ? 'tnt' : flame.wire ? 'wire' : 'blast', flame.owner);
         // an angel's bomb, with Angels come back on: the angel takes this robot's place
         const by = world.players[flame.owner];
         if (world.angels === 'revive' && by && by.angel && by.id !== p.id && !allies(by, p) && !comebacks.some((c) => c[0] === by)) comebacks.push([by, cx, cy, p.id]);
@@ -2554,7 +2870,18 @@ export function step(world: World, inputs: (PlayerInput | undefined)[]): void {
       world.items.splice(i, 1);
       applyItem(p, kind);
       world.events.push({ type: 'pickup', player: p.id, kind });
+      if (kind === 'decoy') makeDecoys(world, p);
     }
+  }
+  // any blast pops a decoy (whoever's it is), and so does a block that has landed on it
+  if (world.decoys.length) {
+    for (const d of world.decoys) {
+      if (d.popped >= 0) continue;
+      const cx = Math.round(d.x);
+      const cy = Math.round(d.y);
+      if (flameAt(world, cx, cy) || tileAt(world, cx, cy) === HARD) popDecoy(world, d);
+    }
+    world.decoys = world.decoys.filter((d) => d.popped < 0 || world.tick - d.popped < POOF_TICKS);
   }
 
   for (const [angel, cx, cy, victim] of comebacks) {

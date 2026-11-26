@@ -1749,7 +1749,7 @@ export function createLobby(host: LobbyHost): {
           s().itemsOn = v;
           changed();
         },
-        offText: 'The usual mix. Shields, curses and laptops are very rare.',
+        offText: 'The usual mix. Shields, curses, laptops, decoys and trip wires are very rare.',
         // One block per power-up (the owner's asks, 19 November 2026): its picture, name and what it does, its
         // switch (none for the extra bomb and the flame: always on), and right under it, set in under the name,
         // How often while it is on. A line only between one power-up and the next, so each slider and switch

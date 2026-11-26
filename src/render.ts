@@ -6,7 +6,7 @@
  * - drawStatic: the floor and solid blocks (drawn once, then reused)
  * - drawDynamic: bricks, power-ups, bombs, blasts and robots (drawn every frame), and over everything the
  *   laptops' planes and the bombs falling from them
- * - drawItemIcon: the eight power-up icons, also used by the top bar
+ * - drawItemIcon: the power-up icons, also used by the menus
  */
 import { drawRobot, warmRobots, CRACK, GHOST_ARMS, ROBOT, type Pose, type Wanted } from './robot';
 import { danceFrame, danceSamples, type DanceId } from './dances';
@@ -14,7 +14,7 @@ import { TEAMS, type MapId } from './setup';
 export { warmRobots } from './robot';
 import { drawBarrel, drawCrossing, drawLitTnt, drawRails, drawTrain, railWalls } from './railway';
 import { drawFactory, drawFactoryLive, drawMachine, drawBox, drawPlate, boxOnBelt } from './factory';
-import { World, FLOOR, HARD, SOFT, TNT, FLAME_TICKS, DEATH_TICKS, GHOST_TICKS, SHIELD_GRACE_TICKS, FALL_TICKS, TICK_HZ, ItemKind, Player, Bomb, FLY_TICKS_PER_TILE, THROW_TILES, FUSE_TICKS, CARRY_FUSE_TICKS, DX, DY, DROP_TICKS, TURN_STEPS, allies, angelAim, angelReach, perimeterAt } from './sim';
+import { World, FLOOR, HARD, SOFT, TNT, FLAME_TICKS, DEATH_TICKS, GHOST_TICKS, SHIELD_GRACE_TICKS, FALL_TICKS, TICK_HZ, ItemKind, Player, Bomb, FLY_TICKS_PER_TILE, THROW_TILES, FUSE_TICKS, CARRY_FUSE_TICKS, DX, DY, DROP_TICKS, TURN_STEPS, allies, angelAim, angelReach, perimeterAt, POOF_TICKS, wireSpot, type Decoy, type Wire } from './sim';
 
 export interface BotColor {
   /** saved with the player's choice and sent to the rules as Player.colorId */
@@ -825,6 +825,8 @@ export const ITEM_COLOR: Record<ItemKind, string> = {
   shield: '#f1f5ff',
   curse: '#ff4063',
   laptop: '#6f86ff',
+  decoy: '#ff9ad5',
+  wire: '#d6ad6e',
 };
 /** A power-up lying on the floor is this share of a tile across (it was 0.92; made 10% smaller). */
 const ITEM_SIZE = 0.83;
@@ -962,6 +964,45 @@ export function drawItemIcon(ctx: Ctx, kind: ItemKind, cx: number, cy: number, r
     ctx.closePath();
     ctx.fill();
     ctx.restore();
+  } else if (kind === 'decoy') {
+    // two robot heads, one behind the other: the one behind only an outline (a copy)
+    const head = (ox: number, oy: number, k: number): void => {
+      ctx.beginPath();
+      ctx.moveTo(ox - k * 0.5, oy + k * 0.36);
+      ctx.lineTo(ox - k * 0.5, oy - k * 0.02);
+      ctx.arc(ox, oy - k * 0.02, k * 0.5, Math.PI, 0);
+      ctx.lineTo(ox + k * 0.5, oy + k * 0.36);
+      ctx.closePath();
+    };
+    ctx.lineWidth = r * 0.13;
+    ctx.setLineDash([r * 0.2, r * 0.13]);
+    head(-r * 0.3, -r * 0.2, r * 0.92);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    head(r * 0.2, r * 0.14, r * 1.04);
+    ctx.fill();
+    ctx.fillStyle = hole;
+    rr(ctx, r * 0.2 - r * 0.37, r * 0.14 - r * 0.1, r * 0.74, r * 0.22, r * 0.1);
+    ctx.fill();
+  } else if (kind === 'wire') {
+    // two posts with a wire stretched taut between them, and a spark on it where it is tripped
+    rr(ctx, -r * 0.9, -r * 0.6, r * 0.26, r * 1.3, r * 0.07);
+    ctx.fill();
+    rr(ctx, r * 0.64, -r * 0.6, r * 0.26, r * 1.3, r * 0.07);
+    ctx.fill();
+    ctx.lineWidth = r * 0.12;
+    line(ctx, -r * 0.64, r * 0.28, r * 0.64, r * 0.28);
+    ctx.beginPath();
+    for (let k = 0; k < 8; k++) {
+      const a = (k * Math.PI) / 4 - Math.PI / 2;
+      const d = k % 2 ? r * 0.16 : r * 0.44;
+      const px = Math.cos(a) * d;
+      const py = -r * 0.16 + Math.sin(a) * d;
+      if (k) ctx.lineTo(px, py);
+      else ctx.moveTo(px, py);
+    }
+    ctx.closePath();
+    ctx.fill();
   } else {
     // a glove
     rr(ctx, -r * 0.5, -r * 0.72, r * 0.78, r * 1.1, r * 0.32);
@@ -1584,8 +1625,17 @@ export function drawDynamic(ctx: Ctx, world: World, T: number, time: number, foc
   const plain = world.rails.length ? railWalls(world) : null;
   drawCrossing(ctx, world, T, (x, y) => drawWall(ctx, world, x, y, T, plain));
 
-  // the tile you count as standing on
+  // trip wires strung across their gaps, and where yours would go if you strung one where you stand
+  for (const o of world.wires) drawWire(ctx, world, o, T, time, 1);
   const me = world.players[focusId];
+  if (me && me.alive && me.wires > 0 && !me.flying) {
+    const cx = Math.round(me.x);
+    const cy = Math.round(me.y);
+    const dir = wireSpot(world, cx, cy);
+    if (dir) drawWire(ctx, world, { cx, cy, dir, owner: me.id, armed: false, at: 0 }, T, time, 0.3 + 0.12 * Math.sin(time * 5));
+  }
+
+  // the tile you count as standing on
   if (me && me.alive) {
     const g = colorById(me.colorId).glow;
     const m = T * 0.05;
@@ -1623,7 +1673,8 @@ export function drawDynamic(ctx: Ctx, world: World, T: number, time: number, foc
 
   // robots, back to front; a train along a row among them, in front of those behind its line and behind those in
   // front of it; a train down a column over them all
-  const order = [...world.players].sort((a, b) => a.y - b.y);
+  // (decoys among them, drawn just like their robots; yours a little see-through, so only you can tell)
+  const order: Player[] = [...world.players, ...world.decoys.filter((d) => d.popped < 0)].sort((a, b) => a.y - b.y);
   const tr = world.train;
   const row = tr && world.rails[tr.line].dir === 'h' ? world.rails[tr.line].at : -1;
   let train = row < 0;
@@ -1632,7 +1683,13 @@ export function drawDynamic(ctx: Ctx, world: World, T: number, time: number, foc
       drawTrain(ctx, world, T, world.tick, time);
       train = true;
     }
-    drawPlayer(ctx, world, p, T, time, celebrate, crowned);
+    if ('popped' in p) drawDecoy(ctx, world, p as Decoy, T, time, celebrate, crowned, p.id === focusId);
+    else drawPlayer(ctx, world, p, T, time, celebrate, crowned);
+  }
+  // decoys appearing and popping: puffs of smoke
+  for (const d of world.decoys) {
+    const k = d.popped >= 0 ? (world.tick - d.popped) / POOF_TICKS : (world.tick - d.born) / POOF_TICKS;
+    if (k >= 0 && k < 1) drawPoof(ctx, d, T, k, d.popped >= 0);
   }
   if (!train || (tr && row < 0)) drawTrain(ctx, world, T, world.tick, time);
 
@@ -2302,6 +2359,132 @@ function drawFrost(ctx: Ctx, p: Player, x: number, y: number, T: number, time: n
     ctx.fillRect(fx - sz / 2, fy - sz / 2, sz, sz);
   }
   ctx.restore();
+}
+
+/**
+ * A decoy: drawn as its robot is (drawPlayer), fading in as it appears. Your own (`mine`) are a little see-through,
+ * so you can tell which one is you; to everyone else they look just like you.
+ */
+function drawDecoy(ctx: Ctx, world: World, d: Decoy, T: number, time: number, celebrate: Celebration | undefined, crowned: (id: number) => boolean, mine: boolean): void {
+  const grow = Math.min(1, (world.tick - d.born) / (POOF_TICKS * 0.6));
+  ctx.save();
+  ctx.globalAlpha = (mine ? 0.5 : 1) * grow;
+  drawPlayer(ctx, world, d, T, time, celebrate, crowned);
+  ctx.restore();
+}
+
+/**
+ * A puff of smoke where a decoy appears or pops: soft grey balls swelling and fading, and, as it pops, a few
+ * sparks thrown out. `k` runs from 0 to 1 over POOF_TICKS.
+ */
+function drawPoof(ctx: Ctx, d: Decoy, T: number, k: number, popping: boolean): void {
+  const x = (d.x + 0.5) * T;
+  const y = (d.y + 0.5) * T + T * 0.05;
+  const col = colorById(d.colorId);
+  ctx.save();
+  for (let i = 0; i < 9; i++) {
+    const a = (i / 9) * Math.PI * 2 + d.born * 0.7;
+    const out = T * (0.12 + 0.36 * Math.sqrt(k)) * (0.7 + 0.3 * scatter(i + d.born));
+    const r = T * (0.16 + 0.2 * k) * (0.8 + 0.4 * scatter(i * 3.7 + d.id));
+    ctx.globalAlpha = (1 - k) * (popping ? 0.75 : 0.55);
+    ctx.fillStyle = i % 3 === 0 ? '#d7dbe6' : i % 3 === 1 ? '#a9afbf' : '#eef0f6';
+    ctx.beginPath();
+    ctx.arc(x + Math.cos(a) * out, y + Math.sin(a) * out * 0.7 - T * 0.35 * k, r, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  if (popping) {
+    ctx.fillStyle = col.glow;
+    for (let i = 0; i < 6; i++) {
+      const a = (i / 6) * Math.PI * 2 + 0.4;
+      const out = T * (0.2 + 0.6 * k);
+      const sz = Math.max(1, T * 0.06 * (1 - k));
+      ctx.globalAlpha = 1 - k;
+      ctx.fillRect(x + Math.cos(a) * out - sz / 2, y + Math.sin(a) * out * 0.8 - T * 0.4 - sz / 2, sz, sz);
+    }
+  }
+  ctx.restore();
+}
+
+/**
+ * A trip wire strung across its tile, from the face of one solid block to the face of the one opposite: a small
+ * steel plate bolted to each, with a light in the colour of whoever strung it (blinking once it is armed), and
+ * the wire taut between them, glinting. `alpha` below 1 for the faint one showing where yours would go.
+ */
+function drawWire(ctx: Ctx, world: World, o: Wire, T: number, time: number, alpha: number): void {
+  const across = o.dir === 'h';
+  // the two ends, at the faces of the blocks: across the tile a little below its middle (where a robot's feet
+  // are as it walks into it), or down it through the middle
+  const x0 = across ? o.cx * T : (o.cx + 0.5) * T;
+  const y0 = across ? (o.cy + 0.6) * T : o.cy * T + T * 0.04;
+  const x1 = across ? (o.cx + 1) * T : x0;
+  const y1 = across ? y0 : (o.cy + 1) * T;
+  const glow = colorById(world.players[o.owner]?.colorId ?? '').glow;
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.lineCap = 'round';
+  const wire = (width: number, style: string, dx = 0, dy = 0): void => {
+    ctx.strokeStyle = style;
+    ctx.lineWidth = Math.max(1, width);
+    ctx.beginPath();
+    ctx.moveTo(x0 + dx, y0 + dy);
+    ctx.lineTo(x1 + dx, y1 + dy);
+    ctx.stroke();
+  };
+  // its shadow on the floor, a soft glow in its owner's colour, a dark edge, then the wire itself
+  wire(T * 0.05, 'rgba(0,0,0,0.45)', T * 0.03, T * 0.07);
+  ctx.globalAlpha = alpha * (o.armed ? 0.4 : 0.25);
+  wire(T * 0.13, glow);
+  ctx.globalAlpha = alpha;
+  wire(T * 0.075, 'rgba(10,12,20,0.85)');
+  wire(T * 0.042, '#eef1f6');
+  // a glint running along it
+  const g = (time * 0.7 + o.cx * 0.3 + o.cy * 0.7) % 1;
+  ctx.strokeStyle = 'rgba(255,255,255,0.9)';
+  ctx.lineWidth = Math.max(1, T * 0.02);
+  ctx.beginPath();
+  ctx.moveTo(x0 + (x1 - x0) * g, y0 + (y1 - y0) * g);
+  ctx.lineTo(x0 + (x1 - x0) * Math.min(1, g + 0.12), y0 + (y1 - y0) * Math.min(1, g + 0.12));
+  ctx.stroke();
+  // the plates at the ends, each with its light
+  const blink = !o.armed || Math.floor(time * 3 + o.cx + o.cy) % 2 === 0;
+  for (const [px, py] of [
+    [x0, y0],
+    [x1, y1],
+  ]) {
+    const w = across ? T * 0.12 : T * 0.26;
+    const h = across ? T * 0.26 : T * 0.12;
+    ctx.fillStyle = '#4a4f5c';
+    rr(ctx, px - w / 2, py - h / 2, w, h, T * 0.03);
+    ctx.fill();
+    ctx.fillStyle = '#7a8090';
+    ctx.fillRect(px - w / 2, py - h / 2, w, Math.max(1, h * 0.25));
+    ctx.globalAlpha = alpha * (blink ? 1 : 0.35);
+    ctx.fillStyle = glow;
+    ctx.beginPath();
+    ctx.arc(px, py, T * 0.045, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalAlpha = alpha;
+  }
+  ctx.restore();
+}
+
+/** For the menu's Key: a trip wire strung across a gap, between two solid blocks of the map being played. */
+export function drawWireIcon(g: Ctx, s: number): void {
+  const T = s * 0.5;
+  g.save();
+  g.beginPath();
+  g.rect(0, 0, s, s);
+  g.clip();
+  drawFloor(g, 1, 1, s * 0.25, 0, T);
+  drawFloor(g, 1, 2, s * 0.25, T, T);
+  drawHard(g, s * 0.25 - T, 0, T);
+  drawHard(g, s * 0.75, 0, T);
+  drawHard(g, s * 0.25 - T, T, T);
+  drawHard(g, s * 0.75, T, T);
+  g.translate(s * 0.25 - T, -T * 0.1);
+  const w = { w: 3, h: 3, players: [], wires: [] } as unknown as World;
+  drawWire(g, w, { cx: 1, cy: 0, dir: 'h', owner: -1, armed: true, at: 0 }, T, 0, 1);
+  g.restore();
 }
 
 /** A robot on its tile; the winner celebrating; or, for a moment after being knocked out, its remains and its ghost. */

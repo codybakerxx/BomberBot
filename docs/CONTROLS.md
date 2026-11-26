@@ -19,7 +19,7 @@ How the game is controlled, how the swipe pad turns a moving thumb into a direct
 On a phone held upright the top bar comes first (the scoreboard and the timer are in it), then a blank line one block high, then the arena, and the controls fill everything below it:
 
 - **Swipe pad:** two thirds of the width. The cross in the middle only shows which direction is being read. It is not a button and you do not need to touch it.
-- **B:** on the other side, at the top. Lifts a bomb, then throws it (needs the glove). Holding a laptop, B flies its plane instead (see Flying the plane, below).
+- **B:** on the other side, at the top. Lifts a bomb, then throws it (needs the glove). Holding a laptop, B flies its plane instead (see Flying the plane, below). Holding a trip wire, standing between two solid blocks, B strings it there (see Stringing a trip wire, below).
 - **A:** below B, the larger of the two. Drops a bomb.
 
 Which side the pad is on is a setting, **Steering thumb**. With *Left thumb* (the default) the pad is on the left and B and A on the right. With *Right thumb* the same layout is mirrored.
@@ -85,6 +85,16 @@ Holding a **laptop** (a power-up: see [GAME-RULES.md](GAME-RULES.md), Laptop), *
 - While flying, the caption on the swipe pad says **Steer the plane**, and a one-line tip over the arena explains it the first time you pick a laptop up in a match.
 
 Online, your steering is sent with your presses, in 64 ways (`IN_AIM` in net.ts: see [ONLINE.md](ONLINE.md)).
+
+## Stringing a trip wire
+
+Holding a **trip wire** (a power-up: see [GAME-RULES.md](GAME-RULES.md), Trip wire), stand on a tile with a solid block on each side (any tile between two pillars, or between a pillar and the outer wall) and press **B**. While you can, the B button glows tan and says **Set wire**, with a picture of two posts and a wire, and a faint wire shows on your tile where it would go. Anywhere else B does what it always does. What B does, in order: throw the bomb you carry; string a wire, where one can go; fly the laptop's plane; lift a bomb.
+
+Walk off the tile to arm it. After that it goes off whoever walks into it, you included, so remember where yours are.
+
+## Decoys
+
+A **decoy** (see GAME-RULES.md, Decoy) needs no button: its two copies of your robot walk whenever you walk, one the same way, one the opposite way, for 15 seconds. On your screen they are a little see-through, so you can tell which one is you.
 
 ## As an angel or a zombie
 

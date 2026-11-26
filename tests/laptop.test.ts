@@ -12,6 +12,9 @@ import {
   World,
   PlayerInput,
   ITEM_CHANCE,
+  ITEM_WEIGHT,
+  ITEM_SHARE,
+  itemMix,
   SOFT,
   FLOOR,
   HARD,
@@ -74,9 +77,10 @@ function takeOff(w: World): void {
   assert.deepStrictEqual(PLANE_STEP[TURN_STEPS / 4].map(Math.abs), [0, PLANE_SPEED]);
 }
 
-// every arena has a laptop under some brick (unless the lobby has switched them off), and it is the last kind
+// every arena has a laptop under some brick (unless the lobby has switched them off); it was the last kind
+// until the decoy and the trip wire came after it
 {
-  assert.equal(ITEM_CHANCE[ITEM_CHANCE.length - 1][0], 'laptop', 'new kinds go at the end');
+  assert.equal(ITEM_CHANCE[7][0], 'laptop', 'new kinds go at the end');
   for (let seed = 1; seed <= 40; seed++) {
     const w = createWorld({ seed, players: [{ colorId: 'a' }, { colorId: 'b' }] });
     assert.ok([...w.hidden.values()].includes('laptop'), `seed ${seed} has a laptop`);
@@ -476,12 +480,15 @@ for (const level of ['hard', 'normal', 'beginner'] as const) {
 
 // CPU players all holding laptops, a few rounds: they fly, drop, and none is knocked out by its own bomb, unless
 // a rival's falling bomb set that bomb off early (a Beginner never notices one in time, and cannot allow for it:
-// experiments/cpu-matches.ts tells these apart the same way)
+// experiments/cpu-matches.ts tells these apart the same way). The arenas hide the power-ups there were when
+// this was written, so it stays about the laptop (a trip wire a CPU player strings is a wall to it, and one shut
+// in behind its own by a rival is "shut in by a rival" in experiments/cpu-matches.ts, which this cannot tell)
 {
   let flights = 0;
   let drops = 0;
+  const before = itemMix(ITEM_WEIGHT.filter(([k]) => k !== 'decoy' && k !== 'wire'), ITEM_SHARE);
   for (let seed = 1; seed <= 6; seed++) {
-    const w = createWorld({ seed, players: [0, 1, 2, 3].map((i) => ({ colorId: String(i) })), softDensity: 0.5 });
+    const w = createWorld({ seed, players: [0, 1, 2, 3].map((i) => ({ colorId: String(i) })), softDensity: 0.5, itemChance: before, sure: ['kick', 'grab', 'laptop'] });
     const bots = w.players.map((p, i) => createBot(i, (['hard', 'normal', 'beginner', 'hard'] as const)[i], seed * 10 + i));
     for (const p of w.players) p.laptop = true;
     const rushed = new Map<number, number>(); // player -> the last tick a rival's falling bomb set one of theirs off early

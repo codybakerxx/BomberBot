@@ -53,7 +53,7 @@ The whole game as pure logic. No drawing, no sound, no browser calls, no `Math.r
 | `cloneWorld(world)` | A separate copy of a world, which CPU players use to try a move before making it |
 | `step(world, inputs)` | Advances the world one tick. The only function the rest of the game calls during play. |
 | `ticksLeft(world)`, `blockLandTick(world, k)` | What the timer shows, and when each falling block lands |
-| `movePlayer` | Walking, lining up with openings, turning, kicking |
+| `walkRobot`, `movePlayer` | One tick of a robot's walking, on ice and belts too (`walkRobot`, also played by the CPU players on a copy of their robot); walking, lining up with openings, turning, kicking (`movePlayer`) |
 | `iceMove`, `glide` | On ice (`World.ice`, Frozen Lake): sliding on after letting go or turning back (`Player.slip`, `slipDir`, `skid`) |
 | `beltLines`, `beltClock`, `beltsRunning`, `beltsAt`, `beltDir`, `beltCarry`, `beltBomb` | The Factory's conveyor belts (`World.belts`, `beltWay`, `beltFlip`): where they run, turning round after the alarm, which way one carries a robot or bomb (along its lane; through a crossing the way it came, `Player.ride`, `Bomb.ride`), carrying robots (let go when lined up to step off to the side) and bombs (waiting at anything in the way). `beltBomb` is shared with the CPU players' `foresee` |
 | `placeBomb`, `useAction` | The A and B buttons |
@@ -62,6 +62,8 @@ The whole game as pure logic. No drawing, no sound, no browser calls, no `Math.r
 | `knockOut`, `bringBack`, `comeBackTile` | Losing a life: coming back at the start, or out of the round (an angel, with angels on) |
 | `angelStep`, `perimeterAt`, `angelAim`, `angelReach` | Angels: gliding round the outer wall, winding up and throwing a bomb in |
 | `inRound`, `Player.zombie` | Who is still in the round; zombies (risen in `step`, knocked down in `knockOut`) are not |
+| `wireSpot`, `wireAt`, `wireLane`, `checkWires`, `tripWire` | Trip wires (`World.wires`, `Player.wires`): where one can be strung (a tile between two solid blocks), B strings it (`useAction`), armed once its tile is clear, set off by any robot that walks into it, and its blast the length of its lane to the walls (`Flame.wire`, death cause `wire`) |
+| `makeDecoys`, `moveDecoys`, `popDecoy` | Decoys (`World.decoys`): copies of a robot (`Decoy` extends `Player`, with its owner's id) on the nearest free tiles, walked by the rules' own movement with the owner's input (one mirrored), popped by a blast, a block, the train or time (`popped`, drawn as a puff for `POOF_TICKS`) |
 | `launch`, `flyPlane`, `planeTurn`, `endFlight` | The laptop's plane: B takes off, `PlayerInput.aim` steers (`PLANE_STEP`: a table of moves per heading made with sums only, so every engine agrees), A drops, B lands. Its state is flat fields on `Player` (`laptop`, `flying`, `planeX`, `planeY`, `planeDir`, `planeBombs`, `planeCool`), so copies and the online picture carry it as they are |
 | `moveDrops`, `dropLanding`, `blast` | Bombs falling from planes (`World.drops`): where one lands (CPU players use the same sums) and its blast, which `explode` shares |
 | Constants | Every number of the game, named, near the top of the file |
@@ -102,6 +104,7 @@ Pure logic like the rules. Given the world, `botInput(world, bot)` returns one `
 | `decide`, `chooseGoal` | Bomb a player, or pick a power-up, bricks or a player to walk to |
 | `placeBomb` | The three checks before pressing A: a way out, nobody able to shut it, and the move played forward on a copy |
 | `tryOut`, `wayOut` | Kicks and throws, each tried on a copy of the world first |
+| `inView`, `wireBehind`, `roomBeyond`, `wireGuard` | Decoys look like robots to them (`inView`: players and decoys that are up, used for who to go after and fly at); a trip wire is a wall (`wallsOf`); holding one, they string it behind them as they walk through a gap, with room left beyond it; near one, the move they mean to make is played forward on a copy of their robot, so the rules never walk, slide or carry them into it (`wireGuard`) |
 | `pilot` | Flying the laptop's plane: at the nearest rival, off by its level's `slop`, `lead` and `carry`, and never letting a bomb go that would reach its own robot or a teammate (`dropLanding` and `dangerMap` with the bomb added) |
 
 It uses `cloneWorld` and `step` from `sim.ts` to play moves forward. Plain-words version: [CPU-PLAYERS.md](CPU-PLAYERS.md).
@@ -177,6 +180,7 @@ Everything on the canvas is drawn with shapes in code. There are no image files.
 | `warmSprites` | Gets the robots' pictures ready ahead of need: everyone's walk, the burnt robot, the ghosts, the winner's dance |
 | `drawGhosts` | The ghosts of knocked-out robots, with wings and a halo, floating up to the top of the screen. Drawn on a layer of its own, because they leave the arena |
 | `drawStatus` | What is drawn over a robot: the shield ring, the ring flying off when a shield is used up, the skull over a cursed robot |
+| `drawWire`, `drawWireIcon`, `drawDecoy`, `drawPoof` | A trip wire strung across its tile (and a faint one where yours would go), the Key's picture of one; decoys among the robots (yours see-through), and their puffs of smoke |
 | `drawLaptopHeld`, `drawSkies`, `drawPlane`, `drawFallingBomb` | The laptop in a robot's hands (with signal waves while it flies), and over everything the planes (in their pilot's colours, with a shadow) and the bombs falling from them, shrinking as they fall. No mark shows where a bomb will land (the owner's ask) |
 | `drawBombArt`, `drawHard`, `drawSoft` | A bomb with a lit fuse, a solid block and a brick, on their own: for the title screen (always Midnight's) and the lobby's map buttons |
 | `drawPlate`, `drawMachine`, `drawBox`, `drawFactory`, `drawFactoryLive`, `drawBeltIcon` (in `factory.ts`) | The Factory: steel floor plates, machines (four kinds, by the tile: a cabinet with a gauge, a cooling unit, a motor, a pipe junction; each a picture made once per size), cardboard boxes (on a belt drawn between its frame, `boxOnBelt`). `drawStatic` adds the hazard stripes along the walls, the belts at rest, the crossings (tables of rolling balls), a drive with a beacon at each end of each belt and two furnaces with their glow (`drawFactory`); `drawDynamic` the treads moving (a picture per size and way, stamped with an offset from `World.beltRun`), the beacons and arrows flashing amber while the alarm sounds, the machines' lights blinking and the furnaces flickering (`drawFactoryLive`) |

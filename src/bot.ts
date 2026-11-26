@@ -77,6 +77,8 @@ import {
   makeRng,
   cloneWorld,
   step,
+  walkRobot,
+  WIRE_REACH,
   DROP_TICKS,
   DROP_FIRE,
   PLANE_STEP,
@@ -89,6 +91,8 @@ import {
   MAX_FIRE,
   MAX_BOMBS,
   MAX_SPEED_ITEMS,
+  MAX_WIRES,
+  wireSpot,
 } from './sim';
 
 // ---------------------------------------------------------------- levels
@@ -189,6 +193,13 @@ export interface LevelSpec {
    * where it would leave a rival no way out, or onto a rival it cannot reach with a bomb where it stands
    */
   throwAttack: boolean;
+  /**
+   * holding a trip wire, walking through a gap where one can be strung: the chance of stringing it there as it
+   * goes, behind it (`wireBehind`); and whether only on its way nearer a rival (Hard: then the wire is behind it,
+   * in the lane a rival coming after it would take, and never across its own way to them)
+   */
+  wire: number;
+  wireHunting: boolean;
 }
 
 export const LEVELS: Record<BotLevel, LevelSpec> = {
@@ -222,6 +233,8 @@ export const LEVELS: Record<BotLevel, LevelSpec> = {
     tunnel: 0,
     combos: false,
     throwAttack: false,
+    wire: 0.05,
+    wireHunting: false,
   },
   normal: {
     label: 'Normal',
@@ -253,6 +266,8 @@ export const LEVELS: Record<BotLevel, LevelSpec> = {
     tunnel: 0,
     combos: false,
     throwAttack: false,
+    wire: 0.15,
+    wireHunting: false,
   },
   hard: {
     label: 'Hard',
@@ -284,6 +299,8 @@ export const LEVELS: Record<BotLevel, LevelSpec> = {
     tunnel: 3,
     combos: true,
     throwAttack: true,
+    wire: 0.5,
+    wireHunting: true,
   },
 };
 
@@ -326,6 +343,8 @@ export interface Bot {
   aimFor: number;
   /** running from a blast: the tile it last looked for a bomb to drop on the way out from (combos), -1 none */
   shotFrom: number;
+  /** holding a trip wire: the tile it last thought about stringing it on as it went through (`wireBehind`), -1 none */
+  wireTile: number;
 }
 
 export function createBot(id: number, level: BotLevel, seed: number): Bot {
@@ -337,6 +356,7 @@ export function createBot(id: number, level: BotLevel, seed: number): Bot {
     goal: 'none',
     goalTile: -1,
     shotFrom: -1,
+    wireTile: -1,
     thinkIn: 0,
     wait: 0,
     script: [],
@@ -533,11 +553,13 @@ function slid(world: World, c: Bomb, self: Bomb, fuse: number, from: number, sta
 }
 
 /**
- * On ice: could sliding bomb `b` blast (tx, ty), wherever it goes off? A robot stepping into its way stops it
- * there or bounces it back, so it may go off well short of where it would stop by itself (`slid` leaves robots
+ * Could sliding bomb `b` blast (tx, ty), wherever it goes off? A robot stepping into its way stops it there (on
+ * ice, or bounces it back), so it may go off well short of where it would stop by itself (`slid` leaves robots
  * out, as they move). Each tile on its way is tried in turn as the one a robot is standing on. (A Hard CPU
  * player on Frozen Lake kicked a bomb down a column at a rival and dropped another behind it; the rival
- * stepped into the column, the kicked bomb bounced back and set off the one behind it, which caught the bot.)
+ * stepped into the column, the kicked bomb bounced back and set off the one behind it, which caught the bot.
+ * Since 26 November 2026 on every map: on the Wild West the kicked bomb, stopped by the rival, was set off
+ * early in a lane a rival's bomb blasted, and set off the one behind.)
  */
 export function slideMayReach(world: World, b: Bomb, tx: number, ty: number): boolean {
   const free = (x: number, y: number): boolean => tile(world, x, y) === FLOOR && !groundBombAt(world, x, y, b);
@@ -552,7 +574,7 @@ export function slideMayReach(world: World, b: Bomb, tx: number, ty: number): bo
   };
   const endsAt = (taken: number): boolean => {
     const c = { ...b };
-    for (let left = Math.max(1, b.fuse); left > 0 && c.slide; left--) slideBomb(c, true, (x, y) => y * world.w + x !== taken && free(x, y));
+    for (let left = Math.max(1, b.fuse); left > 0 && c.slide; left--) slideBomb(c, world.ice, (x, y) => y * world.w + x !== taken && free(x, y));
     return reaches(c.cx, c.cy);
   };
   if (endsAt(-1)) return true;
@@ -851,6 +873,20 @@ function sparedFor(D: Danger, ticks: number): Danger {
   return { w: D.w, iv, gone: D.gone, occ: D.occ };
 }
 
+/** Trapped, with nowhere clear for good: how far ahead a way out only has to be clear (`breathing`), in ticks. */
+const BREATHE = 60;
+
+/** The same map with only the blasts and blocks due in the next `ticks` ticks (a bomb's goes on burning as it does). */
+function breathing(D: Danger, ticks: number): Danger {
+  const iv = D.iv.map((v) => {
+    if (!v) return undefined;
+    const out: number[] = [];
+    for (let k = 0; k < v.length; k += 2) if (v[k] < ticks) out.push(v[k], v[k + 1]);
+    return out.length ? out : undefined;
+  });
+  return { w: D.w, iv, gone: D.gone, occ: D.occ };
+}
+
 /** Must the player on this tile get off it now? Yes for any blast, and for a block landing within `soon` ticks. */
 function urgent(D: Danger, idx: number, soon: number): boolean {
   const v = D.iv[idx];
@@ -877,10 +913,14 @@ function safeAfter(D: Danger, idx: number, a: number): boolean {
 
 // ---------------------------------------------------------------- finding a way
 
-/** Tiles that cannot be walked onto: blocks, bricks and bombs on the floor. */
+/**
+ * Tiles that cannot be walked onto: blocks, bricks and bombs on the floor, and trip wires (walking into one sets
+ * it off: no CPU player ever does, its own included, and it counts a rival as unable to either).
+ */
 function wallsOf(world: World): Uint8Array {
   const out = new Uint8Array(world.w * world.h);
   for (let i = 0; i < out.length; i++) if (world.tiles[i] !== FLOOR) out[i] = 1;
+  for (const o of world.wires) out[o.cy * world.w + o.cx] = 1;
   for (const b of world.bombs) {
     if (b.state !== 'ground') continue;
     // On ice a sliding bomb is in no tile's way for long: it may crawl through one for a second, but it moves
@@ -1108,6 +1148,8 @@ function legOk(who: Who, D: Danger, path: number[], times: number[], margin: num
     const r = Math.round(pos);
     let next = pos + s * v;
     const stop = !!walls[tileAt(r + s)] && (next - r) * s >= 0;
+    // (a trip wire is a wall to it, but it does not stop a slide: it would slide on into it)
+    if (stop && world.wires.length && world.wires.some((o) => o.cy * world.w + o.cx === tileAt(r + s))) return false;
     if (stop) next = (pos - r) * s >= 0 ? pos : r;
     pos = next;
     t++;
@@ -1333,11 +1375,15 @@ function itemWorth(p: Player, kind: ItemKind, spec: LevelSpec): number {
     if (kind === 'kick') return p.canKick ? 0.1 : 3.5;
     if (kind === 'grab') return p.canGrab ? 0.1 : 3.2;
     if (kind === 'laptop') return p.laptop ? 0.1 : 3.5;
+    if (kind === 'wire') return p.wires >= MAX_WIRES ? 0 : p.wires ? 0.6 : 2;
+    if (kind === 'decoy') return 1.6;
   }
   if (kind === 'shield') return p.shieldTicks > 10 * TICK_HZ ? 0.5 : 3.4;
   if (kind === 'kick') return p.canKick ? 0.2 : 2;
   if (kind === 'grab') return p.canGrab ? 0.2 : 1.6;
   if (kind === 'laptop') return p.laptop ? 0.1 : 2.2;
+  if (kind === 'wire') return p.wires >= MAX_WIRES ? 0 : 1.4;
+  if (kind === 'decoy') return 1.4;
   if (kind === 'speed') return 2.6;
   return 3;
 }
@@ -1455,6 +1501,83 @@ export function botInput(world: World, bot: Bot): PlayerInput {
   // so a blast coming there is as urgent as one coming here
   const ahead = world.ice && me.slip > 0 ? glideEnd(world, me).tiles : [];
   const out = me.carrying ? carrying(c) : urgent(c.D, c.S, soon) || ahead.some((t) => urgent(c.D, t, soon)) ? flee(c) : calm(c);
+  return world.wires.length ? wireGuard(c, out) : out;
+}
+
+const GUARD_NEAR = 6; // tiles: the trip wires it looks out for, steps away (across and along)
+const GUARD_HOLD = 24; // ticks a direction is held in a way of keeping clear, at most
+const GUARD_COAST = 90; // ticks of letting go on ice played forward, at most
+
+/**
+ * A trip wire is a wall to a CPU player's ways (`wallsOf`), but the rules do not stop a robot at one: a robot whose
+ * turn is shut walks on to the next opening, on ice it slides on when it lets go, and a belt carries it. So near a
+ * wire it plays the move it means to make forward on a copy of its robot with the rules' own walking (`walkRobot`):
+ * after that move there must still be a way of keeping clear of every wire (letting go there, or holding a
+ * direction until it turns or for `GUARD_HOLD` ticks and then letting go). If there is none, it makes the first move
+ * after which there is. (A Normal on Frozen Lake turning off a lane just short of its own wire had the turn shut by
+ * a kicked bomb, walked on to the next opening and slid into the wire; a Hard lining up for a turn was thrown back
+ * the way it had come, let go, and slid into its own.)
+ */
+function wireGuard(c: Ctx, out: PlayerInput): PlayerInput {
+  const { world, me } = c;
+  const near = world.wires.filter((o) => Math.abs(o.cx - me.x) + Math.abs(o.cy - me.y) <= GUARD_NEAR);
+  if (!near.length) return out;
+  // (a wire is set off only once it is armed: one it has just strung is armed when it has left its tile)
+  interface Run { p: Player; off: boolean[] }
+  const copy = (r: Run): Run => ({ p: { ...r.p }, off: [...r.off] });
+  const fresh = (): Run => ({ p: { ...me, canKick: false }, off: near.map((o) => o.armed || Math.round(me.x) !== o.cx || Math.round(me.y) !== o.cy) });
+  /** one tick with `d` held: whether it sets a wire off */
+  const tick = (r: Run, d: Dir): boolean => {
+    walkRobot(world, r.p, d);
+    const x = Math.round(r.p.x);
+    const y = Math.round(r.p.y);
+    for (let i = 0; i < near.length; i++) {
+      const o = near[i];
+      if (x !== o.cx || y !== o.cy) r.off[i] = true;
+      else if (r.off[i] && (o.dir === 'h' ? Math.abs(r.p.y - o.cy) : Math.abs(r.p.x - o.cx)) <= WIRE_REACH) return true;
+    }
+    return false;
+  };
+  /**
+   * letting go from here: whether it comes to rest (or is played out) clear of every wire. Only ice carries it on
+   * whatever it does next; a belt it can walk against, so there it is the next tick that counts (played out for
+   * longer, a CPU player standing on a belt beside a wire was kept from ever stepping off it)
+   */
+  const coasts = (r: Run): boolean => {
+    const q = copy(r);
+    for (let t = 0; t < (world.ice ? GUARD_COAST : 1); t++) {
+      const x = q.p.x;
+      const y = q.p.y;
+      if (tick(q, 0)) return false;
+      if (q.p.x === x && q.p.y === y) return true;
+    }
+    return true;
+  };
+  /** whether there is still a way of keeping clear from here */
+  const clear = (r: Run): boolean => {
+    if (coasts(r)) return true;
+    for (const d of [1, 2, 3, 4] as Dir[]) {
+      const q = copy(r);
+      const was = q.p.heading;
+      let ok = true;
+      for (let t = 0; t < GUARD_HOLD; t++) {
+        if (tick(q, d)) {
+          ok = false;
+          break;
+        }
+        // (turned: what it had been going the old way is gone; it lets go from here)
+        if (q.p.moving && q.p.heading !== was) break;
+      }
+      if (ok && coasts(q)) return true;
+    }
+    return false;
+  };
+  const after = (d: Dir): boolean => {
+    const r = fresh();
+    return !tick(r, d) && clear(r);
+  };
+  if (after(out.dir)) return out;
+  for (const d of [0, 1, 2, 3, 4] as Dir[]) if (d !== out.dir && after(d)) return { ...out, dir: d };
   return out;
 }
 
@@ -1505,6 +1628,12 @@ function flee(c: Ctx): PlayerInput {
         bot.doing = 'script';
         return bot.script.shift()!;
       }
+      // Nowhere clear for good: somewhere clear for now, of every blast due in the next BREATHE ticks, and think
+      // again from there (a Normal on ice, its two bombs either side and the blocks closing in, slid on into one:
+      // the tile beside it was clear for over a second, until its other bomb)
+      if (!bot.path.length) find(breathing(D, BREATHE));
+    }
+    if (!bot.path.length) {
       const ditch = world.ice ? lastDitch(c) : null;
       if (!ditch) {
         bot.doing = 'trapped';
@@ -1724,7 +1853,9 @@ function runShot(c: Ctx): PlayerInput | null {
 /** Nothing is about to hit its tile: follow the plan, or make one. */
 function calm(c: Ctx): PlayerInput {
   const { world, me, bot, spec, D } = c;
-  if (bot.wait > 0) {
+  // (on ice it only makes up its mind once it has stopped sliding: standing still there slides it on, past the
+  // turn its new way takes, and on into whatever is beyond, a trip wire too: a Normal slid into its own)
+  if (bot.wait > 0 && !(world.ice && me.slip > 0 && bot.path.length)) {
     // making up its mind: stand where it is (its tile is not in any blast, or it would be fleeing). On a belt
     // (the Factory) that means walking against it, or it is carried off
     bot.wait--;
@@ -1754,7 +1885,62 @@ function calm(c: Ctx): PlayerInput {
     return NONE;
   }
   bot.doing = bot.path.length ? 'travel' : 'idle';
+  if (d > 0 && wireBehind(c, d as Dir)) return { dir: d as Dir, a: false, b: true };
   return go(d);
+}
+
+/**
+ * Holding a trip wire, walking through a gap where one can be strung, on through it along the lane (`d`): string
+ * it as it goes, so it is left behind it. Now and then, by its level (`wire`), and for Hard only on its way
+ * nearer a rival (`wireHunting`). Only near the middle of the tile, so it
+ * is still on it once it has moved this tick (B anywhere else would do something else). It never walks back
+ * into one: to the CPU players a wire is a wall (`wallsOf`).
+ */
+function wireBehind(c: Ctx, d: Dir): boolean {
+  const { world, me, bot, spec, D, S } = c;
+  if (!me.wires || me.carrying || bot.wireTile === S) return false;
+  const sx = S % world.w;
+  const sy = (S - sx) / world.w;
+  const dir = wireSpot(world, sx, sy);
+  // (along the lane, near the middle of the tile, coming from the side it leaves behind)
+  if (!dir || (dir === 'h') !== (d <= 2) || !bot.path.length || hasDanger(D, S)) return false;
+  const off = d <= 2 ? (me.y - sy) * DY[d] : (me.x - sx) * DX[d];
+  if (off > 0.2) return false;
+  bot.wireTile = S; // (one go at each tile it crosses)
+  const rivals = inView(world).filter((e) => e.alive && e.id !== me.id && !allies(me, e));
+  const from = (t: number): number => {
+    const x = t % world.w;
+    const y = (t - x) / world.w;
+    return Math.min(...rivals.map((e) => Math.abs(Math.round(e.x) - x) + Math.abs(Math.round(e.y) - y)));
+  };
+  if (!rivals.length) return false;
+  // (Hard: only on its way to a rival, where it is going nearer to one than it is here)
+  if (spec.wireHunting && !(from(bot.path[bot.path.length - 1]) < from(S))) return false;
+  if (!(bot.rng() < spec.wire)) return false;
+  // and room on the far side: the wire is a wall to it once it is through, so it must not shut itself in a pocket
+  // there with no way out of its own blasts (a Hard strung one behind it into a dead end of bricks, and stood there
+  // for the rest of the round, unable to bomb its way on)
+  return roomBeyond(c, S + DX[d] + DY[d] * world.w, S) >= WIRE_ROOM;
+}
+
+/** Stringing a trip wire behind it: at least this many tiles of open floor must be left on the far side. */
+const WIRE_ROOM = 10;
+
+/** How many tiles of open floor can be walked to from `from` without going through `not` (up to WIRE_ROOM). */
+function roomBeyond(c: Ctx, from: number, not: number): number {
+  const { world, walls } = c;
+  if (walls[from]) return 0;
+  const seen = new Set([not, from]);
+  const todo = [from];
+  for (let i = 0; i < todo.length && todo.length < WIRE_ROOM; i++) {
+    for (let k = 1; k <= 4; k++) {
+      const j = todo[i] + DX[k] + DY[k] * world.w;
+      if (seen.has(j) || walls[j]) continue;
+      seen.add(j);
+      todo.push(j);
+    }
+  }
+  return todo.length;
 }
 
 /** Left holding a bomb with no plan: throw it where that is survivable. */
@@ -1801,7 +1987,7 @@ function pilot(c: Ctx): PlayerInput {
   bot.goal = 'none';
   // (a press must be fresh: B is let go for a tick first if it was held)
   if (urgent(D, S, Math.min(spec.blockSight, BLOCK_URGENT))) return { dir: 0, a: false, b: !me.prevB };
-  const rivals = world.players.filter((p) => p.alive && p.id !== me.id && !p.zombie && !allies(me, p));
+  const rivals = inView(world).filter((p) => p.alive && p.id !== me.id && !p.zombie && !allies(me, p));
   if (!rivals.length || me.planeBombs <= 0) return NONE; // (it comes home by itself)
   let target = rivals[0];
   let best = Infinity;
@@ -1864,6 +2050,14 @@ function pilot(c: Ctx): PlayerInput {
   return { dir: 0, a: drop, b: false, aim };
 }
 
+/**
+ * The robots it can see in the arena: every player, and every decoy that is up. A decoy looks just like its
+ * robot (it is its owner's copy, with its id), so a CPU player cannot tell them apart and goes after decoys too.
+ */
+function inView(world: World): Player[] {
+  return world.decoys.length ? [...world.players, ...world.decoys.filter((d) => d.popped < 0)] : world.players;
+}
+
 function shuffled(rng: () => number): Dir[] {
   const out: Dir[] = [1, 2, 3, 4];
   for (let i = 3; i > 0; i--) {
@@ -1879,14 +2073,17 @@ function decide(c: Ctx): PlayerInput | null {
   const { world, me, bot, spec, D, walls, S } = c;
   const sx = S % world.w;
   const sy = (S - sx) / world.w;
-  // (a zombie goes after the robots still in the round, not other zombies; nobody goes after a teammate)
-  const enemies = world.players.filter((p) => p.alive && p.id !== me.id && !(me.zombie && p.zombie) && !allies(me, p));
+  // (a zombie goes after the robots still in the round, not other zombies; nobody goes after a teammate; a decoy
+  // looks just like its robot, so it is gone after too)
+  const enemies = inView(world).filter((p) => p.alive && p.id !== me.id && !(me.zombie && p.zombie) && !allies(me, p));
   const wasIdle = bot.path.length === 0;
+  // (holding a trip wire between two solid blocks, B strings it: not the moment to fly a plane)
+  const strings = me.wires > 0 && !me.carrying ? wireSpot(world, sx, sy) : null;
 
   // holding a laptop: fly the plane now and then, when nothing is coming for it and no rival is near enough to
   // walk up and box it in while it stands at the laptop (it lands again if a blast heads its way: pilot). Never
   // from a belt (the Factory): it would be carried off while it flies (a Normal was carried into its own blast)
-  if (me.laptop && !me.carrying && enemies.length && !hasDanger(D, S) && !(world.belts.length && beltDir(world, me.x, me.y, 0, me.ride ?? 0))) {
+  if (me.laptop && !strings && !me.carrying && enemies.length && !hasDanger(D, S) && !(world.belts.length && beltDir(world, me.x, me.y, 0, me.ride ?? 0))) {
     const near = enemies.some((e) => Math.abs(Math.round(e.x) - sx) + Math.abs(Math.round(e.y) - sy) <= 3);
     if (!near && bot.rng() < spec.fly) {
       bot.path = [];
@@ -2243,8 +2440,18 @@ function placeBomb(c: Ctx): PlayerInput | null {
   const sy = (S - sx) / world.w;
   // (with friendly fire on: not on top of a teammate)
   if (trapsTeammate(c)) return null;
-  // (on ice: not where a sliding bomb could set it off if a robot stopped it, or bounced it back)
-  if (world.ice && world.bombs.some((b) => b.state === 'ground' && b.slide && slideMayReach(world, b, sx, sy))) return null;
+  // (the Factory: a belt may carry it over onto the next tile in the tick it presses A, and the bomb is dropped there,
+  // not where it worked out its way out from: it waits until it would be dropped where it stands. A Hard dropped one
+  // a tile further along than it thought, the bomb rode on into its way out, and it was shut in)
+  if (world.belts.length) {
+    const q: Player = { ...me, canKick: false };
+    walkRobot(world, q, 0);
+    if (tileOf(world, q) !== S) return null;
+  }
+  // (not where a sliding bomb could set it off if a robot stopped it, or, on ice, bounced it back: a Hard on the
+  // Wild West kicked one along a row at a rival and dropped another behind it; the rival stepped into the row,
+  // the kicked bomb stopped in the lane of a rival's bomb, which set it off, and it set off the one behind)
+  if (world.bombs.some((b) => b.state === 'ground' && b.slide && slideMayReach(world, b, sx, sy))) return null;
   const what = [{ cx: sx, cy: sy, range: me.fire, fuse: FUSE_TICKS }];
   // For getting clear of its own bomb, a tile only has to outlast the blast: a block due on it
   // after that is something to deal with afterwards. (Near the end, no tile lasts much longer.)

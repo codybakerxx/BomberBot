@@ -10,9 +10,9 @@
  *
  * It holds no game rules. Those are all in sim.ts.
  */
-import { createWorld, step, ticksLeft, World, PlayerInput, type Player, Dir, TICK_HZ, DEATH_TICKS, type GameEvent, type ItemKind } from './sim';
+import { createWorld, step, ticksLeft, wireSpot, World, PlayerInput, type Player, Dir, TICK_HZ, DEATH_TICKS, type GameEvent, type ItemKind } from './sim';
 import { Bot, BotLevel, BOT_LEVELS, LEVELS, createBot, botInput } from './bot';
-import { COLORS, NOBODY, botName, colorById, drawAngels, drawBarrel, drawFloor, drawSignalIcon, drawGround, drawHead, drawItemTile, drawStatic, drawDynamic, drawGhosts, groundKey, setMap, setOrangeFire, warmSprites } from './render';
+import { COLORS, NOBODY, botName, colorById, drawAngels, drawBarrel, drawFloor, drawSignalIcon, drawGround, drawHead, drawItemTile, drawStatic, drawDynamic, drawGhosts, drawWireIcon, groundKey, setMap, setOrangeFire, warmSprites } from './render';
 import { drawBeltIcon } from './factory';
 import { Input, PadReader, pilotAim, typing } from './input';
 import { drawTitle, closeTitle, drawIcon } from './title';
@@ -122,7 +122,8 @@ let blastedBy = -1;
 const CRUSHED = -2;
 const TRAIN = -3;
 const TNT_BLAST = -4;
-/** With TNT_BLAST: who set the barrel off (-1 if nobody). */
+const WIRE_BLAST = -5;
+/** With TNT_BLAST: who set the barrel off (-1 if nobody); with WIRE_BLAST, whose trip wire it was. */
 let tntBy = -1;
 /** true once this round's "blocks are falling" warning has sounded */
 let hurried = false;
@@ -134,6 +135,9 @@ let laptopTipShown = false;
 let trainTipShown = false;
 let iceTipShown = false;
 let beltTipShown = false;
+/** the first decoy, and the first trip wire, picked up here in a match get a tip saying what they do */
+let decoyTipShown = false;
+let wireTipShown = false;
 const playTip = $('playTip');
 /** The bubbles over the robots: what each said in the quick chat (quick.ts) */
 const bubbles = createBubbles($('bubbles'), (i) => colorById(world.players[i]?.colorId ?? 'gold').glow);
@@ -773,9 +777,15 @@ function pilot<T extends PlayerInput | undefined>(inp: T, p: Player | undefined)
 let hintKey = '';
 const LAPTOP_GLYPH =
   '<svg class="tb-ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="5" width="14" height="10" rx="1.5"/><path d="M2.5 18.5h19"/></svg>';
+/** a trip wire: two posts with a wire across */
+const WIRE_GLYPH =
+  '<svg class="tb-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5v14M20 5v14M4 13h16"/></svg>';
 function touchHints(): void {
-  const me = shownWorld().players[myIdx()];
-  const key = !me || !me.alive ? '' : me.flying > 0 ? `fly${me.planeBombs}` : me.laptop ? 'laptop' : '';
+  const w = shownWorld();
+  const me = w.players[myIdx()];
+  // (holding a trip wire, standing between two solid blocks: B strings it, whatever else it would do)
+  const wire = !!me && me.wires > 0 && !me.carrying && !!wireSpot(w, Math.round(me.x), Math.round(me.y));
+  const key = !me || !me.alive ? '' : me.flying > 0 ? `fly${me.planeBombs}` : wire ? 'wire' : me.laptop ? 'laptop' : '';
   if (key === hintKey) return;
   hintKey = key;
   const a = $('btnA');
@@ -792,12 +802,16 @@ function touchHints(): void {
     if (key === 'laptop') {
       b.innerHTML = `<span class="tb-row"><span class="tb-key">B</span>${LAPTOP_GLYPH}</span><small class="tb-sub">fly plane</small>`;
       b.setAttribute('aria-label', 'B button, fly the plane');
+    } else if (key === 'wire') {
+      b.innerHTML = `<span class="tb-row"><span class="tb-key">B</span>${WIRE_GLYPH}</span><small class="tb-sub">set wire</small>`;
+      b.setAttribute('aria-label', 'B button, string the trip wire here');
     } else {
       b.textContent = 'B';
       b.setAttribute('aria-label', 'B button, lift or throw a bomb');
     }
   }
   b.classList.toggle('laptop', key === 'laptop');
+  b.classList.toggle('wire', key === 'wire');
 }
 
 /** Draw one frame. */
@@ -915,6 +929,13 @@ function soundOf(e: GameEvent): void {
   else if (e.type === 'death') sfx.death();
   else if (e.type === 'launch') sfx.lift(); // the laptop's plane goes up (Lift and land's sound)
   else if (e.type === 'drop') sfx.kick(); // and lets a bomb go: a whoosh (Kick and throw's)
+  else if (e.type === 'decoy') sfx.decoy();
+  else if (e.type === 'poof') sfx.poof();
+  else if (e.type === 'wire') sfx.wire();
+  else if (e.type === 'trip') {
+    sfx.trip();
+    shakeAt = clock;
+  }
 }
 
 /** One step of the game rules on this screen: read the input, then advance (below). */
@@ -942,7 +963,7 @@ function advance(inputs: (PlayerInput | undefined)[]): void {
     // (online, a sound the picture already made ahead of the server is not made twice; nor are the sounds
     // of ticks caught up on while the page was out of sight)
     if (!(net && (net.heard(world.tick, e) || document.hidden))) soundOf(e);
-    if (e.type === 'explode' || e.type === 'tnt') {
+    if (e.type === 'explode' || e.type === 'tnt' || e.type === 'trip') {
       // a light shake for a blast within two tiles of a robot played on a controller
       if (prefs.rumble)
         for (let i = 0; i < world.players.length; i++) {
@@ -954,7 +975,7 @@ function advance(inputs: (PlayerInput | undefined)[]): void {
       redrawStatic();
     } else if (e.type === 'death') {
       if (e.player === mi && e.out) {
-        blastedBy = e.cause === 'block' ? CRUSHED : e.cause === 'train' ? TRAIN : e.cause === 'tnt' ? TNT_BLAST : e.by;
+        blastedBy = e.cause === 'block' ? CRUSHED : e.cause === 'train' ? TRAIN : e.cause === 'tnt' ? TNT_BLAST : e.cause === 'wire' ? WIRE_BLAST : e.by;
         tntBy = e.by;
       }
       if (prefs.rumble && human(e.player)) padOf(e.player)?.rumble(1, 0.7, 380); // a strong shake: you are out
@@ -984,6 +1005,18 @@ function advance(inputs: (PlayerInput | undefined)[]): void {
     if (got && got.type === 'pickup') {
       laptopTipShown = true;
       showTip(`${couch() ? `${nameOf(got.player)}: a` : 'A'} laptop! B flies a plane: steer it, A drops bombs`);
+    }
+  }
+  for (const [kind, tip] of [
+    ['decoy', 'decoy! Two copies of you copy your moves for 15 s'],
+    ['wire', 'trip wire! Between two blocks, B strings it. Walk into it and the lane blows'],
+  ] as const) {
+    if (kind === 'decoy' ? decoyTipShown : wireTipShown) continue;
+    const got = world.events.find((e) => e.type === 'pickup' && e.kind === kind && (net ? e.player === mi : human(e.player)));
+    if (got && got.type === 'pickup') {
+      if (kind === 'decoy') decoyTipShown = true;
+      else wireTipShown = true;
+      showTip(`${couch() ? `${nameOf(got.player)}: a` : 'A'} ${tip}`);
     }
   }
   const firstAngel = world.players.findIndex((p, i) => (net ? i === mi : human(i)) && p.angel && world.tick >= p.angelFrom);
@@ -1059,6 +1092,11 @@ function howOut(): string {
   const me = world.players[myIdx()];
   const who = world.players[blastedBy];
   if (blastedBy === TRAIN) return 'The train hit you.';
+  if (blastedBy === WIRE_BLAST) {
+    const whose = world.players[tntBy];
+    if (!whose) return 'Caught in a trip wire’s blast.';
+    return whose === me ? 'Caught in your own trip wire’s blast.' : `Caught in ${nameOf(tntBy) === 'You' ? botName(colorById(whose.colorId)) : nameOf(tntBy)}’s trip wire blast.`;
+  }
   if (blastedBy === TNT_BLAST) {
     const lit = world.players[tntBy];
     if (!lit) return 'Caught in a TNT blast.';
@@ -1750,6 +1788,9 @@ function fillHero(): void {
     const left = me.planeBombs;
     list.push(me.flying ? item('laptop', String(left), `Flying the plane: ${left} ${left === 1 ? 'bomb' : 'bombs'} left`) : item('laptop', '', 'Laptop: B flies a plane'));
   }
+  if (me.wires > 0) list.push(item('wire', String(me.wires), `${me.wires} trip ${me.wires === 1 ? 'wire' : 'wires'}: B between two blocks strings one`));
+  const decoys = world.decoys.filter((d) => d.id === me.id && d.popped < 0);
+  if (decoys.length) list.push(item('decoy', `${Math.ceil(Math.max(...decoys.map((d) => d.until - world.tick)) / TICK_HZ)}s`, 'Decoys: seconds left'));
   if (me.shieldTicks > 0) list.push(item('shield', `${Math.ceil(me.shieldTicks / TICK_HZ)}s`, 'Shield: seconds left'));
   if (me.curseTicks > 0) list.push(item('curse', `${Math.ceil(me.curseTicks / TICK_HZ)}s`, 'Cursed: seconds left', true));
   if (list.length > 6) list.shift(); // (a full kit: the label gives up its room, so the kit stays on one line)
@@ -1898,6 +1939,7 @@ function showKey(): void {
     // the Factory's conveyor belts
     row('Conveyor belt', 'Carries robots and bombs along. When the alarm sounds and the lights flash, the belts stop, then run the other way.', drawBeltIcon);
   }
+  row('Trip wire', 'Strung between two blocks. Walk into it and its blast runs the whole lane both ways, to the walls. Its lights blink once it is set.', drawWireIcon);
   row('Crown', 'The player in the lead', (g, s) => {
     const col = colorById(world.players[myIdx()]?.colorId ?? 'gold');
     drawHead(g, s / 2, s * 0.58, s * 0.36, col, { xEyes: false, crown: true });
@@ -2244,7 +2286,7 @@ function onRound(w: World, s: Seat[], score: Score, fresh: boolean): void {
     redrawStatic();
     return;
   }
-  if (fresh && roundNo <= 1) angelTipShown = laptopTipShown = trainTipShown = iceTipShown = beltTipShown = false; // a new match
+  if (fresh && roundNo <= 1) angelTipShown = laptopTipShown = trainTipShown = iceTipShown = beltTipShown = decoyTipShown = wireTipShown = false; // a new match
   blastedBy = -1;
   hurried = false;
   overShown = false;

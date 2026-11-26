@@ -27,7 +27,7 @@
  * few ticks ago, read from a short history, so they walk evenly however unevenly the ticks arrive. How far
  * back follows the connection: as far as the ticks have lately been late, easing forward again.
  */
-import { TICK_HZ, cloneWorld, step, type GameEvent, type Player, type PlayerInput, type World } from './sim';
+import { TICK_HZ, cloneWorld, step, type Decoy, type GameEvent, type Player, type PlayerInput, type World } from './sim';
 import { IN_A, IN_ALL, IN_B, newQueue, takeInput, tickCodes, unpackInput, worldHash, type ClientMsg, type InputQueue, type ServerMsg, type StampedInput } from './net';
 
 export const TICK_MS = 1000 / TICK_HZ;
@@ -94,7 +94,7 @@ export class Predictor {
   private lastCodes: number[] = [];
 
   // the other robots: where the server said they were, tick by tick, and how far back they are drawn
-  private hist: ({ tick: number; players: Player[] } | undefined)[] = new Array(RING);
+  private hist: ({ tick: number; players: Player[]; decoys: Decoy[] } | undefined)[] = new Array(RING);
   private delay = 0;
   private delayAt = 0;
   private remoteTick = 0;
@@ -157,9 +157,9 @@ export class Predictor {
     while (this.sent.length && this.sent[0].n <= n) this.ackedV = this.sent.shift()!.v & IN_ALL;
   }
 
-  /** Keep where everyone is after this tick, for drawing the others a few ticks back. */
+  /** Keep where everyone is after this tick, for drawing the others a few ticks back (their decoys too). */
   private record(w: World): void {
-    this.hist[w.tick % RING] = { tick: w.tick, players: w.players.map((p) => ({ ...p })) };
+    this.hist[w.tick % RING] = { tick: w.tick, players: w.players.map((p) => ({ ...p })), decoys: w.decoys.map((d) => ({ ...d })) };
   }
 
   /**
@@ -230,7 +230,13 @@ export class Predictor {
     const bombs = w.bombs.some((b) => b.state === 'held' && b.heldBy !== this.me)
       ? w.bombs.map((b) => (b.state === 'held' && b.heldBy !== this.me && players[b.heldBy] ? { ...b, x: players[b.heldBy].x, y: players[b.heldBy].y } : b))
       : w.bombs;
-    this.shown = { ...w, players, bombs };
+    // (their decoys too, where they were with them: drawn ahead of them, a decoy would move a moment before its
+    // robot did, and so give it away; yours walk with you, in the picture)
+    const theirs = (h && h.tick === this.remoteTick ? h.decoys : base.decoys).filter((d) => d.id !== this.me);
+    const decoys = w.decoys.length || theirs.length
+      ? [...w.decoys.filter((d) => d.id === this.me), ...theirs.map((d) => (shift ? { ...d, born: d.born + shift, popped: d.popped >= 0 ? d.popped + shift : -1 } : d))]
+      : w.decoys;
+    this.shown = { ...w, players, bombs, decoys };
   }
 
   /** Move the clock towards where the pongs say it should be. */
@@ -300,6 +306,8 @@ export class Predictor {
       case 'reverse':
         return true;
       case 'pickup':
+      case 'decoy':
+      case 'wire':
         return e.player === this.me;
       default:
         return false;

@@ -81,30 +81,34 @@ Each brick hides at most one power-up. You pick one up by standing on its tile. 
 | Shield | The next blast does not knock you out. Wears off after 30 seconds if not used. | One at a time |
 | Curse (skull) | A penalty: you walk at 85% of the starting speed for 8 seconds | |
 | Laptop | Held in your robot's hands. **B** flies a plane: steer it anywhere, and **A** drops its one bomb, which goes off where it lands. See Laptop below | One flight |
+| Decoy (two heads) | Two copies of your robot appear beside you and walk when you walk, one the same way, one the opposite way, for 15 seconds. See Decoy below | Two at a time |
+| Trip wire | **B**, standing between two solid blocks, strings it across that gap. Anyone who walks into it sets off a blast along the whole lane. See Trip wire below | 3 held |
 
-<img src="screenshots/power-ups.png" width="560" alt="The eight power-ups in a row: bomb, flame, speed, boot, glove, shield, curse and laptop. Below them, a robot inside a shield ring, a cursed robot with a small skull over its head, a robot with both, and a ring flying outward from a robot whose shield has just taken a blast">
+<img src="screenshots/power-ups.png" width="560" alt="The power-ups in a row: bomb, flame, speed, boot, glove, shield, curse, laptop, decoy and trip wire. Below them, a robot inside a shield ring, a cursed robot with a small skull over its head, a robot with both, and a ring flying outward from a robot whose shield has just taken a blast">
 
 ### How rare each one is
 
-**60% of the bricks hide a power-up** (`ITEM_SHARE`): the lobby's **Power-up density** setting, from none to every brick (the owner's ask and name, 19 November 2026). Which one is drawn by each kind's weight (`ITEM_WEIGHT`), so each keeps its share of the power-ups however many there are: bombs and flames 30.6% of them each, speed 22.4%, boots and gloves 5.1% each, shields, curses and laptops 2% each. The chance under each brick is the two together (`ITEM_CHANCE`). The other columns are what that comes to in play, counted over 20,000 arenas by `experiments/item-rarity.ts`, at the usual 60%. An arena starts with about 81 bricks, and about 49 of them hide something (every chance was raised by a quarter in November 2026, the owner's ask: 38 before).
+**60% of the bricks hide a power-up** (`ITEM_SHARE`): the lobby's **Power-up density** setting, from none to every brick (the owner's ask and name, 19 November 2026). Which one is drawn by each kind's weight (`ITEM_WEIGHT`), so each keeps its share of the power-ups however many there are: bombs and flames 29.4% of them each, speed 21.6%, boots and gloves 4.9% each, shields, curses, laptops, decoys and trip wires 2% each. The chance under each brick is the two together (`ITEM_CHANCE`). The other columns are what that comes to in play, counted over 20,000 arenas by `experiments/item-rarity.ts`, at the usual 60%. An arena starts with about 81 bricks, and about 50 of them hide something (every chance was raised by a quarter in November 2026, the owner's ask: 38 before).
 
 | Power-up | Chance under each brick | Average in an arena | Arenas with at least one | Arenas with two or more |
 |---|---|---|---|---|
-| Bomb | 18.4% | 14.8 | 100% | 100% |
-| Flame | 18.4% | 14.8 | 100% | 100% |
-| Speed | 13.5% | 10.9 | 100% | 100% |
-| Boot | 3.1% | 2.6 | 100% | 72% |
-| Glove | 3.1% | 2.6 | 100% | 71% |
-| Shield | 1.2% | 1.0 | 63% | 26% |
-| Curse | 1.2% | 1.0 | 63% | 26% |
-| Laptop | 1.2% | 1.4 | 100% | 26% |
+| Bomb | 17.6% | 14.3 | 100% | 100% |
+| Flame | 17.6% | 14.3 | 100% | 100% |
+| Speed | 12.9% | 10.4 | 100% | 100% |
+| Boot | 2.9% | 2.5 | 100% | 69% |
+| Glove | 2.9% | 2.5 | 100% | 69% |
+| Shield | 1.2% | 0.9 | 62% | 25% |
+| Curse | 1.2% | 0.9 | 61% | 24% |
+| Laptop | 1.2% | 1.3 | 100% | 24% |
+| Decoy | 1.2% | 1.3 | 100% | 24% |
+| Trip wire | 1.2% | 1.3 | 100% | 25% |
 | Nothing | 40% | | | |
 
 - The **shield** and the **curse** are very rare on purpose. Each is missing from nearly four arenas in ten, and when one is there it is usually the only one.
-- Every arena has at least one **boot**, one **glove** and one **laptop**. If the dice give none, one is placed under a brick that would otherwise be empty. Nothing else is guaranteed. (The laptop is as rare under a brick as the shield; the one made sure of is why an arena averages more.)
+- Every arena has at least one **boot**, one **glove**, one **laptop**, one **decoy** and one **trip wire** (`SURE_KINDS`). If the dice give none, one is placed under a brick that would otherwise be empty. Nothing else is guaranteed. (The laptop, the decoy and the trip wire are as rare under a brick as the shield; the one made sure of is why an arena averages more.)
 - These are what an arena *hides*. Fewer are picked up: a power-up lying in the open is destroyed by a blast, and some bricks are never broken.
 - The **boot** and the **glove** are the next rarest: two or three of each in an arena, and in three arenas in ten there is only the one.
-- The first five began at 40% of bricks between them and were raised to 46% in the same mix. The shield and the curse added 1% each. Then the boot and the glove went from 6% to 4% each and later to 2.5% each, and what they gave up went to the bomb, the flame and speed (now 15%, 15% and 11%). The total stayed at 48%, until every chance was raised by a quarter (60% in all) at the owner's ask in November 2026. The laptop added 1.25% (61.25%) on 18 November 2026. On 19 November 2026 the total became the Power-up density setting, 60% by default, the laptop sharing it with the rest (each kind's chance about 2% less than the day before).
+- The first five began at 40% of bricks between them and were raised to 46% in the same mix. The shield and the curse added 1% each. Then the boot and the glove went from 6% to 4% each and later to 2.5% each, and what they gave up went to the bomb, the flame and speed (now 15%, 15% and 11%). The total stayed at 48%, until every chance was raised by a quarter (60% in all) at the owner's ask in November 2026. The laptop added 1.25% (61.25%) on 18 November 2026. On 19 November 2026 the total became the Power-up density setting, 60% by default, the laptop sharing it with the rest (each kind's chance about 2% less than the day before). The decoy and the trip wire came on 26 November 2026, sharing it too (each other kind's chance about 4% less).
 
 ### Shield
 
@@ -142,6 +146,30 @@ Each brick hides at most one power-up. You pick one up by standing on its tile. 
 - Knocked out while flying, the plane is gone (bombs already falling still land). When the round is decided every plane lands. A robot coming back with a new life has no laptop.
 - Teammates: a plane's blast hurts them only with Friendly fire on, like any blast.
 - CPU players fly it too (see `docs/CPU-PLAYERS.md`).
+
+### Decoy
+
+*`makeDecoys`, `moveDecoys` and `popDecoy` in sim.ts (the owner's design, 26 November 2026; the numbers are Claude's)*
+
+- Picking one up makes **two copies** of your robot appear on the free tiles nearest you (open floor with no bomb, blast or block about to land, found step by step across the floor, at most 6 steps away), each in a puff of smoke.
+- They **walk whenever you walk**: the nearer one the way you are asked to go, the other the **opposite** way. They move by the same rules as a robot (lining up for turns, sliding on ice, carried by belts) and stand still when you do, or while you fly a laptop's plane. They show your shield, curse and laptop too, so nothing gives them away. They do not drop bombs, pick up power-ups, kick bombs or set off trip wires, and robots and bombs pass through them.
+- Any **blast**, whoever's, pops one in a puff of smoke, and so does a **falling block** or the **train**. Otherwise they vanish after **15 seconds** (`DECOY_TICKS`; the owner's pick). They go when you are knocked out.
+- Another decoy replaces the two you have: two at a time.
+- On your own screen your decoys are drawn a little see-through, so you can tell which one is you. Everyone else sees them exactly as they see you, and the CPU players cannot tell them apart either: they go after decoys too.
+
+### Trip wire
+
+*`wireSpot`, `useAction`, `checkWires`, `tripWire` and `wireLane` in sim.ts (the owner's design, 26 November 2026; the numbers are Claude's)*
+
+- Picking one up gives you a trip wire to string (up to 3 held, `MAX_WIRES`).
+- **B**, standing on a tile with a **solid block on each side** (left and right, or above and below: in an arena's lanes, every tile between two pillars or between a pillar and the outer wall), strings it across that tile from one block to the other (`wireSpot`). Anywhere else B does what it always does (throw, fly a plane, lift a bomb). While you hold one and stand where it can go, B glows and says *set wire*, and a faint wire shows where it would be. Not on a bomb, and one wire to a tile.
+- It is a thin steel wire between two small plates, with a light on each in the colour of whoever strung it. It is **armed** once nobody stands on its tile (you walk off it first); then the lights blink.
+- **Anyone who walks into it sets it off** (`checkWires`): any robot on its tile within 0.3 of the wire (`WIRE_REACH`), the one who strung it included, and a zombie too. Decoys do not. Nothing else does: a bomb's blast leaves it be, a falling block crushes it without setting it off, and the train tears it away.
+- **Its blast runs the whole length of its lane, both ways**, from the wire's tile to the walls (`tripWire`, `wireLane`): along the column for a wire strung left to right, along the row for one strung top to bottom. Nothing but a solid block stops it (the outer wall, or a block that has fallen): it burns every brick on the way and carries on, sets off bombs and barrels of TNT, and destroys power-ups lying there. It lasts as long as any blast, in the colour of whoever strung it, and counts as their blast (knocked out by it, it is "their trip wire's blast"; with Friendly fire off it spares their teammates).
+- Not strung, trip wires go down with the rest of the kit in Item Drop. A robot coming back with a new life has none.
+- CPU players string them now and then, and never walk into one (see `docs/CPU-PLAYERS.md`).
+
+<img src="screenshots/decoy-wire.png" width="390" alt="Your gold robot in the middle of the arena with its two decoys either side of it, a little see-through on your screen; two trip wires strung across lanes between pillars, a white wire between two small steel plates with lights; and down the right a pink blast running the whole length of a column, where a wire was set off">
 
 ## Kicking
 
@@ -483,9 +511,9 @@ The host can change these before a match. Left alone, every one is the usual rul
 | Rounds to win | 1 to 9 | The match ends when someone reaches it |
 | Brick density | 0% (None) to 100% of the open floor, in steps of 5%; 80% the usual | `softDensity` (see The arena): the share of the open floor that starts as bricks; the corners the robots start in stay clear. (It was Bricks, five steps: Few 50%, Some 65%, Normal 78%, Lots 86%, Packed 93%, until 19 November 2026; then steps of 1% with 78% the usual for a few hours; a saved percentage goes to the nearest 5%) |
 | Power-up density | 0% (None) to 100% of the bricks, in steps of 5%; 60% the usual | How many bricks hide a power-up (`itemChance` adds up to it). The line under it counts them in the arena pictured. None: no power-ups at all, not even the boot, glove and laptop every arena otherwise gets |
-| Item drop | On or off; off the usual (on in the Item Drop mode) | `itemDrop`. On, a robot knocked out (losing a life too) drops every power-up it collected that round: the bombs, flames and speed above what it started with, the boot, the glove and a laptop it has not flown, one to a tile on the open floor round where it fell, the boot, glove and laptop nearest, up to 4 tiles away (`dropKit`, `DROP_REACH` in sim.ts). Anyone can pick them up, the robot that did it or not; they are not hurt by the blast that knocked it out, but a later blast burns them like any power-up. A zombie drops nothing (it has nothing) |
+| Item drop | On or off; off the usual (on in the Item Drop mode) | `itemDrop`. On, a robot knocked out (losing a life too) drops every power-up it collected that round: the bombs, flames and speed above what it started with, the boot, the glove, a laptop it has not flown and trip wires it has not strung, one to a tile on the open floor round where it fell, the boot, glove and laptop nearest, up to 4 tiles away (`dropKit`, `DROP_REACH` in sim.ts). Anyone can pick them up, the robot that did it or not; they are not hurt by the blast that knocked it out, but a later blast burns them like any power-up. A zombie drops nothing (it has nothing) |
 | Custom start | Bombs 1 to 8, blast 1 to 8 tiles, speed +0 to +6 | What everyone starts each round with (`startBombs`, `startFire`, `startSpeed`) |
-| Custom power-ups | For each kind: How often, Very rare (a quarter; added 23 November 2026), Rare (half), Normal, Lots (double); every kind but the extra bomb and the flame also has a switch, How often showing while it is on | Which kinds the power-ups are: each kind's weight, compared to the others (`itemMix`); Power-up density still says how many. A kind switched off never turns up, and the others share its bricks. The extra bomb and the flame cannot be switched off (`ALWAYS_ON`; the owner's ask, 19 November 2026). A boot, a glove and a laptop are only made sure of when they are on and at Normal or Lots (`sure` in the round's config: one at Rare or Very rare is not, so it really is rare; 23 November 2026). (Until 19 November 2026 these scaled each kind's own chance, so Off made fewer power-ups and Lots more) |
+| Custom power-ups | For each kind: How often, Very rare (a quarter; added 23 November 2026), Rare (half), Normal, Lots (double); every kind but the extra bomb and the flame also has a switch, How often showing while it is on | Which kinds the power-ups are: each kind's weight, compared to the others (`itemMix`); Power-up density still says how many. A kind switched off never turns up, and the others share its bricks. The extra bomb and the flame cannot be switched off (`ALWAYS_ON`; the owner's ask, 19 November 2026). A boot, a glove, a laptop, a decoy and a trip wire are only made sure of when they are on and at Normal or Lots (`sure` in the round's config: one at Rare or Very rare is not, so it really is rare; 23 November 2026). (Until 19 November 2026 these scaled each kind's own chance, so Off made fewer power-ups and Lots more) |
 | Lives | 1 to 5 | Lives each robot has in a round (`lives`); see Lives and angels |
 | Post-Mortem Behavior | Off (the default: watch) or on: Angel (with Angels come back) or Zombie | What a robot out of lives does: watches, haunts the wall throwing bombs in (`angels`: 'on'; 'revive' with Angels come back), or gets up as a zombie (`zombies`) |
 | Teams (Players page) | Off, or on: Custom (everyone on their own until colours are matched) or Teams of 2 or 4 (the row is the team); team colours; who sits where (drag a card); Friendly fire off or on | The last team standing wins (`teams`, `friendlyFire`); see Teams |

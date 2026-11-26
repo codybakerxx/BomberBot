@@ -12,7 +12,7 @@
 import { DANCES, readDance, type DanceId } from './dances';
 import { BotLevel, BOT_LEVELS } from './bot';
 import { KeyMap, PadMap, defaultKeys, defaultPad, readKeys, readPad } from './bindings';
-import { ItemKind, ITEM_CHANCE, ITEM_SHARE, ITEM_WEIGHT, itemMix, MAX_BOMBS, MAX_FIRE, MAX_LIVES, MAX_SPEED_ITEMS, SOFT_DENSITY, START_FIRE, TICK_HZ, WorldConfig } from './sim';
+import { ItemKind, SURE_KINDS, ITEM_CHANCE, ITEM_SHARE, ITEM_WEIGHT, itemMix, MAX_BOMBS, MAX_FIRE, MAX_LIVES, MAX_SPEED_ITEMS, SOFT_DENSITY, START_FIRE, TICK_HZ, WorldConfig } from './sim';
 
 // ---------------------------------------------------------------- the match
 
@@ -141,6 +141,8 @@ export const ITEM_NAMES: [ItemKind, string, string][] = [
   ['shield', 'Shield', 'Survive one blast'],
   ['curse', 'Curse', 'Slows you down for 8 seconds'],
   ['laptop', 'Laptop', 'B flies a plane: steer it, A drops its bomb'],
+  ['decoy', 'Decoy', 'Two copies of you copy your moves for 15 s'],
+  ['wire', 'Trip wire', 'B strings it between two blocks: walking into it blasts the lane'],
 ];
 
 /** Round lengths the timer can be set to: 30 seconds to 5 minutes, in steps of 15 seconds. */
@@ -636,8 +638,8 @@ export function defaultSetup(myColor: string): MatchSetup {
     startSpeed: 0,
     itemShare: ITEM_SHARE_DEFAULT,
     itemsOn: false,
-    items: { bomb: ITEM_NORMAL, fire: ITEM_NORMAL, speed: ITEM_NORMAL, kick: ITEM_NORMAL, grab: ITEM_NORMAL, shield: ITEM_NORMAL, curse: ITEM_NORMAL, laptop: ITEM_NORMAL },
-    itemOn: { bomb: true, fire: true, speed: true, kick: true, grab: true, shield: true, curse: true, laptop: true },
+    items: { bomb: ITEM_NORMAL, fire: ITEM_NORMAL, speed: ITEM_NORMAL, kick: ITEM_NORMAL, grab: ITEM_NORMAL, shield: ITEM_NORMAL, curse: ITEM_NORMAL, laptop: ITEM_NORMAL, decoy: ITEM_NORMAL, wire: ITEM_NORMAL },
+    itemOn: { bomb: true, fire: true, speed: true, kick: true, grab: true, shield: true, curse: true, laptop: true, decoy: true, wire: true },
     lives: 1,
     afterlife: 'watch', // watching is the standard: Post-Mortem Behavior off (the owner's call)
     postMortem: false,
@@ -882,7 +884,7 @@ export function worldConfig(s: MatchSetup, myColor: string, seed: number, guests
     shrinkTicks: CLOSE_IN[s.closeIn].secs * TICK_HZ,
     itemChance: itemChances(s),
     // (a kind set to Rare or Very rare in a custom mix is not made sure of: rare means rare)
-    sure: (['kick', 'grab', 'laptop'] as const).filter((k) => !s.itemsOn || s.items[k] >= ITEM_NORMAL),
+    sure: SURE_KINDS.filter((k) => !s.itemsOn || s.items[k] >= ITEM_NORMAL),
     startBombs: s.startOn ? s.startBombs : 1,
     startFire: s.startOn ? s.startFire : START_FIRE,
     startSpeed: s.startOn ? s.startSpeed : 0,
@@ -1047,6 +1049,10 @@ export const SOUND_NAMES: [string, string][] = [
   ['tnt', 'TNT'],
   ['alarm', 'Belt alarm'],
   ['reverse', 'Belts turning'],
+  ['decoy', 'Decoys appear'],
+  ['poof', 'Decoy popped'],
+  ['wire', 'Trip wire strung'],
+  ['trip', 'Trip wire set off'],
 ];
 
 /**
@@ -1060,6 +1066,7 @@ export const SOUND_GROUPS: [string, string[]][] = [
   ['Knockouts and wins', ['death', 'win']],
   ['Trains and TNT', ['bell', 'train', 'tnt']],
   ['Factory belts', ['alarm', 'reverse']],
+  ['Decoys and trip wires', ['decoy', 'poof', 'wire', 'trip']],
 ];
 
 /**

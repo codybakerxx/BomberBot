@@ -25,7 +25,7 @@
  * experiments this is a measurement, not a model. What it cannot tell you is
  * how they feel to play against.
  */
-import { createWorld, step, World, PlayerInput, TICK_HZ, FLOOR, SOFT, ROUND_TICKS, SHRINK_TICKS, DROP_TICKS, DROP_FIRE, FLAME_TICKS, dropLanding, tileAt, DX, DY } from '../src/sim';
+import { createWorld, step, World, PlayerInput, TICK_HZ, FLOOR, SOFT, ROUND_TICKS, SHRINK_TICKS, DROP_TICKS, DROP_FIRE, FLAME_TICKS, SHIELD_GRACE_TICKS, dropLanding, tileAt, DX, DY } from '../src/sim';
 import { createBot, botInput, Bot, BotLevel, BOT_LEVELS, LEVELS } from '../src/bot';
 const wrap = (v: number, n: number): number => ((v % n) + n) % n;
 /** WEST=1: the Wild West's railway and TNT in every arena */
@@ -36,6 +36,10 @@ const ICE = process.env.ICE === '1';
 const BELTS = process.env.BELTS === '1';
 /** robots a train hit, over the whole run */
 let ranOver = 0;
+/** over the whole run: trip wires strung, robots that walked into one (anyone's), decoys made */
+let wiresStrung = 0;
+let walkedIntoWire = 0;
+let decoysMade = 0;
 
 export interface Outcome {
   /**
@@ -93,6 +97,9 @@ export function playMatch(seed: number, levels: (BotLevel | null)[], maxTicks: n
   // a player's own bombs that a rival's bomb set off early (see `early` below), kept while their blast burns,
   // so a robot whose shield took the first blast and that is caught in this one half a second later still counts
   const setOff: { owner: number; cx: number; cy: number; range: number; tick: number }[] = [];
+  // a player's shield taken by a blast a rival had a hand in (a rival's bomb, or its own bomb a rival had kicked
+  // or thrown): the tick, so its own blast catching it as the shield's half second runs out counts as the rival's doing
+  const shieldTaken = new Map<number, number>();
   const thrownOn = new Map<number, number>(); // bomb id -> the tick it was thrown, while it is in the air
   const use: Use[] = levels.map(() => ({ placed: 0, most: 0, kicks: 0, throws: 0, flights: 0, drops: 0 }));
   // bombs a rival has kicked or thrown at some time since they were dropped (one kicked away and back again
@@ -150,6 +157,9 @@ export function playMatch(seed: number, levels: (BotLevel | null)[], maxTicks: n
     for (const e of world.events) {
       if (e.type === 'launch' && use[e.player]) use[e.player].flights++;
       if (e.type === 'drop' && use[e.player]) use[e.player].drops++;
+      if (e.type === 'wire') wiresStrung++;
+      if (e.type === 'trip') walkedIntoWire++;
+      if (e.type === 'decoy') decoysMade++;
     }
     for (const p of world.players) if (use[p.id]) use[p.id].most = Math.max(use[p.id].most, p.activeBombs);
     const gone = before.filter((b) => !world.bombs.some((x) => x.id === b.id));
@@ -207,6 +217,12 @@ export function playMatch(seed: number, levels: (BotLevel | null)[], maxTicks: n
     }
     for (const e of world.events) if (e.type === 'block') landedOn.set(e.cy * world.w + e.cx, t);
     for (const e of world.events) {
+      if (e.type !== 'shield') continue;
+      const p = world.players[e.player];
+      const [sx, sy] = [Math.round(p.x), Math.round(p.y)];
+      if (wentOff.some((g) => inBlast(world, g, sx, sy) && (g.owner !== e.player || rivalMoved.has(g.id)))) shieldTaken.set(e.player, t);
+    }
+    for (const e of world.events) {
       if (e.type !== 'death') continue;
       const p = world.players[e.player];
       const px = Math.round(p.x);
@@ -225,6 +241,15 @@ export function playMatch(seed: number, levels: (BotLevel | null)[], maxTicks: n
       if (e.by !== e.player) {
         fate[e.player] = 'other';
         continue;
+      }
+      // its own trip wire: caught in its lane when a rival walked into it ('other'); walked into it itself, as
+      // with its own bomb: 'self', unless a rival had shut it in (a rival's bomb on its way out: below)
+      if (e.cause === 'wire') {
+        const trip = world.events.find((x) => x.type === 'trip' && x.owner === e.player);
+        if (trip && trip.type === 'trip' && trip.player !== e.player) {
+          fate[e.player] = 'other';
+          continue;
+        }
       }
       // its own blast. Did a rival shut it in, or had its own bomb been moved, or set off early by a rival's?
       // (a rival's bomb in the air, thrown since, comes down where it is going: it blocks that tile and will blast)
@@ -255,7 +280,9 @@ export function playMatch(seed: number, levels: (BotLevel | null)[], maxTicks: n
         }) ||
         // (or it went off a moment ago, and the robot's shield took a blast and kept it safe for half a second)
         setOff.some((b) => b.owner === e.player && t - b.tick <= FLAME_TICKS && inBlast(world, b, px, py));
-      fate[e.player] = boxed || moved || early ? 'boxed' : 'self';
+      // (or a rival's doing took its shield, and its own blast caught it as the shield's half second ran out)
+      const shielded = t - (shieldTaken.get(e.player) ?? -1e9) <= FLAME_TICKS + SHIELD_GRACE_TICKS;
+      fate[e.player] = boxed || moved || early || shielded ? 'boxed' : 'self';
     }
     if (stopWhenDecided && world.over) break;
   }
@@ -489,4 +516,5 @@ if (process.argv[1] && process.argv[1].endsWith('cpu-matches.ts')) {
     console.log(`\ndraws ${draws} of ${total}, not decided ${open} of ${total}`);
   }
   if (WEST) console.log(`\nWild West: robots hit by a train in the whole run: ${ranOver}`);
+  console.log(`\nTrip wires strung in the whole run: ${wiresStrung}; robots that walked into one: ${walkedIntoWire}; decoys picked up: ${decoysMade}`);
 }

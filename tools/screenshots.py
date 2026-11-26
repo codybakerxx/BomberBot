@@ -190,7 +190,7 @@ async def main():
         await page.screenshot(path=str(OUT / "sideways.png"))
         await context.close()
 
-        # --- the eight power-ups in a row, and what a shield and a curse look like on a robot
+        # --- the power-ups in a row, and what a shield and a curse look like on a robot
         context, page = await phone(browser, 393, 740)
         await start_round(page)
         await page.wait_for_timeout(200)
@@ -199,7 +199,7 @@ async def main():
               const w = __game.world;
               for (let i = 0; i < w.tiles.length; i++) if (w.tiles[i] === 2) w.tiles[i] = 0;
               __game.bots.length = 0;  // the CPU players stand still for the picture
-              ['bomb', 'fire', 'speed', 'kick', 'grab', 'shield', 'curse', 'laptop'].forEach((kind, i) => w.items.push({ cx: 3 + i, cy: 1, kind, age: 20 }));
+              ['bomb', 'fire', 'speed', 'kick', 'grab', 'shield', 'curse', 'laptop', 'decoy', 'wire'].forEach((kind, i) => w.items.push({ cx: 2 + i, cy: 1, kind, age: 20 }));
               const [a, b, c, d] = w.players;
               Object.assign(a, { x: 3, y: 3, facing: 2, shieldTicks: 1500 });            // shield up
               Object.assign(b, { x: 5, y: 3, facing: 2, curseTicks: 400 });              // cursed
@@ -213,6 +213,38 @@ async def main():
             path=str(OUT / "power-ups.png"),
             clip={"x": box["x"], "y": box["y"], "width": box["width"], "height": box["height"] * 0.42},
         )
+        await context.close()
+
+        # --- decoys and trip wires: your robot with its two decoys, a wire strung across a lane, another set off
+        context, page = await phone(browser, 393, 740)
+        await start_round(page)
+        await page.wait_for_timeout(200)
+        await page.evaluate(
+            """() => {
+              const w = __game.world;
+              __game.bots.length = 0;  // the CPU players stand still for the picture
+              for (let i = 0; i < w.tiles.length; i++) if (w.tiles[i] === 2 && (i % 3 === 0 || i % 5 === 0)) { w.tiles[i] = 0; w.hidden.delete(i); }
+              const clear = (x, y) => { w.tiles[y * w.w + x] = 0; w.hidden.delete(y * w.w + x); };
+              for (const [x, y] of [[5, 5], [4, 5], [6, 5], [7, 5], [3, 5], [3, 4], [3, 3], [9, 3], [9, 4], [9, 5], [9, 6], [9, 7], [8, 7], [7, 7]]) clear(x, y);
+              const [a, b, c, d] = w.players;
+              Object.assign(a, { x: 5, y: 5, facing: 4, moving: true, walk: 1.2 });
+              Object.assign(b, { x: 11, y: 1, facing: 2 });
+              Object.assign(c, { x: 1, y: 9, facing: 2 });
+              Object.assign(d, { x: 13, y: 11, facing: 1 });
+              w.decoys.push({ ...a, x: 7, y: 5, mirror: false, born: w.tick - 100, until: w.tick + 600, popped: -1 });
+              w.decoys.push({ ...a, x: 3.4, y: 5, facing: 3, mirror: true, born: w.tick - 100, until: w.tick + 600, popped: -1 });
+              w.wires.push({ cx: 3, cy: 4, dir: 'h', owner: 1, armed: true, at: 0 });
+              w.wires.push({ cx: 9, cy: 4, dir: 'h', owner: 0, armed: true, at: 0 });
+              // a third, just set off: its fire down the whole lane
+              w.players[2].wires = 0;
+              const lane = []; for (let y = 1; y <= w.h - 2; y++) lane.push(y);
+              for (const y of lane) if (w.tiles[y * w.w + 11] !== 1) w.flames.push({ cx: 11, cy: y, ttl: 27, owner: 2, kind: 'v', tip: y === 1 ? 1 : y === w.h - 2 ? 2 : 0, wire: true });
+              Object.assign(b, { x: 13, y: 1 });
+            }"""
+        )
+        await page.wait_for_timeout(60)
+        box = await page.locator("#cv").bounding_box()
+        await page.screenshot(path=str(OUT / "decoy-wire.png"), clip={"x": box["x"], "y": box["y"], "width": box["width"], "height": box["height"]})
         await context.close()
 
         # --- after the timer reaches 0: blocks falling round the edge

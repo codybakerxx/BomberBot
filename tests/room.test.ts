@@ -82,7 +82,7 @@ for (const a of ARENAS) {
   const sum = (c: [string, number][]): number => c.reduce((n, [, x]) => n + x, 0);
   assert.equal(defaultSetup('gold').itemShare, 60, '60% by default');
   assert.deepStrictEqual(itemChances(defaultSetup('gold')), ITEM_CHANCE, 'the default setup gives the usual chances');
-  const lots = { ...defaultSetup('gold'), itemsOn: true, items: { bomb: 4, fire: 4, speed: 4, kick: 4, grab: 4, shield: 4, curse: 4, laptop: 4 } };
+  const lots = { ...defaultSetup('gold'), itemsOn: true, items: { bomb: 4, fire: 4, speed: 4, kick: 4, grab: 4, shield: 4, curse: 4, laptop: 4, decoy: 4, wire: 4 } };
   const c = itemChances(lots);
   assert.ok(Math.abs(sum(c) - 0.6) < 1e-12, `still 60% of the bricks (${sum(c)})`);
   assert.ok(Math.abs(c[0][1] / c[2][1] - 60 / 44) < 1e-9, 'in the usual proportions');
@@ -93,9 +93,9 @@ for (const a of ARENAS) {
     }
   }
   // one kind on its own takes all of it; every kind off, or None, hides nothing
-  const bombs = itemChances({ ...lots, itemShare: 40, items: { ...lots.items, fire: 0, speed: 0, kick: 0, grab: 0, shield: 0, curse: 0, laptop: 0 } });
+  const bombs = itemChances({ ...lots, itemShare: 40, items: { ...lots.items, fire: 0, speed: 0, kick: 0, grab: 0, shield: 0, curse: 0, laptop: 0, decoy: 0, wire: 0 } });
   assert.deepStrictEqual(bombs.filter(([, x]) => x > 0), [['bomb', 0.4]]);
-  const off = { ...lots, items: { bomb: 0, fire: 0, speed: 0, kick: 0, grab: 0, shield: 0, curse: 0, laptop: 0 } };
+  const off = { ...lots, items: { bomb: 0, fire: 0, speed: 0, kick: 0, grab: 0, shield: 0, curse: 0, laptop: 0, decoy: 0, wire: 0 } };
   assert.equal(sum(itemChances(off)), 0, 'every kind off: none');
   for (const s of [{ ...defaultSetup('gold'), itemShare: 0 }, off]) {
     const w = createWorld(worldConfig(s, 'gold', 7));
@@ -763,11 +763,11 @@ console.log('room checks passed');
     assert.deepStrictEqual(hard[k], classic[k], `Hardcore: ${k} as in Classic (the owner: the rest normal, power-up density included)`);
   // the glove very rare (the owner's ask): Rare, and no arena sure to have one; the rest of the mix as usual
   assert.ok(hard.itemsOn && hard.items.grab === ITEM_RARE, 'Hardcore: the glove at Rare, half as common');
-  for (const k of ['bomb', 'fire', 'speed', 'kick', 'shield', 'curse', 'laptop'] as const) assert.strictEqual(hard.items[k], classic.items[k], `Hardcore: ${k} as usual`);
+  for (const k of ['bomb', 'fire', 'speed', 'kick', 'shield', 'curse', 'laptop', 'decoy', 'wire'] as const) assert.strictEqual(hard.items[k], classic.items[k], `Hardcore: ${k} as usual`);
   {
     const cfg = worldConfig(hard, me, 1);
-    assert.deepStrictEqual(cfg.sure, ['kick', 'laptop'], 'the glove is not made sure of');
-    assert.deepStrictEqual(worldConfig(classic, me, 1).sure, ['kick', 'grab', 'laptop'], 'in Classic it is');
+    assert.deepStrictEqual(cfg.sure, ['kick', 'laptop', 'decoy', 'wire'], 'the glove is not made sure of');
+    assert.deepStrictEqual(worldConfig(classic, me, 1).sure, ['kick', 'grab', 'laptop', 'decoy', 'wire'], 'in Classic it is');
     let gloves = 0;
     let none = 0;
     let all = 0;

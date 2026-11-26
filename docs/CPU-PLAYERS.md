@@ -102,7 +102,7 @@ On Frozen Lake (25 November 2026; docs/GAME-RULES.md › Frozen Lake's ice) robo
 - **They follow a sliding bomb with the rules' own slide** (`slideBomb` from sim.ts, in `slid`): a thrown bomb on from where it lands, a kicked one slowing and bouncing back, stopping where it would. A blast it slides into sets it off where it is then, not where it would have stopped (`path` in `dangerMap`; this holds for kicked bombs on every map too).
 - **A sliding bomb is not in their way until it stops** (`wallsOf`, ice only). Counting the tile it was crossing shut a Normal in for good when a bomb crawled through the one tile of its way out for a second; counting where it would stop shut a Hard in whose kicked bomb would bounce back, though it had time to get past first.
 - **Boxed in, they play it out before giving up** (`lastDitch`, ice only). With no way out they can see on the danger map, they play standing still forward on a copy of the world with the real rules, then walking to each of the six nearest tiles they can reach, and take the first way that leaves them standing. On ice the danger map sees least well, and a way out it cannot see is often there. At most every 20 ticks.
-- **Not where a sliding bomb could set it off** (`slideMayReach` in `placeBomb`, ice only). A robot that steps into a sliding bomb's way stops it there, or bounces it back, so it may go off well short of where it would stop by itself. Before dropping a bomb they try each tile of a sliding bomb's way as the one a robot is standing on, and do not drop where any of those ends would blast it.
+- **Not where a sliding bomb could set it off** (`slideMayReach` in `placeBomb`; ice only at first, every map since 26 November 2026, when a Hard on the Wild West kicked a bomb at a rival who stepped into its way, stopping it in the lane of another bomb, which set it off and it set off the one the Hard had dropped behind it). A robot that steps into a sliding bomb's way stops it there, or bounces it back, so it may go off well short of where it would stop by itself. Before dropping a bomb they try each tile of a sliding bomb's way as the one a robot is standing on, and do not drop where any of those ends would blast it.
 - **A kick or a throw under way is checked again** (`scriptOk`, ice only). These are carried out as a list of presses worked out in advance; on ice they take longer (turning back slides first), so the world has longer to change. Every 6 ticks the rest is played forward again; if it no longer works out and another way does, they take that. A combo given up half way can leave them worse off than finishing it (a bomb dropped to be kicked away, not kicked), so if nothing else works they finish it.
 
 ## In the Factory: conveyor belts
@@ -113,6 +113,7 @@ In the Factory (26 November 2026; docs/GAME-RULES.md › The Factory's conveyor 
 - **They see the belts turn round once the alarm starts** (`beltsThen`), not before: then they know the belts stand still for the last half second and run the other way after.
 - **They follow a bomb a belt carries to where it goes off** (`slid`, with the rules' own `beltBomb`), a bomb they are about to drop on one too, and where it will be on the way (`occ` in the danger map): they do not step onto a tile a bomb will be on as they get there, and do not wait where one is coming (it would stop right beside them). Before that, a Normal escaping down a column was shut in by its own bomb riding along a row into the tile it was heading for.
 - **They allow for a robot standing still in a bomb's way** (`standing` in `slid`): it holds the bomb up, so a blast where it would then go off counts too (it sets nothing else off). Before that, a Beginner was caught by its own bomb, held up on the belt behind a robot pinned against a box, a tile short of where it expected it.
+- **They drop a bomb only where it will really be dropped** (`placeBomb`): the rules drop it on the tile the robot is on after this tick's move, and a belt may carry it over onto the next tile in the tick A is pressed, so they wait until the belt would leave them where they stand. Before that, a Hard worked out its way out from one tile, the bomb was dropped on the next, rode on into its way out and shut it in (found once decoys and trip wires changed what lies under the bricks, 26 November 2026).
 - **They stand still on a belt by walking against it** while they make up their mind, and never fly a laptop's plane from a belt: standing at the laptop it would be carried off (a Normal was carried into its own blast).
 - The rules let any robot step off a belt to the side: lined up with an opening it has asked to go through, the belt lets it go. (Found by these players: carried along, a robot lined up with the opening every tick and was carried off it again, for ever.)
 
@@ -156,6 +157,18 @@ The laptop (see [GAME-RULES.md](GAME-RULES.md), Laptop) is worth about as much t
 
 Against someone who keeps an eye on the sky, a flight mostly misses; against someone who never looks up, a Hard pilot hardly ever does. With one bomb a flight (since 23 November 2026) a miss is a wasted laptop, so the numbers fell to about a third of what three bombs got; against someone who dodges, a flight now rarely lands. A CPU pilot also no longer lets go when it judges the bomb would land on the outer wall beside its target (it used to count that as on target). How it feels to be bombed by one, and whether Hard is too good at it, has to be played: the four numbers in each level's line are the ones to turn.
 
+## Decoys and trip wires
+
+The decoy and the trip wire (26 November 2026; see [GAME-RULES.md](GAME-RULES.md), Decoy and Trip wire). What the CPU players know of them, and do with them:
+
+- **They cannot tell a decoy from its robot** (`inView`): a decoy that is up is one more robot to them, the same as its owner, so they go after it, bomb it, aim planes at it and take it into account when they look for a rival to shut in (a decoy cannot drop bombs, but they do not know that). Their own decoys need nothing from them: they walk with them.
+- **A trip wire is a wall to them** (`wallsOf`): no CPU player ever walks into one, its own included, and they count a rival as unable to walk through one either (so a rival shut in behind a wire is shut in).
+- **They string one behind them** (`wireBehind`). Holding a trip wire, walking along a lane through a gap where one can be strung, near the middle of that tile, they press B as they go, so it is left behind them in the lane: a person coming after them walks into it. Each level does it now and then (`wire` in `LEVELS`: Beginner 5% of such gaps, Normal 15%, Hard 50%), Hard only on its way nearer a rival (`wireHunting`), so a wire is never across its way to them. And only with at least 10 tiles of open floor on the far side (`roomBeyond`, `WIRE_ROOM`): the wire is a wall to them once they are through, and a Hard strung one behind it into a dead end of bricks and stood there for the rest of the round, unable to bomb its way on (it needs a way out of its own blast). They never string one standing still.
+- On ice they no longer stop to make up their mind while still sliding (`calm`): standing still there slides them on past the turn their new way takes, and a Normal slid on into its own trip wire. Their ways on ice never end in a slide into a wire (`legOk`).
+- **Never walked or carried into a wire** (`wireGuard`, every map). The rules do not stop a robot at a wire: one whose turn is shut walks on to the next opening, on ice it slides on when it lets go, and a belt carries it. So within 6 tiles of a wire (`GUARD_NEAR`) a CPU player plays the move it means to make forward on a copy of its robot, with the rules' own walking (`walkRobot` in sim.ts): after it there must still be a way to keep clear of every wire, letting go there or holding a direction until it turns (at most `GUARD_HOLD` 24 ticks) and then letting go (on ice, played out until it stops; on a belt, which it can walk against, only the next tick). If not, it makes the first move after which there is. Found on ice: a Normal turning off a lane just short of its own wire had the turn shut by a kicked bomb, walked on and slid into it; a Hard lining up for a turn was thrown back the way it had come, let go, and slid into its own. (An ice-only first try, `wireBrake`, turned it aside only once it was already sliding.)
+- **Trapped, somewhere clear for now** (`breathing`, `BREATHE`, every map). With no way to anywhere clear for good, and no kick or throw out, they now take a way to somewhere clear of every blast due in the next second, and think again from there, before giving up (`trapped`). Found on ice: a Normal between its two bombs, the blocks closing in, slid on into one of them; the tile beside it was clear for over a second, until its other bomb went off, by which time it could have moved on.
+- CPU players string wires that only a person will walk into; to each other they are walls. How much a trip wire left behind a Hard catches people has to be played.
+
 ## As angels
 
 Out of lives with Angels on, a CPU player is an angel on the wall (`angelInput` in bot.ts). It picks the robot nearest to it, goes round the wall to the closest place in line with that robot that a throw can reach (2 to 6 tiles in: over its column from the top or bottom, or by its row from a side), holds A for exactly that distance and lets go. It aims where the robot is, not where it is going. Between throws it rests, by level (`ANGEL_REST`): Beginner 150 ticks, Normal 70, Hard 25. Its own robot's knockout makes it forget its plan, so a robot coming back after a lost life starts thinking afresh.
@@ -193,6 +206,8 @@ All of these are in the `LEVELS` table at the top of `src/bot.ts`. Times are in 
 | Aims ahead of a moving rival (`lead`) | not at all | 40% of the way | all the way |
 | Aim off by up to (`slop`), once a flight | 3 tiles each way | 2 | 0.8 |
 | Misjudges how far a falling bomb carries (`carry`), once a flight | by up to 90% | 85% | 60% |
+| Strings a trip wire behind it in a gap it walks through (`wire`) | 5% of gaps | 15% | 50% |
+| Only on its way nearer a rival (`wireHunting`) | no | no | yes |
 
 In short:
 
@@ -216,11 +231,11 @@ A round has no end of its own: the timer runs 1 minute 30, the blocks take 50 se
 
 | Level | Blasted itself | Shut in by a rival | Caught in a rival's blast | Under a block, early | Under a block, in the last 15 s of them | Won | Rounds drawn | Not decided | Decided after |
 |---|---|---|---|---|---|---|---|---|---|
-| Beginner | 0.0% | 0.4% | 42.9% | 0.8% | 0.8% | 1.7% | 0 of 60 | 56 of 60 | 91 s |
-| Normal | 0.0% | 28.3% | 41.7% | 1.3% | 3.3% | 23.8% | 1 of 60 | 2 of 60 | 153 s |
-| Hard | 0.0% | 26.7% | 45.4% | 0.4% | 0.0% | 22.5% | 0 of 60 | 6 of 60 | 136 s |
+| Beginner | 0.0% | 0.8% | 38.8% | 0.0% | 2.1% | 2.5% | 0 of 60 | 54 of 60 | 101 s |
+| Normal | 0.0% | 30.8% | 41.7% | 0.4% | 2.9% | 23.3% | 3 of 60 | 1 of 60 | 156 s |
+| Hard | 0.0% | 21.3% | 50.4% | 0.0% | 0.0% | 21.7% | 0 of 60 | 8 of 60 | 145 s |
 
-(25 November 2026, late, after the CPU players learnt the ice: on Midnight they changed only where a blast catches a sliding bomb, and the Beginner row came out the same to the last figure, Normal and Hard within noise; it was Normal 27.9%, 42.1%; Hard 27.5%, 45.0%, 5 of 60 not decided. 25 November 2026, the evening, after try-outs stopped counting on the shield and a thrown bomb's landing counts one landing ahead of it: the Beginner and Normal rows came out the same as the day before to the last figure, and Hard within noise; it was 25.0%, 47.9%, 22.9% won, 5 of 60.)
+(26 November 2026, with the decoy and the trip wire in every arena, and the CPU players stringing wires behind them, treating them as walls and going after decoys; every arena differs from before, as the power-up chances moved. Over the run (with the one of each below) 321 wires were strung, 354 decoys picked up, and no robot walked into a wire; in all the runs on all four maps, none did, after the wire guard (`wireGuard`). Within noise of the run before: Beginner 0.4%, 42.9%, 56 of 60 not decided; Normal 28.3%, 41.7%; Hard 26.7%, 45.4%, 6 of 60. 25 November 2026, late, after the CPU players learnt the ice: on Midnight they changed only where a blast catches a sliding bomb, and the Beginner row came out the same to the last figure, Normal and Hard within noise; it was Normal 27.9%, 42.1%; Hard 27.5%, 45.0%, 5 of 60 not decided. 25 November 2026, the evening, after try-outs stopped counting on the shield and a thrown bomb's landing counts one landing ahead of it: the Beginner and Normal rows came out the same as the day before to the last figure, and Hard within noise; it was 25.0%, 47.9%, 22.9% won, 5 of 60.)
 
 - "Shut in by a rival" and "blasted itself" are both a bot caught by its own blast. The script calls it "shut in by a rival" when, within six steps of where the bot stood, there was a tile its own bombs would not have reached that was blocked or about to be blasted by a bomb a rival dropped *after* the bomb that caught it. It looks at the arena as it was when that bomb was dropped, so a tile a block has landed on since still counts as a way out it had. A rival's bomb dropped on the very same tick counts too, and so does one a rival threw or kicked that came to rest on the way out afterwards, a rival's bomb let go from a plane (from the moment it was let go), and a rival's bomb a falling block took away after the bot dropped its own. It is also "shut in by a rival" when the bot's own bomb went off early because a rival's bomb (one from a plane too) set it off, and that rival's bomb was dropped, kicked, thrown or let go after the bot dropped its own, including when the bot's shield took a first blast and its own bomb's blast caught it half a second later. Bombs that have gone off a moment before count while their flames still burn, the bot's own and rivals' (since 25 November 2026). Anything else is "blasted itself".
 - With the laptop in every arena (18 November 2026) the columns moved little: the CPU players fly it now and then, and a plane's bombs add to what catches them. The slower plane with 16 s flights (19 November 2026) moved them little again, and so did power-ups at 60% of bricks rather than 61.25% (the same day), and bricks on 80% of the open floor rather than 78% (the same day: the table above; the arenas differ each time).
@@ -237,22 +252,22 @@ A round has no end of its own: the timer runs 1 minute 30, the blocks take 50 se
 
 | Level | Won | Blasted | Under a block, early | Blasted itself | Rivals it blasted |
 |---|---|---|---|---|---|
-| Beginner | 0.0% | 92.8% | 0.6% | 0.0% | 1 |
-| Normal | 12.2% | 82.2% | 1.1% | 0.0% | 25 |
-| Hard | 80.0% | 15.0% | 0.0% | 0.0% | 261 |
+| Beginner | 1.7% | 93.9% | 1.7% | 0.0% | 1 |
+| Normal | 13.9% | 78.9% | 0.6% | 0.0% | 31 |
+| Hard | 78.3% | 17.8% | 0.0% | 0.0% | 264 |
 
-0 of 180 drawn, 14 left undecided (25 November 2026, late, as above: Hard 75.0% the evening before; 25 November 2026, the evening, as above: within noise of the day before, 73.9% for Hard; 24 November 2026, the plane faster and turning tighter: Hard 77.2% the day before; 23 November 2026, Hard made more aggressive: it wins 77% of these rounds, was 39%; the run before gave 8 drawn, 39 undecided; 20 November 2026, the 9 by 7 on Standard: the bigger square leaves many more rounds going; with the 7 by 5 the same morning's arenas gave 6 drawn, 6 undecided; 19 November 2026, bricks at 80%: Normal won 35.6% and Hard 60.6% with bricks at 78% the same day, nothing in the CPU players changed between the two: a different set of arenas swings this table that much; with power-ups at 60%: 1 drawn, 3 undecided; with the slower plane just before: 3 and 4; with the first plane: 7 and 3; before the laptop: 4 and 5; with the 5 by 5 and the 2.5 s fuse: 5 drawn, 2 undecided) (it was 27 before they pressed in the square). The levels are well apart: each wins far more and blasts far more rivals than the one below.
+0 of 180 drawn, 11 left undecided (26 November 2026, with the decoy and the trip wire: Hard won 80.0% and 14 were undecided the day before; 25 November 2026, late, as above: Hard 75.0% the evening before; 25 November 2026, the evening, as above: within noise of the day before, 73.9% for Hard; 24 November 2026, the plane faster and turning tighter: Hard 77.2% the day before; 23 November 2026, Hard made more aggressive: it wins 77% of these rounds, was 39%; the run before gave 8 drawn, 39 undecided; 20 November 2026, the 9 by 7 on Standard: the bigger square leaves many more rounds going; with the 7 by 5 the same morning's arenas gave 6 drawn, 6 undecided; 19 November 2026, bricks at 80%: Normal won 35.6% and Hard 60.6% with bricks at 78% the same day, nothing in the CPU players changed between the two: a different set of arenas swings this table that much; with power-ups at 60%: 1 drawn, 3 undecided; with the slower plane just before: 3 and 4; with the first plane: 7 and 3; before the laptop: 4 and 5; with the 5 by 5 and the 2.5 s fuse: 5 drawn, 2 undecided) (it was 27 before they pressed in the square). The levels are well apart: each wins far more and blasts far more rivals than the one below.
 
 **One against one** (`cpu-matches.ts duel`, 60 rounds each, the two taking each corner in turn, the whole round with the timer and the falling blocks; the last columns are what the first-named player did with its kit, a round on average):
 
 | Pairing | Won | Lost | Won by a blast | Before 0:00 | Time to win | Drawn | Not decided | Blasted itself | Bombs | Most out at once | Kicks | Throws | Flights |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| Hard v Beginner | 59 | 1 | 59 | 52 | 64 s | 0 | 0 | 0 | 38 | 5.4 | 0.5 | 9.3 | 0.5 |
-| Hard v Normal | 48 | 11 | 41 | 25 | 91 s | 1 | 0 | 0 | 64 | 5.1 | 2.0 | 29.2 | 0.5 |
-| Hard v Hard | 30 | 27 | 20 | 9 | 99 s | 3 | 0 | 0 | 60 | 4.9 | 2.5 | 28.5 | 0.4 |
-| Normal v Beginner | 42 | 4 | 39 | 9 | 129 s | 0 | 14 | 0 | 64 | 3.2 | 0.1 | 0 | 0.7 |
+| Hard v Beginner | 60 | 0 | 59 | 49 | 68 s | 0 | 0 | 0 | 40 | 5.1 | 0.3 | 12.5 | 0.5 |
+| Hard v Normal | 52 | 5 | 43 | 23 | 95 s | 0 | 3 | 0 | 80 | 5.3 | 1.8 | 43.2 | 0.5 |
+| Hard v Hard | 31 | 26 | 23 | 11 | 117 s | 0 | 3 | 0 | 84 | 4.7 | 1.7 | 50.7 | 0.5 |
+| Normal v Beginner | 39 | 1 | 31 | 6 | 130 s | 0 | 20 | 0 | 70 | 3.2 | 0.0 | 0 | 0.6 |
 
-(25 November 2026, late, as above: Hard v Normal 45 to 11 and Hard v Hard 33 to 26 the evening before; 25 November 2026, the evening, as above; within noise of 24 November, when the plane was made faster and turning tighter: Hard v Normal 49 won, 10 lost; Hard v Hard 33 and 25.)
+(26 November 2026, with the decoy and the trip wire: within noise of the day before, which was Hard v Beginner 59 to 1, 52 before 0:00; Hard v Normal 48 to 11; Hard v Hard 30 to 27; Normal v Beginner 42 to 4, 14 not decided. 25 November 2026, late, as above: Hard v Normal 45 to 11 and Hard v Hard 33 to 26 the evening before; 25 November 2026, the evening, as above; within noise of 24 November, when the plane was made faster and turning tighter: Hard v Normal 49 won, 10 lost; Hard v Hard 33 and 25.)
 
 Before Hard was made more aggressive (23 November 2026, 40 rounds each): Hard v Beginner won 23 of 40, 7 before 0:00, in 125 s on average, 17 still going 2 minutes after the blocks stopped, and it never kicked or threw; Hard v Normal won 23 and lost 11. A kick is rarer than a throw: it needs the boot and a lane, the glove only a rival three tiles off.
 
@@ -260,9 +275,11 @@ Before Hard was made more aggressive (23 November 2026, 40 rounds each): Hard v 
 
 | Three of | Blasted the player | Average time | A block got the player | The player won | Not decided | CPU players that blasted themselves |
 |---|---|---|---|---|---|---|
-| Beginner | 34 of 80 | 119 s | 1 of 80 | 2 of 80 | 75 of 80 | 0 |
-| Normal | 62 of 80 | 115 s | 5 of 80 | 2 of 80 | 12 of 80 | 0 |
-| Hard | 79 of 80 | 46 s | 0 of 80 | 0 of 80 | 5 of 80 | 0 |
+| Beginner | 28 of 80 | 75 s | 5 of 80 | 4 of 80 | 70 of 80 | 0 |
+| Normal | 62 of 80 | 127 s | 8 of 80 | 1 of 80 | 12 of 80 | 0 |
+| Hard | 79 of 80 | 49 s | 1 of 80 | 0 of 80 | 8 of 80 | 0 |
+
+(26 November 2026, with the decoy and the trip wire; the day before: Beginner 34, Normal 62, Hard 79 in 46 s, 5 not decided.)
 
 (25 November 2026, late, as above: Hard got the player 80 of 80 times, in 50 s, the evening before; 25 November 2026, the evening; the day before, with the plane faster and turning tighter, 45 s and 3 of 80 not decided for Hard.)
 
@@ -286,50 +303,58 @@ This table is noisy, and the stand-in is not a person. Read it loosely.
 
 | Level | Blasted itself | Got the other player | Average time |
 |---|---|---|---|
-| Beginner | 0 of 40 | 25 of 40 | 125 s |
-| Normal | 0 of 40 | 39 of 40 | 96 s |
-| Hard | 0 of 40 | 40 of 40 | 54 s (76 s before 23 November 2026) |
+| Beginner | 0 of 40 | 21 of 40 | 112 s |
+| Normal | 0 of 40 | 40 of 40 | 106 s |
+| Hard | 0 of 40 | 40 of 40 | 55 s (76 s before 23 November 2026) |
+
+(26 November 2026, with the decoy and the trip wire: Beginner 25, Normal 39 the day before. A first try had Hard miss 3 of 40: it strung a wire behind it into a dead end of bricks and stood there, unable to bomb its way on without a way out of its own blast; since then it needs room beyond, `WIRE_ROOM`.)
 
 Most of that time is spent digging through bricks from one corner to the other. With the laptop (19 November 2026, the slower plane and power-ups at 60%; before the laptop: 12 of 40 in 156 s, 133 s, 113 s) it is quicker: a CPU player that finds the laptop can fly over the bricks to a player who stands still. It takes longer than it did, because a blast now starts one tile long. Beginner's figures moved since the last run (11 of 40, then 17) although Beginner was not changed: the arenas are different, because the power-up chances have changed (this run has no timer, so the 7 by 5 plays no part in it).
 
-**On the Wild West** (25 November 2026, the evening, `WEST=1` in front of each run: the railway with bricks on it, a train every 8 to 12 s and the TNT in every arena, Standard size, otherwise as above):
+**On the Wild West** (26 November 2026, with the decoy and the trip wire, `WEST=1` in front of each run: the railway with bricks on it, a train every 8 to 12 s and the TNT in every arena, Standard size, otherwise as above):
 
 | Run | Blasted itself | What else |
 |---|---|---|
-| Four of the same level | 0 for every level | Beginner 41.7% caught in a rival's blast, 50 of 60 not decided; Normal 32.5% shut in by a rival, 38.8% caught; Hard 18.3% and 54.2%, 3 of 60 not decided |
-| One of each level | 0 for every level | Hard won 81.7%, Normal 14.4%, Beginner 0.6%; none drawn, 6 of 180 undecided. 8 robots hit by a train over these two runs |
-| Against the stand-in | 0 | Three Hards got it 80 of 80 times, in 47 s; Normals 62, Beginners 31. 1 robot hit by a train |
-| Alone among bricks | 0 | All three levels in the square at the end, 40 of 40 |
-| Alone with a still player | 0 | Got it: Beginner 33, Normal 39, Hard 40 of 40, in 84, 57 and 32 s. 1 robot hit by a train |
-| One against one | 0 | Hard beat Beginner 58 to 2, Normal 53 to 7, Hard v Hard 35 to 23; Normal beat Beginner 39 to 4. 8 robots hit by a train |
+| Four of the same level | 0 for every level | Beginner 44.2% caught in a rival's blast, 48 of 60 not decided; Normal 32.9% shut in by a rival, 39.6% caught; Hard 21.7% and 50.0%, 7 of 60 not decided |
+| One of each level | 0 for every level | Hard won 84.4%, Normal 10.0%, Beginner 0.6%; 1 drawn, 8 of 180 undecided. 3 robots hit by a train over these two runs |
+| Against the stand-in | 0 | Three Hards got it 79 of 80 times, in 55 s; Normals 63, Beginners 32. 1 robot hit by a train |
+| Alone among bricks | 0 | In the square at the end: Normal and Hard 40 of 40, Beginner 39 (1 caught by a block) |
+| Alone with a still player | 0 | Got it: Beginner 32, Normal 40, Hard 40 of 40, in 86, 55 and 36 s |
+| One against one | 0 | Hard beat Beginner 60 to 0, Normal 52 to 5 (1 drawn), Hard v Hard 31 to 26; Normal beat Beginner 43 to 4, 13 not decided |
+
+(25 November 2026, the evening, before the decoy and the trip wire: four Beginners 41.7% caught, 50 of 60 not decided; Normals 32.5%, 38.8%; Hards 18.3%, 54.2%, 3 of 60; one of each, Hard won 81.7%; against the stand-in 80 of 80 in 47 s, Normals 62, Beginners 31; alone with a still player 33, 39, 40; one against one 58 to 2, 53 to 7, 35 to 23, and Normal beat Beginner 39 to 4.)
 
 A train hits a CPU player now and then: 18 robots in all of these runs together, a few hundred rounds (not replayed to see why). (Run again the same night with the CPU players' ice changes, which touch every map only where a blast catches a sliding bomb: blasted itself still 0 in every run.)
 
-**On Frozen Lake** (26 November 2026, after the ice was made more slippery, `ICE=1` in front of each run: ice in every arena, Standard size, otherwise as above):
+**On Frozen Lake** (26 November 2026, after the ice was made more slippery, with the decoy and the trip wire, `ICE=1` in front of each run: ice in every arena, Standard size, otherwise as above):
 
 | Run | Blasted itself | What else |
 |---|---|---|
-| Four of the same level | 0 for every level | Beginner 52.5% caught in a rival's blast, 37 of 60 not decided; Normal 24.6% shut in by a rival, 44.2% caught, 7 of 60 not decided; Hard 23.3% and 51.3%, 2 of 60 |
-| One of each level | 0 for every level | Hard won 87.8%, Normal 9.4%, Beginner 0.6%; 1 drawn, 3 of 180 undecided |
-| Against the stand-in | 0 | Three Hards got it 79 of 80 times, in 42 s; Normals 64, Beginners 44 |
-| Alone among bricks | 0 | In the square at the end: Hard 40 of 40, Normal 39, Beginner 38 (the rest caught by a block) |
-| Alone with a still player | 0 | Got it: Beginner 26, Normal 40, Hard 40 of 40, in 123, 100 and 55 s |
-| One against one | 0 | Hard beat Beginner 59 to 1, Normal 54 to 6, Hard v Hard 33 to 25 (2 drawn); Normal beat Beginner 37 to 4, 19 not decided |
+| Four of the same level | 0 for every level | Beginner 55.0% caught in a rival's blast, 35 of 60 not decided; Normal 25.4% shut in by a rival, 42.5% caught, 10 of 60 not decided; Hard 18.8% and 56.3%, 1 of 60 |
+| One of each level | 0 for every level | Hard won 79.4%, Normal 11.1%, Beginner 1.1%; 6 drawn, 9 of 180 undecided |
+| Against the stand-in | 0 | Three Hards got it 80 of 80 times, in 44 s; Normals 68, Beginners 46 |
+| Alone among bricks | 0 | In the square at the end: Hard 40 of 40, Normal and Beginner 39 (the rest caught by a block) |
+| Alone with a still player | 0 | Got it: Beginner 29, Normal 40, Hard 40 of 40, in 107, 118 and 57 s |
+| One against one | 0 | Hard beat Beginner 60 to 0, Normal 56 to 3, Hard v Hard 31 to 27; Normal beat Beginner 47 to 5, 8 not decided |
+
+(The same day, before the decoy and the trip wire: four Beginners 52.5% caught, 37 of 60 not decided; Normals 24.6%, 44.2%, 7 of 60; Hards 23.3%, 51.3%, 2 of 60; one of each, Hard won 87.8%; against the stand-in 79 of 80 in 42 s, Normals 64, Beginners 44; alone with a still player 26, 40, 40; one against one 59 to 1, 54 to 6, 33 to 25, and Normal beat Beginner 37 to 4, 19 not decided.)
 
 (On the first, less slippery ice, 25 November 2026: four Beginners 49.2% caught, 40 of 60 not decided; Normals 23.8%, 46.7%, 5 of 60; Hards 23.3%, 50.4%, 2 of 60; one of each, Hard won 87.8%, Normal 8.9%, Beginner 1.7%; against the stand-in 79 of 80 in 54 s, Normals 61, Beginners 37; alone with a still player 23, 40, 40 in 128, 102 and 56 s; one against one 60 to 0, 47 to 12, 32 to 28, and Normal beat Beginner 49 to 4.)
 
-Rounds on ice come out much as on Midnight. Normal against a Beginner leaves more rounds undecided than on the first ice (19 of 60, was 7; not replayed to see why). Eight Hards think in 0.25 ms a tick on average on ice (0.33 on Midnight, measured the same run), the slowest tick about 17 to 19 ms on both (this machine; measured again 26 November 2026 with the slipperier ice).
+Rounds on ice come out much as on Midnight. Normal against a Beginner left more rounds undecided than on the first ice (19 of 60, was 7; 8 with the decoy and the trip wire; not replayed to see why). Eight Hards think in 0.25 ms a tick on average on ice (0.33 on Midnight, measured the same run), the slowest tick about 17 to 19 ms on both (this machine; measured again 26 November 2026 with the slipperier ice).
 
-**In the Factory** (26 November 2026, `BELTS=1` in front of each run: the four conveyor belts in every arena, Standard size, otherwise as above):
+**In the Factory** (26 November 2026, with the decoy and the trip wire, `BELTS=1` in front of each run: the four conveyor belts in every arena, Standard size, otherwise as above):
 
 | Run | Blasted itself | What else |
 |---|---|---|
-| Four of the same level | 0 for every level | Beginner 38.8% caught in a rival's blast, 48 of 60 not decided; Normal 19.2% shut in by a rival, 53.8% caught, none not decided; Hard 20.8% and 54.2%, 1 of 60 |
-| One of each level | 0 for every level | Hard won 82.8%, Normal 14.4%, Beginner 1.1%; 3 drawn, none undecided |
-| Against the stand-in | 0 | Three Hards got it 80 of 80 times, in 48 s; Normals 76, Beginners 33 |
-| Alone among bricks | 0 | In the square at the end: Hard and Normal 40 of 40, Beginner 39 (1 caught by a block) |
-| Alone with a still player | 0 | Got it: Beginner 21, Normal 40, Hard 40 of 40, in 120, 107 and 60 s |
-| One against one | 0 | Hard beat Beginner 59 to 1, Normal 58 to 2, Hard v Hard 33 to 26 (1 drawn); Normal beat Beginner 51 to 5, 4 not decided |
+| Four of the same level | 0 for every level | Beginner 35.4% caught in a rival's blast, 53 of 60 not decided; Normal 18.3% shut in by a rival, 53.3% caught, 2 of 60 not decided; Hard 14.2% and 57.5%, 5 of 60 |
+| One of each level | 0 for every level | Hard won 78.3%, Normal 15.6%, Beginner 0.6%; 4 drawn, 6 of 180 undecided |
+| Against the stand-in | 0 | Three Hards got it 80 of 80 times, in 45 s; Normals 77, Beginners 27 |
+| Alone among bricks | 0 | In the square at the end: Normal 40 of 40, Hard and Beginner 39 (1 caught by a block each) |
+| Alone with a still player | 0 | Got it: Beginner 21, Normal 36, Hard 40 of 40, in 109, 106 and 59 s |
+| One against one | 0 | Hard beat Beginner 60 to 0, Normal 55 to 4, Hard v Hard 30 to 30; Normal beat Beginner 56 to 2, 2 not decided |
+
+(The same day, before the decoy and the trip wire: four Beginners 38.8% caught, 48 of 60 not decided; Normals 19.2%, 53.8%; Hards 20.8%, 54.2%, 1 of 60; one of each, Hard won 82.8%; against the stand-in 80 of 80 in 48 s, Normals 76, Beginners 33; alone with a still player 21, 40, 40; one against one 59 to 1, 58 to 2, 33 to 26, and Normal beat Beginner 51 to 5. A Normal alone with a still player got it 36 times of 40 against 39 with the drop check that waits for the belt switched off; on 60 other arenas both missed 3: it is the arenas, not the check.)
 
 Rounds in the Factory come out much as on the other maps. Eight Hards think in 0.66 ms a tick on average there (0.32 on Midnight, measured the same run), the slowest tick about 33 ms (22 on Midnight; this machine): following bombs along the belts is remembered for the rest of each tick (`foreseen`), which took it down from twice that.
 
@@ -360,7 +385,7 @@ The "blasted itself" column is only worth anything because every case that lands
 - **Frozen Lake (25 November 2026, late).** The first runs on ice put CPU players under "blasted itself", and every fix moved the rounds enough to turn up another, so nine were replayed in all. (1) Four Hards, seed 10: turning back from its own bomb's blast, a Hard slid on into it; its danger map had counted on turning at once. Now turning back costs the slide (`stepTimes`, `glideEnd`). (2) Hard v Hard, seed 55: a Hard's thrown bomb landed and slid into flames still burning, which set it off at once, where the Hard thought it would lie for two seconds; standing still, the Hard slid on into the next tile and that blast. Now a sliding bomb is followed tick by tick, a blast still burning on its way sets it off there (`slid`), and a blast due where it is sliding to is urgent. (3) Four Hards, seed 48: a rival's thrown bomb landed in a blast and went off there, but the danger map put its blast where it would have stopped, two tiles on, and the Hard thought its one way out blasted. Now a blast that catches a sliding bomb on its way sets it off where it is then (`path` in `dangerMap`). (4) Normal v Hard, seed 59, and (5) four Hards, seed 10 again: the walls (above). (6) Three Hards and the stand-in, seed 56: a Hard boxed in, with a way out its danger map could not see: `lastDitch`. (7) One of each, seed 351: a kick worked out in advance did not happen, as a rival had stepped into its lane while the Hard slid back to it: `scriptOk`. (8) Three Hards and the stand-in, seed 11: the first `scriptOk` gave up a drop-and-kick half way, leaving the Hard beside the bomb it had dropped to kick; now it gives up only for a way that works. (9) Three Hards and the stand-in, seed 63, was the script's: a Hard shut in by a rival's bomb, whose shield took a plane's bomb and whose half second of safety ran out in the middle of its own flames, its bomb already gone off; the script now keeps bombs that have gone off while their flames burn, its own and rivals' (`burning` in `playMatch`). All gone; every run on all three maps reads 0. Over 120 other arenas four Hards blast themselves about once on Midnight too (1 of 480 robots), so 0 here is the same bar as before, not a promise.
 - **The Wild West packed with bricks (25 November 2026, the evening).** With bricks on the railway and trains every 8 to 12 s, three more turned up. (1) The `solo` and `alone` runs counted any robot out as "blasted itself", a train included; they now leave trains out (counted at the end). (2) Four Hards, seed 12: a Hard threw two bombs one after the other along the same row; the first landed where the second was headed, so the second bounced on two tiles further, onto the end of a rival's way out. That rival had worked out where the second would land from the bombs on the ground alone, so it thought the far end safe. A real fault, and not the Wild West's: where a thrown bomb lands now counts another bomb in the air that will land first (`landing` in `foresee`). (3) One of each level, seed 13: a Hard's way out of its own bombs was a pocket of the railway between crates; the train's warning started after it had dropped them, and the pocket became the train's path. The script now counts a train whose warning came after the bomb as shutting the line, like a rival's bomb dropped since (`train` in `shutIn`).
 - **Slipperier ice (26 November 2026).** With robots sliding up to 1.7 tiles and bombs further, the first runs put 41 robots under "blasted itself" on Frozen Lake. Most ran their way out to its last tile and slid on past it into the blast beyond, or let go too late or too early: `coastTo` and `legOk` (above). Of the rest: (1) the script put a thrown bomb that bounced on where it was headed, not where it came down (`downAt` in `playMatch`); (2) four Normals, seed 1, three Normals and the stand-in, seed 3, and four Hards, seed 23, were rivals' bombs dropped after theirs, shutting their way out; finding it shut, each slid on into a dead end behind its own bomb, and the script, searching only from where it was caught, could not get past that bomb to see the rival's. It now searches from where it dropped the bomb too. (3) One of each, seed 352: a Hard kicked a bomb down a column at a rival and dropped another behind it; the rival stepped into the column, the kicked bomb bounced off it, came back and set off the one behind, which caught the Hard: `slideMayReach` (above).
-- **The Factory (26 November 2026).** Before the CPU players knew the belts, four of a level put 21 Beginners and 23 Normals under "blasted itself" in 15 rounds each: they stood still on belts and were carried into blasts, and timed their ways out at walking speed. With the belts in their sums: (1) a Normal flew its laptop's plane from a belt and was carried into its own blast: no plane from a belt. (2) A Hard, carried along a belt, lined up with an opening every tick and was carried off it again, for ever: the rules now let a robot go when it is lined up to step off (it was the same for people). (3) A Normal escaping down a column was shut in by its own bomb, riding along a row into the tile it was heading for: `occ`. (4) A Beginner was caught by its own bomb, held up on the belt behind a robot pinned against a box, a tile short of where it expected it: `standing`. (5) A Hard against a Normal, seed 31: not replayed; it was gone after (3) and (4).
+- **The Factory (26 November 2026).** Before the CPU players knew the belts, four of a level put 21 Beginners and 23 Normals under "blasted itself" in 15 rounds each: they stood still on belts and were carried into blasts, and timed their ways out at walking speed. With the belts in their sums: (1) a Normal flew its laptop's plane from a belt and was carried into its own blast: no plane from a belt. (2) A Hard, carried along a belt, lined up with an opening every tick and was carried off it again, for ever: the rules now let a robot go when it is lined up to step off (it was the same for people). (3) A Normal escaping down a column was shut in by its own bomb, riding along a row into the tile it was heading for: `occ`. (4) A Beginner was caught by its own bomb, held up on the belt behind a robot pinned against a box, a tile short of where it expected it: `standing`. (5) A Hard against a Normal, seed 31: not replayed; it was gone after (3) and (4). (6) Later that day, with decoys and trip wires under the bricks, six more one against one: a Hard (and, the same way, Beginners and a Normal) dropped a bomb a tile further along a belt than it had worked out its way out from, because the belt carried it over in the tick it pressed A: they now drop only where the bomb will really be. And the first wire guard kept a Hard from stepping off a belt beside its own wire, as it played letting go there for a second and a half: on a belt only the next tick counts.
 
 One weakness the replays showed and that is still there: a CPU player with no safe route left stands still. Trying anyway would sometimes save it, and that is not built.
 
