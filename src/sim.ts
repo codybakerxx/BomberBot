@@ -162,6 +162,11 @@ export interface Player {
   slipDir: Dir;
   /** it slid on the last tick (no feet moving: it is drawn standing, leaning, kicking up frost) */
   skid: boolean;
+  /**
+   * The Factory's belts (World.belts): which way the last belt to carry it ran, 1 along a row, 2 down a column,
+   * 0 none yet. Standing still in the middle of a crossing, it rides on the same way (`beltDir`).
+   */
+  ride?: number;
 }
 
 export interface Bomb {
@@ -189,6 +194,8 @@ export interface Bomb {
   heldBy: number;
   /** true once it has been picked up, so the carry timer is only set once */
   lifted: boolean;
+  /** the Factory's belts: which way the last belt to carry it ran (as Player.ride) */
+  ride?: number;
   /** a throw: the tile it left from, its direction, how many tiles it will travel, ticks in the air */
   fromX: number;
   fromY: number;
@@ -275,6 +282,10 @@ export type GameEvent =
   | { type: 'bell'; line: number }
   /** a train is about to come out of its tunnel on this line: its whistle */
   | { type: 'train'; line: number }
+  /** the Factory's belts are about to turn round: the alarm (twice a second while the beacons flash) */
+  | { type: 'alarm' }
+  /** the Factory's belts have turned round */
+  | { type: 'reverse' }
   /** a player who lost a life is back, at their starting place (or the nearest free tile to it) */
   | { type: 'respawn'; player: number }
   /** an angel's bomb knocked a robot out and, with Angels come back on, the angel took its place */
@@ -295,6 +306,17 @@ export type KnockCause = 'blast' | 'block' | 'train' | 'tnt';
 export interface Rail {
   dir: 'h' | 'v';
   at: number;
+}
+
+/**
+ * One conveyor belt (the Factory): along row `at` ('h') or down column `at` ('v'), from the outer wall to the
+ * outer wall. `way` 1 carries towards higher x or y, -1 lower, at the start of the round (World.beltWay turns
+ * them all round).
+ */
+export interface Belt {
+  dir: 'h' | 'v';
+  at: number;
+  way: 1 | -1;
 }
 
 /**
@@ -401,6 +423,19 @@ export interface World {
    * off what stops them if they hit it fast enough (`slideBomb`).
    */
   ice: boolean;
+  /**
+   * The Factory's conveyor belts (the owner's design, 26 November 2026; `beltLines`); empty on other maps. They
+   * carry the robots and bombs on them along (`beltCarry`, `beltBomb`), and now and then turn round.
+   */
+  belts: Belt[];
+  /** 1 while the belts run the way they started, -1 once turned round (and so on) */
+  beltWay: 1 | -1;
+  /** the tick they next turn round: the alarm starts BELT_WARN_TICKS before; 0 once they no longer will */
+  beltFlip: number;
+  /** where the belts' own random numbers have got to (how long until the next turn) */
+  beltSeed: number;
+  /** how far the belts have run since the round began, in tiles (the way they started counts up): for drawing them */
+  beltRun: number;
 }
 
 /** Knocked-out players as angels: off, on (they throw bombs in), or on and able to come back (`revive`). */
@@ -464,6 +499,8 @@ export interface WorldConfig {
   tnt?: boolean;
   /** The floor is ice (World.ice; the Frozen Lake map). Default false. */
   ice?: boolean;
+  /** Conveyor belts (World.belts; the Factory map). Default false. */
+  belts?: boolean;
 }
 
 // ---------------------------------------------------------------- constants
@@ -619,6 +656,16 @@ export const BELL_TICKS = 30; // the bell rings twice a second while the lights 
 export const TNT_SHARE = 0.1; // one brick in ten is a barrel of TNT (taken from bricks that hide no power-up where it can)
 export const TNT_FUSE_TICKS = 8; // a barrel goes off this soon after a blast reaches it (0.13 s)
 
+// the Factory's conveyor belts (the owner's design, 26 November 2026): two along rows and two down columns, on the
+// same lines as the Wild West's railway (`beltLines`), crossing at four points. They carry robots and bombs (not
+// power-ups) along; walking against one is slow, with it fast. Now and then, after an alarm, they all turn round.
+export const BELT_SPEED = 0.021875; // tiles a tick: 1.31 tiles a second (a robot starts at 2.55), so against one at the start is about half speed
+export const BELT_FIRST = [15 * TICK_HZ, 20 * TICK_HZ]; // they first turn round 15 to 20 s into the round
+export const BELT_GAP = [15 * TICK_HZ, 20 * TICK_HZ]; // and again 15 to 20 s after that, and so on
+export const BELT_WARN_TICKS = 120; // the beacons flash and the alarm sounds for 2 s before they turn
+export const BELT_STOP_TICKS = 30; // in the last half second of it the belts stand still
+export const BELT_ALARM_TICKS = 30; // the alarm buzzes twice a second
+
 /**
  * The way a plane flies for each of its TURN_STEPS headings: [x, y] per tick of PLANE_SPEED, clockwise from
  * right (y is down). Worked out with + - * / only, from the series for sine and cosine, never Math.sin or
@@ -725,6 +772,16 @@ export function onRail(world: { w: number; h: number; rails: Rail[] }, x: number
   if (x < 1 || y < 1 || x > world.w - 2 || y > world.h - 2) return false;
   for (const r of world.rails) if (r.dir === 'h' ? y === r.at : x === r.at) return true;
   return false;
+}
+
+/**
+ * The Factory's four conveyor belts in an arena `w` by `h`: the railway's lines (`railLines`: the third row and
+ * column from each edge, where no robot starts), running round the arena the way a clock's hands do at the start:
+ * right along the top one, down the right one, left along the bottom one, up the left one. They cross at four
+ * points.
+ */
+export function beltLines(w: number, h: number): Belt[] {
+  return railLines(w, h).map((r, k): Belt => ({ dir: r.dir, at: r.at, way: k === 0 || k === 3 ? 1 : -1 }));
 }
 
 /**
@@ -893,9 +950,145 @@ export function createWorld(cfg: WorldConfig): World {
     trainSeed: (cfg.seed ^ 0x5bd1e995) >>> 0,
     tntLit: [],
     ice: !!cfg.ice,
+    belts: cfg.belts ? beltLines(w, h) : [],
+    beltWay: 1,
+    beltFlip: 0,
+    beltSeed: (cfg.seed ^ 0x27d4eb2f) >>> 0,
+    beltRun: 0,
   };
+  if (world.belts.length) world.beltFlip = BELT_FIRST[0] + Math.floor(beltRand(world) * (BELT_FIRST[1] - BELT_FIRST[0] + 1));
   if (rails.length) world.train = trainFrom(world, TRAIN_FIRST[0] + Math.floor(trainRand(world) * (TRAIN_FIRST[1] - TRAIN_FIRST[0] + 1)));
   return world;
+}
+
+// ---------------------------------------------------------------- the Factory's conveyor belts
+
+/** The belts' next random number, 0 to 1, from their own seed (world.beltSeed), so every copy of a round agrees. */
+function beltRand(world: World): number {
+  world.beltSeed = (world.beltSeed + 0x6d2b79f5) >>> 0;
+  let t = world.beltSeed;
+  t = Math.imul(t ^ (t >>> 15), t | 1);
+  t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+  return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+}
+
+/**
+ * Are the belts running on this tick? Not in the last half second before they turn round (BELT_STOP_TICKS), and
+ * not once the round is decided.
+ */
+export function beltsRunning(world: World, t = world.tick): boolean {
+  if (!world.belts.length || world.over) return false;
+  return !(world.beltFlip > 0 && t >= world.beltFlip - BELT_STOP_TICKS && t < world.beltFlip);
+}
+
+/**
+ * The way the belts under (cx, cy) run now, inside the outer wall: [along the row, down the column], each 1, -1,
+ * or 0 where there is no belt that way. A crossing has both.
+ */
+export function beltsAt(world: World, cx: number, cy: number, way = world.beltWay): [number, number] {
+  let h = 0;
+  let v = 0;
+  if (cx < 1 || cy < 1 || cx > world.w - 2 || cy > world.h - 2) return [0, 0];
+  for (const b of world.belts) {
+    if (b.dir === 'h' && b.at === cy) h = b.way * way;
+    else if (b.dir === 'v' && b.at === cx) v = b.way * way;
+  }
+  return [h, v];
+}
+
+/**
+ * Which way a belt carries something at (x, y) (a robot or a bomb), or 0 if none does. It is carried along the
+ * lane it is in: between two tiles of a row, along the row's belt; between two of a column, down the column's.
+ * In the middle of a tile with a belt each way (a crossing), along the one it is walking along (`heading`),
+ * or, standing still, the one that last carried it (`ride`; along the row if none has). Walking across a belt,
+ * it is not dragged sideways.
+ */
+export function beltDir(world: World, x: number, y: number, heading: Dir, ride: number, way = world.beltWay): Dir {
+  const cx = Math.round(x);
+  const cy = Math.round(y);
+  if (tileAt(world, cx, cy) !== FLOOR) return 0;
+  const [h, v] = beltsAt(world, cx, cy, way);
+  if (!h && !v) return 0;
+  let axis: number;
+  if (Math.abs(y - cy) > 1e-6) axis = 2;
+  else if (Math.abs(x - cx) > 1e-6) axis = 1;
+  else if (h && v) axis = heading ? (DX[heading] ? 1 : 2) : ride === 2 ? 2 : 1;
+  else axis = h ? 1 : 2;
+  if (heading && (DX[heading] ? 1 : 2) !== axis) return 0;
+  const runs = axis === 1 ? h : v;
+  if (!runs) return 0;
+  return axis === 1 ? (runs > 0 ? 4 : 3) : runs > 0 ? 2 : 1;
+}
+
+/**
+ * The belts for one tick: the alarm while the beacons flash, then, on `beltFlip`, they all turn round and the next
+ * turn is set 15 to 20 s on. `beltRun` counts how far they have run, for drawing them.
+ */
+function beltClock(world: World): void {
+  if (!world.belts.length) return;
+  if (world.over) {
+    world.beltFlip = 0;
+    return;
+  }
+  const t = world.tick;
+  if (beltsRunning(world)) world.beltRun += BELT_SPEED * world.beltWay;
+  if (!world.beltFlip) return;
+  const warn = world.beltFlip - BELT_WARN_TICKS;
+  if (t >= warn && t < world.beltFlip && (t - warn) % BELT_ALARM_TICKS === 0) world.events.push({ type: 'alarm' });
+  if (t >= world.beltFlip) {
+    world.beltWay = world.beltWay > 0 ? -1 : 1;
+    world.events.push({ type: 'reverse' });
+    world.beltFlip = t + BELT_GAP[0] + Math.floor(beltRand(world) * (BELT_GAP[1] - BELT_GAP[0] + 1));
+  }
+}
+
+/**
+ * A belt carries this robot along a tick's worth (BELT_SPEED), as its own walking would: a block, brick or bomb
+ * ahead stops it in the middle of its tile. Walking with the belt it goes faster, against it slower; walking
+ * across it, it is not dragged (`beltDir`), and lined up to step off it to the side, it is let go.
+ */
+function beltCarry(world: World, p: Player, still = false): void {
+  if (!beltsRunning(world)) return;
+  const d = beltDir(world, p.x, p.y, p.moving && !still ? p.heading : 0, p.ride ?? 0);
+  if (!d) return;
+  const horizontal = DX[d] !== 0;
+  const s = horizontal ? DX[d] : DY[d];
+  const pos = horizontal ? p.x : p.y;
+  const t = Math.round(pos);
+  // Stepping off the belt to the side: lined up with an opening it has asked to go through, it is not carried on
+  // past it (else it could never leave: each tick it lines up with the opening, and the belt carries it off again)
+  const ask = still ? 0 : p.askDir;
+  if (ask && DX[ask] !== 0 !== horizontal && pos === t && !blocked(world, p, Math.round(p.x) + DX[ask], Math.round(p.y) + DY[ask])) return;
+  let next = pos + s * BELT_SPEED;
+  const ahead = horizontal ? blocked(world, p, t + s, Math.round(p.y)) : blocked(world, p, Math.round(p.x), t + s);
+  if (ahead && (next - t) * s >= 0) next = (pos - t) * s >= 0 ? pos : t;
+  if (horizontal) p.x = next;
+  else p.y = next;
+  p.ride = horizontal ? 1 : 2;
+}
+
+/**
+ * A belt carries this bomb along a tick's worth (one on the floor, not sliding from a kick; the belts running:
+ * `beltsRunning`). At the middle of each tile it looks at the tile ahead (`free`: no block, bomb or robot) and
+ * waits there until it can go on. The CPU players' `foresee` follows it with this too (`way`: the way the belts
+ * will run then).
+ */
+export function beltBomb(world: World, b: Bomb, free: (cx: number, cy: number) => boolean, way = world.beltWay): void {
+  const d = beltDir(world, b.x, b.y, 0, b.ride ?? 0, way);
+  if (!d) return;
+  const dx = DX[d];
+  const dy = DY[d];
+  const horizontal = dx !== 0;
+  const s = horizontal ? dx : dy;
+  const pos = horizontal ? b.x : b.y;
+  const centre = Math.round(pos);
+  let next = pos + s * BELT_SPEED;
+  if ((pos - centre) * s <= 0 && (next - centre) * s >= 0 && !free(b.cx + dx, b.cy + dy)) next = centre;
+  if (horizontal) b.x = next;
+  else b.y = next;
+  b.cx = Math.round(b.x);
+  b.cy = Math.round(b.y);
+  b.ride = horizontal ? 1 : 2;
 }
 
 // ---------------------------------------------------------------- the railway
@@ -1564,7 +1757,7 @@ function moveBombs(world: World): void {
       }
     } else if (b.slide) {
       if (slideBomb(b, world.ice, (cx, cy) => freeForBomb(world, cx, cy))) world.events.push({ type: 'bounce' });
-    }
+    } else if (world.belts.length && beltsRunning(world)) beltBomb(world, b, (cx, cy) => freeForBomb(world, cx, cy));
   }
 }
 
@@ -2220,8 +2413,8 @@ function iceMove(world: World, p: Player, asked: Dir): void {
 
 /**
  * Advance the world by one tick. `inputs[id]` may be missing: that player
- * stands still. Order within a tick: players move and press buttons (or fly
- * their planes), bombs move, the train runs, bombs count down, due bombs and
+ * stands still. Order within a tick: the belts' clock, players move (and are
+ * carried by a belt) and press buttons (or fly their planes), bombs move, the train runs, bombs count down, due bombs and
  * barrels of TNT go off, bombs falling
  * from planes land and go off, blasts and burning bricks fade, falling blocks
  * land, players are checked against blasts and power-ups, then the match
@@ -2230,6 +2423,8 @@ function iceMove(world: World, p: Player, asked: Dir): void {
 export function step(world: World, inputs: (PlayerInput | undefined)[]): void {
   world.events.length = 0;
   world.tick++;
+  // the Factory's belts: the alarm, and turning round
+  beltClock(world);
 
   for (const p of world.players) {
     if (!p.alive) {
@@ -2256,8 +2451,10 @@ export function step(world: World, inputs: (PlayerInput | undefined)[]): void {
     if (p.curseTicks > 0) p.curseTicks--;
     const inp = inputs[p.id];
     if (p.flying > 0) {
-      // at its laptop: the direction and buttons fly the plane, and the robot stays where it is
+      // at its laptop: the direction and buttons fly the plane, and the robot stays where it is (a belt under it
+      // carries it along)
       flyPlane(world, p, inp);
+      if (world.belts.length) beltCarry(world, p, true);
       continue;
     }
     const asked: Dir = inp ? inp.dir : 0;
@@ -2270,6 +2467,8 @@ export function step(world: World, inputs: (PlayerInput | undefined)[]): void {
     else if (inp && inp.dir) movePlayer(world, p, inp.dir);
     else if (world.stepAssist) coast(world, p);
     else p.moving = false;
+    // a belt under it carries it along
+    if (world.belts.length) beltCarry(world, p);
     const a = !!inp?.a;
     if (a && !p.prevA) placeBomb(world, p);
     p.prevA = a;

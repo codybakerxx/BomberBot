@@ -55,6 +55,12 @@ import {
   TRAIN_NOSE,
   TRAIN_SPEED,
   railLength,
+  BELT_SPEED,
+  BELT_WARN_TICKS,
+  BELT_STOP_TICKS,
+  beltsAt,
+  beltBomb,
+  beltDir,
   FUSE_TICKS,
   FLAME_TICKS,
   FALL_TICKS,
@@ -363,6 +369,19 @@ export interface Danger {
   iv: (number[] | undefined)[];
   /** bricks that are burning or will be hit: tile -> when it turns to floor */
   gone: Map<number, number>;
+  /**
+   * The Factory's belts: when a bomb a belt carries will be on each tile, [from, to] pairs, as `iv`. A robot cannot
+   * step onto a tile a bomb is on, and one that waits on a tile a bomb is coming to stops it right beside itself.
+   */
+  occ?: (number[] | undefined)[];
+}
+
+/** Is a bomb a belt carries on this tile at any moment between `a` and `b`? (The Factory only.) */
+function occupied(D: Danger, idx: number, a: number, b: number): boolean {
+  const v = D.occ?.[idx];
+  if (!v) return false;
+  for (let i = 0; i < v.length; i += 2) if (v[i] < b && v[i + 1] > a) return true;
+  return false;
 }
 
 /** A bomb that does not exist yet, to ask "what if one were dropped here?" */
@@ -409,7 +428,21 @@ function tile(world: World, cx: number, cy: number): number {
  * blast that catches it on the way sets it off where it is then (`dangerMap`).
  */
 type Foreseen = { cx: number; cy: number; t: number; landT: number; path?: [number, number][] };
+/**
+ * The Factory: what `foresee` made of each bomb on this tick, in this world (every CPU player asks the same, many
+ * times a tick, and following a bomb along a belt is the most work in it). Kept for one tick of one world.
+ */
+const foreseen = new WeakMap<World, { tick: number; seen: Map<string, Foreseen> }>();
 function foresee(world: World, b: Bomb): Foreseen {
+  if (!world.belts.length || b.id < 0) return foreseeNow(world, b);
+  let memo = foreseen.get(world);
+  if (!memo || memo.tick !== world.tick) foreseen.set(world, (memo = { tick: world.tick, seen: new Map() }));
+  const key = `${b.id}|${b.x}|${b.y}|${b.fuse}|${b.state}|${b.slide}|${b.ride ?? 0}|${world.bombs.length}`;
+  let f = memo.seen.get(key);
+  if (!f) memo.seen.set(key, (f = foreseeNow(world, b)));
+  return f;
+}
+function foreseeNow(world: World, b: Bomb): Foreseen {
   if (b.state === 'held') {
     const p = world.players[b.heldBy];
     return { cx: p ? Math.round(p.x) : b.cx, cy: p ? Math.round(p.y) : b.cy, t: Math.max(1, b.fuse), landT: 0 };
@@ -427,29 +460,69 @@ function foresee(world: World, b: Bomb): Foreseen {
       const on = slid(world, { ...b, state: 'ground', x: at.cx, y: at.cy, cx: at.cx, cy: at.cy, slide: b.flyDir, speed: ICE_LAND_SPEED }, b, t - at.landT - 1, at.landT + 1);
       return { ...on, landT: at.landT };
     }
+    if (world.belts.length && beltDir(world, at.cx, at.cy, 0, 0)) {
+      // onto a belt (the Factory): it rides on from where it lands
+      const on = slid(world, { ...b, state: 'ground', x: at.cx, y: at.cy, cx: at.cx, cy: at.cy, slide: 0, ride: 0 }, b, t - at.landT - 1, at.landT + 1);
+      return { ...on, landT: at.landT };
+    }
     return { cx: at.cx, cy: at.cy, t, landT: at.landT };
   }
-  if (b.slide) {
-    // a kicked bomb (or, on ice, one sliding on from a throw or bouncing): follow it until it stops or goes off
+  if (b.slide || (world.belts.length && beltDir(world, b.x, b.y, 0, b.ride ?? 0))) {
+    // a kicked bomb (or, on ice, one sliding on from a throw or bouncing; or one a belt carries): follow it until
+    // it stops or goes off
     return { ...slid(world, { ...b }, b, Math.max(1, b.fuse), 0), landT: 0 };
   }
   return { cx: b.cx, cy: b.cy, t: Math.max(1, b.fuse), landT: 0 };
 }
 
 /**
+ * The Factory's belts as a CPU player sees them, `t` ticks from now: the way they run then (World.beltWay) and
+ * whether they are running. They turn round only once the alarm has started: until then it cannot know when.
+ */
+function beltsThen(world: World, t: number): { way: 1 | -1; on: boolean } {
+  if (world.over) return { way: world.beltWay, on: false };
+  const flip = world.beltFlip;
+  if (!flip || world.tick < flip - BELT_WARN_TICKS) return { way: world.beltWay, on: true };
+  const at = world.tick + t;
+  if (at >= flip) return { way: world.beltWay > 0 ? -1 : 1, on: true }; // (and the next turn is 15 s or more on)
+  return { way: world.beltWay, on: at < flip - BELT_STOP_TICKS };
+}
+
+/**
+ * On the Factory's belts: how much faster a robot going way `d` from tile `idx` goes, `t` ticks from now, in
+ * tiles a tick (less than nothing against a belt). Walking across a belt it is not dragged.
+ */
+function beltPush(world: World, idx: number, d: number, t: number): number {
+  if (!world.belts.length) return 0;
+  const b = beltsThen(world, t);
+  if (!b.on) return 0;
+  const x = idx % world.w;
+  const [h, v] = beltsAt(world, x, (idx - x) / world.w, b.way);
+  return (d >= 3 ? h * DX[d] : v * DY[d]) * BELT_SPEED;
+}
+
+/**
  * A copy of sliding bomb `c`, `from` ticks from now, followed by the rules' own slideBomb (sim.ts) until it
  * would go off, `fuse` ticks later: where it is then, and when (ticks from now). It stops at blocks and at bombs
  * on the ground (not `self`, the bomb it is a copy of); robots are left out, as they move. Sliding through a
- * blast still burning sets it off moments later, as it does in the rules.
+ * blast still burning sets it off moments later, as it does in the rules. On the Factory's belts a belt carries
+ * it on (the rules' own beltBomb), while it is on one. `standing`: robots taken as staying where they are, in its way.
  */
-function slid(world: World, c: Bomb, self: Bomb, fuse: number, from: number): { cx: number; cy: number; t: number; path: [number, number][] } {
-  const free = (x: number, y: number): boolean => tile(world, x, y) === FLOOR && !groundBombAt(world, x, y, self);
+function slid(world: World, c: Bomb, self: Bomb, fuse: number, from: number, standing: Player[] = []): { cx: number; cy: number; t: number; path: [number, number][] } {
+  const free = (x: number, y: number): boolean =>
+    tile(world, x, y) === FLOOR && !groundBombAt(world, x, y, self) && !standing.some((p) => Math.round(p.x) === x && Math.round(p.y) === y);
   const path: [number, number][] = [[from, c.cy * world.w + c.cx]];
   let left = fuse;
   let k = 0;
-  while (left > 0 && c.slide) {
+  const belts = world.belts.length > 0;
+  while (left > 0 && (c.slide || (belts && beltDir(world, c.x, c.y, 0, c.ride ?? 0)))) {
     k++;
-    slideBomb(c, world.ice, free);
+    if (c.slide) slideBomb(c, world.ice, free);
+    else {
+      // (the Factory: a belt carries it, the way the belts will run then)
+      const b = beltsThen(world, from + k);
+      if (b.on) beltBomb(world, c, free, b.way);
+    }
     left--;
     const idx = c.cy * world.w + c.cx;
     if (idx !== path[path.length - 1][1]) path.push([from + k, idx]);
@@ -644,11 +717,21 @@ export function dangerMap(world: World, viewer: Player | null, notice: number, e
     gone.set(idx, Math.min(gone.get(idx) ?? Infinity, t));
   };
   for (const l of world.tntLit) lightAt(l.cy * world.w + l.cx, Math.max(1, l.t));
+  // (the Factory: bombs a belt carries, each with what `foresee` made of it, for the end of this)
+  const riders: [Bomb, (typeof pending)[number]][] = [];
   for (const b of world.bombs) {
     if (viewer && b.owner !== viewer.id && b.heldBy !== viewer.id && b.age < notice) continue;
     pending.push({ ...foresee(world, b), range: b.range, done: false });
+    if (world.belts.length && b.state === 'ground' && !b.slide && beltDir(world, b.x, b.y, 0, b.ride ?? 0)) riders.push([b, pending[pending.length - 1]]);
   }
-  for (const e of extra) pending.push({ cx: e.cx, cy: e.cy, t: e.fuse, landT: 0, range: e.range, done: false });
+  for (const e of extra) {
+    if (world.belts.length && beltDir(world, e.cx, e.cy, 0, 0)) {
+      // a bomb about to be dropped on a belt (the Factory) will ride it
+      const v = { id: -1, owner: viewer?.id ?? -1, x: e.cx, y: e.cy, cx: e.cx, cy: e.cy, fuse: e.fuse, range: e.range, age: 0, state: 'ground', slide: 0, speed: 0, heldBy: -1, lifted: false, fromX: 0, fromY: 0, flyDir: 0, flyDist: 0, flyT: 0, ride: 0 } as Bomb;
+      pending.push({ ...slid(world, v, v, Math.max(1, e.fuse), 0), landT: 0, range: e.range, done: false });
+      riders.push([v, pending[pending.length - 1]]);
+    } else pending.push({ cx: e.cx, cy: e.cy, t: e.fuse, landT: 0, range: e.range, done: false });
+  }
   // bombs falling from planes: they go off where they land, the moment they land (nothing sets them off sooner).
   // Onto a brick, only the brick burns. Another player's is only known once it has been falling a while: as
   // long, for the time it takes to fall, as `notice` is for a bomb's fuse (so a Beginner does see one coming)
@@ -713,7 +796,36 @@ export function dangerMap(world: World, viewer: Player | null, notice: number, e
       if (tiles.includes(o.cy * world.w + o.cx)) o.t = Math.min(o.t, Math.max(b.t, o.landT) + CHAIN_TICKS);
     }
   }
-  return { w: world.w, iv, gone };
+  if (!world.belts.length) return { w: world.w, iv, gone };
+  // The Factory's belts. Where each bomb a belt carries will be, and when, until it goes off (`occ`); and where it
+  // would go off if a robot standing still in its way held it up (`slid` leaves robots out, as they move): a blast
+  // there too, which sets nothing else off (a Beginner was caught by its own bomb, held up behind a robot that
+  // stood pinned on the belt)
+  const occ: (number[] | undefined)[] = new Array(world.w * world.h);
+  for (const o of pending) {
+    if (!o.path) continue;
+    for (let i = 0; i < o.path.length && o.path[i][0] < o.t; i++) {
+      const to = Math.min(o.t, i + 1 < o.path.length ? o.path[i + 1][0] : o.t);
+      (occ[o.path[i][1]] ??= []).push(o.path[i][0], to + 1);
+    }
+  }
+  const standing = world.players.filter((p) => p.alive && !p.moving && p !== viewer);
+  if (standing.length) {
+    let memo = foreseen.get(world);
+    if (!memo || memo.tick !== world.tick) foreseen.set(world, (memo = { tick: world.tick, seen: new Map() }));
+    for (const [b, o] of riders) {
+      // (worked out once a tick for each bomb and each player asking, as `foresee` is)
+      const key = `held|${viewer?.id ?? -1}|${b.id}|${b.x}|${b.y}|${o.t}|${world.bombs.length}`;
+      let held = b.id >= 0 ? memo.seen.get(key) : undefined;
+      if (!held) {
+        held = { ...slid(world, { ...b }, b, Math.max(1, o.t), 0, standing), landT: 0 };
+        if (b.id >= 0) memo.seen.set(key, held);
+      }
+      if (held.cx === o.cx && held.cy === o.cy) continue;
+      for (const idx of blastTiles(world, gone, held.cx, held.cy, b.range, o.t, false)) add(idx, o.t, o.t + FLAME_TICKS);
+    }
+  }
+  return { w: world.w, iv, gone, occ };
 }
 
 /** Will this tile be blasted at all? */
@@ -736,7 +848,7 @@ function sparedFor(D: Danger, ticks: number): Danger {
     }
     return out.length ? out : undefined;
   });
-  return { w: D.w, iv, gone: D.gone };
+  return { w: D.w, iv, gone: D.gone, occ: D.occ };
 }
 
 /** Must the player on this tile get off it now? Yes for any blast, and for a block landing within `soon` ticks. */
@@ -799,6 +911,7 @@ interface Reach {
  * really is, which may be off the middle of its tile.
  */
 function stepTimes(world: World, p: Player, sp: number, start: number, from: number, tFrom: number, d: number): [number, number] {
+  if (world.belts.length) return beltStepTimes(world, p, sp, start, from, tFrom, d);
   if (from !== start) return [tFrom + 0.5 / sp, tFrom + 1 / sp];
   const sx = start % world.w;
   const sy = (start - sx) / world.w;
@@ -817,6 +930,42 @@ function stepTimes(world: World, p: Player, sp: number, start: number, from: num
   if (across > 1e-6) return [(across + 0.5) / sp, (across + 1) / sp]; // line up with the tile first
   const dist = Math.abs(horizontal ? sx + DX[d] - p.x : sy + DY[d] - p.y);
   return [Math.max(0, dist - 0.5) / sp, dist / sp];
+}
+
+/**
+ * `stepTimes` on the Factory's belts: walking along a belt it goes faster with it and slower against it, half a
+ * tile at a time (the half on its own tile, then the half on the next: each tile's belt carries it while it
+ * counts as standing on that tile); walking across one it is not dragged. Against a belt faster than it can
+ * walk, it cannot go (Infinity).
+ */
+function beltStepTimes(world: World, p: Player, sp: number, start: number, from: number, tFrom: number, d: number): [number, number] {
+  const nb = from + DX[d] + DY[d] * world.w;
+  const half = (idx: number, t: number, dist: number): number => {
+    const v = sp + beltPush(world, idx, d, t);
+    return v > 1e-9 ? t + dist / v : Infinity;
+  };
+  if (from !== start) {
+    const mid = half(from, tFrom, 0.5);
+    return [mid, half(nb, mid, 0.5)];
+  }
+  const sx = start % world.w;
+  const sy = (start - sx) / world.w;
+  const horizontal = d >= 3;
+  const offX = p.x - sx;
+  const offY = p.y - sy;
+  const across = Math.abs(horizontal ? offY : offX);
+  let t = 0;
+  let dist: number;
+  if (across > 1e-6) {
+    // line up with the tile first (the belt under it may help or hinder), then walk on from its middle
+    const toward = horizontal ? (offY > 0 ? 1 : 2) : offX > 0 ? 3 : 4;
+    const v = sp + beltPush(world, start, toward, 0);
+    t = v > 1e-9 ? across / v : Infinity;
+    dist = 1;
+  } else dist = Math.abs(horizontal ? sx + DX[d] - p.x : sy + DY[d] - p.y);
+  const v = sp + beltPush(world, start, d, t);
+  const mid = v > 1e-9 ? t + Math.max(0, dist - 0.5) / v : Infinity;
+  return [mid, half(nb, mid, Math.min(0.5, dist))];
 }
 
 /**
@@ -856,6 +1005,7 @@ function explore(world: World, p: Player, D: Danger, margin: number, walls: Uint
       if (arr >= time[nb]) continue;
       if (overlaps(D, cur, enter[cur] - margin, mid + margin)) continue;
       if (overlaps(D, nb, mid - margin, arr + margin)) continue;
+      if (D.occ && occupied(D, nb, mid - margin, arr + margin)) continue; // (the Factory: a bomb a belt carries is on it then)
       time[nb] = arr;
       enter[nb] = mid;
       prev[nb] = cur;
@@ -882,6 +1032,8 @@ function escapeTargets(D: Danger, reach: Reach, margin: number, limit: number, r
     const t = reach.time[i];
     if (t === Infinity || i === reach.start) continue;
     if (!safeAfter(D, i, reach.enter[i] - margin)) continue;
+    // (the Factory: not where a bomb a belt carries is coming: it would stop right beside the robot waiting there)
+    if (D.occ && occupied(D, i, reach.enter[i] - margin, Infinity)) continue;
     found.push([t + (rng ? rng() * 0.5 : 0), i]);
   }
   found.sort((a, b) => a[0] - b[0]);
@@ -992,12 +1144,14 @@ function pathOk(world: World, p: Player, D: Danger, path: number[], margin: numb
     const [mid, arr] = stepTimes(world, p, sp, start, cur, t, d);
     if (overlaps(D, cur, entered - margin, mid + margin)) return false;
     if (overlaps(D, nb, mid - margin, arr + margin)) return false;
+    if (D.occ && occupied(D, nb, mid - margin, arr + margin)) return false;
     cur = nb;
     t = arr;
     entered = mid;
     times.push(arr);
   }
   if (world.ice && !legOk({ world, p, walls }, D, path, times, margin, safeEnd)) return false;
+  if (safeEnd && D.occ && occupied(D, cur, entered - margin, Infinity)) return false;
   return !safeEnd || safeAfter(D, cur, entered - margin);
 }
 
@@ -1571,9 +1725,14 @@ function runShot(c: Ctx): PlayerInput | null {
 function calm(c: Ctx): PlayerInput {
   const { world, me, bot, spec, D } = c;
   if (bot.wait > 0) {
-    // making up its mind: stand where it is (its tile is not in any blast, or it would be fleeing)
+    // making up its mind: stand where it is (its tile is not in any blast, or it would be fleeing). On a belt
+    // (the Factory) that means walking against it, or it is carried off
     bot.wait--;
     bot.doing = 'idle';
+    if (world.belts.length) {
+      const d = steer(world, me, []);
+      return d > 0 ? go(d) : NONE;
+    }
     return NONE;
   }
   const hadPath = bot.path.length > 0;
@@ -1725,8 +1884,9 @@ function decide(c: Ctx): PlayerInput | null {
   const wasIdle = bot.path.length === 0;
 
   // holding a laptop: fly the plane now and then, when nothing is coming for it and no rival is near enough to
-  // walk up and box it in while it stands at the laptop (it lands again if a blast heads its way: pilot)
-  if (me.laptop && !me.carrying && enemies.length && !hasDanger(D, S)) {
+  // walk up and box it in while it stands at the laptop (it lands again if a blast heads its way: pilot). Never
+  // from a belt (the Factory): it would be carried off while it flies (a Normal was carried into its own blast)
+  if (me.laptop && !me.carrying && enemies.length && !hasDanger(D, S) && !(world.belts.length && beltDir(world, me.x, me.y, 0, me.ride ?? 0))) {
     const near = enemies.some((e) => Math.abs(Math.round(e.x) - sx) + Math.abs(Math.round(e.y) - sy) <= 3);
     if (!near && bot.rng() < spec.fly) {
       bot.path = [];

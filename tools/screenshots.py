@@ -316,6 +316,34 @@ async def main():
         await page.wait_for_timeout(50)
         await page.screenshot(path=str(OUT / "play-ice.png"))
         await context.close()
+
+        # --- the Factory (26 November 2026): the belts, a robot and a bomb riding one, the alarm's beacons
+        context, page = await phone(browser, 393, 740)
+        await page.tap("#colOk")
+        await page.tap("#colOk")  # Next ›
+        for _ in range(3):
+            await page.tap("#arenaNext")
+            await page.wait_for_timeout(700)
+        await page.wait_for_timeout(300)
+        await page.screenshot(path=str(OUT / "lobby-factory.png"))
+        await start_round(page)
+        await page.wait_for_timeout(200)
+        await page.evaluate(
+            """() => {
+              const w = __game.world, open = (x, y) => { w.tiles[y * w.w + x] = 0; w.hidden.delete(y * w.w + x); };
+              for (let x = 1; x < w.w - 1; x++) open(x, 3);
+              for (const [x, y] of [[1,2],[2,1],[3,1],[3,2]]) open(x, y);
+              __game.bots.length = 0;
+              const me = w.players[0];
+              me.x = 5.3; me.y = 3;
+              w.bombs.push({ id: 901, owner: 1, x: 8.6, y: 3, cx: 9, cy: 3, fuse: 120, range: 2, age: 20, state: 'ground', slide: 0, speed: 0, heldBy: -1, lifted: false, fromX: 0, fromY: 0, flyDir: 0, flyDist: 0, flyT: 0 });
+              w.players[1].activeBombs++;
+              w.beltFlip = w.tick + 100; // the alarm sounding
+            }"""
+        )
+        await page.wait_for_timeout(120)
+        await page.screenshot(path=str(OUT / "play-factory.png"))
+        await context.close()
         await browser.close()
     print("saved", ", ".join(sorted(f.name for f in OUT.glob("*.png"))))
 

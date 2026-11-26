@@ -279,6 +279,19 @@ const sounds = {
     hiss({ kind: 'lowpass', from: 420, to: 70, dur: 1.6, vol: 0.4, at: 0.08, attack: 0.1 });
     for (let k = 0; k < 5; k++) hiss({ kind: 'bandpass', from: 1400 + k * 500, q: 3, dur: 0.05, vol: 0.12, at: 0.05 + k * 0.045 });
   },
+  /** the Factory's belts are about to turn round: a short factory alarm, a buzzing two-tone klaxon (twice a second while the beacons flash) */
+  alarm: (): void => {
+    voice({ type: 'square', from: 440, dur: 0.16, vol: 0.08, lp: 1800, wobble: [28, 8] });
+    voice({ type: 'sawtooth', from: 330, dur: 0.16, vol: 0.06, lp: 1400, wobble: [28, 6] });
+    voice({ type: 'square', from: 220, dur: 0.16, vol: 0.05, lp: 900 });
+  },
+  /** the Factory's belts turn round: a heavy clunk, then the motors whirring up again */
+  reverse: (): void => {
+    voice({ type: 'triangle', from: 120, to: 60, dur: 0.18, vol: 0.32 });
+    hiss({ kind: 'bandpass', from: 700, to: 300, q: 2, dur: 0.08, vol: 0.2 });
+    voice({ type: 'sawtooth', from: 70, to: 150, dur: 0.6, vol: 0.06, at: 0.08, lp: 700, attack: 0.08 });
+    hiss({ kind: 'lowpass', from: 240, to: 380, dur: 0.6, vol: 0.12, at: 0.08, attack: 0.1 });
+  },
   /** knocked out: a robot powering down, wobbling as it goes */
   death: (): void => {
     voice({ type: 'sawtooth', from: 640, to: 55, dur: 0.75, vol: 0.14, lp: 2600, lpTo: 220, wobble: [11, 30] });

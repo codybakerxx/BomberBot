@@ -22,7 +22,7 @@ import type { BotLevel } from './bot';
  * The version of these messages. A page says it in `hello`; the server turns away a page with another (one
  * left open from before an update), telling it to reload. Raise it whenever a message changes its meaning.
  */
-export const PROTOCOL = 15; // 3: the laptop's plane (steering in the inputs, planes and falling bombs in the world); 4: the plane slower, turning less, flying longer; 5: Power-ups (itemShare in the setup), and a custom mix is only which kinds; 6: Brick density (brickShare) and a switch for each kind (itemOn); 7: the area the falling blocks leave is a clean rectangle on every size (9 by 7 on Standard); 8: the plane with one bomb, 6 s, off towards the middle, turning tighter, and the blocks falling faster; 9: the input mask keeps the plane's steering (it was wiped), and the Mode bubbles (randomRules, rolledKey in the setup); 10: the kinds every arena is sure to have (`sure` in the round's config: not one set to Rare or Very rare); 11: Item drop (itemDrop in the setup and the round's config), quick chat (`chat`), the plane faster and turning tighter; 12: the Wild West's railway and TNT (`rails`, `tnt` in the round's config; the train and lit TNT in the world); 13: bricks on the railway (a train smashes them), trains every 8 to 12 s; 14: the Frozen Lake map (`ice` in the round's config: robots and bombs slide, bombs bounce); 15: the ice more slippery (ICE_GRIP), bombs sliding further
+export const PROTOCOL = 16; // 3: the laptop's plane (steering in the inputs, planes and falling bombs in the world); 4: the plane slower, turning less, flying longer; 5: Power-ups (itemShare in the setup), and a custom mix is only which kinds; 6: Brick density (brickShare) and a switch for each kind (itemOn); 7: the area the falling blocks leave is a clean rectangle on every size (9 by 7 on Standard); 8: the plane with one bomb, 6 s, off towards the middle, turning tighter, and the blocks falling faster; 9: the input mask keeps the plane's steering (it was wiped), and the Mode bubbles (randomRules, rolledKey in the setup); 10: the kinds every arena is sure to have (`sure` in the round's config: not one set to Rare or Very rare); 11: Item drop (itemDrop in the setup and the round's config), quick chat (`chat`), the plane faster and turning tighter; 12: the Wild West's railway and TNT (`rails`, `tnt` in the round's config; the train and lit TNT in the world); 13: bricks on the railway (a train smashes them), trains every 8 to 12 s; 14: the Frozen Lake map (`ice` in the round's config: robots and bombs slide, bombs bounce); 15: the ice more slippery (ICE_GRIP), bombs sliding further; 16: the Factory map (`belts` in the round's config: conveyor belts carry robots and bombs, and turn round now and then)
 
 /** Room codes: four letters, without the ones easily mixed up (I, O) or that spell words easily (vowels). */
 export const CODE_LETTERS = 'BCDFGHJKLMNPQRSTVWXZ';
@@ -192,6 +192,7 @@ export function worldHash(w: World): number {
       num(p.planeDir * 8 + p.planeBombs);
     }
     if (w.ice) num(p.slip * 8 + p.slipDir); // (on ice: how fast it is sliding, and which way)
+    if (w.belts.length) num(p.ride ?? 0); // (the Factory: the belt that last carried it)
   }
   num(w.drops.length);
   for (const d of w.drops) {
@@ -206,6 +207,7 @@ export function worldHash(w: World): number {
     num(b.fuse);
     num(b.owner);
     if (w.ice) num(b.speed * 8 + b.slide);
+    if (w.belts.length) num(b.ride ?? 0);
   }
   num(w.flames.length);
   num(w.items.length);
@@ -214,6 +216,7 @@ export function worldHash(w: World): number {
   num(w.shrinkNext);
   num(w.tntLit.length);
   num(w.train ? w.train.warnAt * 8 + w.train.line * 2 + (w.train.dir > 0 ? 1 : 0) : -1);
+  if (w.belts.length) num(w.beltFlip * 2 + (w.beltWay > 0 ? 1 : 0)); // (the Factory: when the belts turn round next, and which way they run)
   num(w.over ? w.over.winner : -2);
   return h >>> 0;
 }

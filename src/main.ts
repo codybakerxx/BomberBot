@@ -13,6 +13,7 @@
 import { createWorld, step, ticksLeft, World, PlayerInput, type Player, Dir, TICK_HZ, DEATH_TICKS, type GameEvent, type ItemKind } from './sim';
 import { Bot, BotLevel, BOT_LEVELS, LEVELS, createBot, botInput } from './bot';
 import { COLORS, NOBODY, botName, colorById, drawAngels, drawBarrel, drawFloor, drawSignalIcon, drawGround, drawHead, drawItemTile, drawStatic, drawDynamic, drawGhosts, groundKey, setMap, setOrangeFire, warmSprites } from './render';
+import { drawBeltIcon } from './factory';
 import { Input, PadReader, pilotAim, typing } from './input';
 import { drawTitle, closeTitle, drawIcon } from './title';
 import { initAudio, preview, setSound, sfx, wakeAudio } from './audio';
@@ -132,6 +133,7 @@ let laptopTipShown = false;
 /** the tip that a train is coming has been shown this match (the first time its bell rings) */
 let trainTipShown = false;
 let iceTipShown = false;
+let beltTipShown = false;
 const playTip = $('playTip');
 /** The bubbles over the robots: what each said in the quick chat (quick.ts) */
 const bubbles = createBubbles($('bubbles'), (i) => colorById(world.players[i]?.colorId ?? 'gold').glow);
@@ -901,6 +903,8 @@ function soundOf(e: GameEvent): void {
     shakeAt = clock;
   } else if (e.type === 'bell') sfx.bell();
   else if (e.type === 'train') sfx.train();
+  else if (e.type === 'alarm') sfx.alarm();
+  else if (e.type === 'reverse') sfx.reverse();
   else if (e.type === 'pickup') e.kind === 'curse' ? sfx.curse() : sfx.pickup();
   else if (e.type === 'shield') sfx.shield();
   else if (e.type === 'kick' || e.type === 'throw') sfx.kick();
@@ -966,6 +970,10 @@ function advance(inputs: (PlayerInput | undefined)[]): void {
   if (!iceTipShown && world.ice && world.tick >= TICK_HZ) {
     iceTipShown = true;
     showTip('Ice! You slide, more the faster you go. Bombs slide too');
+  }
+  if (!beltTipShown && world.belts.length && world.tick >= TICK_HZ) {
+    beltTipShown = true;
+    showTip('Belts carry you and bombs. At the alarm, they turn round');
   }
   if (!trainTipShown && world.events.some((e) => e.type === 'bell')) {
     trainTipShown = true;
@@ -1548,6 +1556,7 @@ function newMatch(again = true): void {
   laptopTipShown = false;
   trainTipShown = false;
   iceTipShown = false;
+  beltTipShown = false;
   start();
 }
 /** Start the next round of the match in a fresh arena. */
@@ -1884,6 +1893,10 @@ function showKey(): void {
         g.stroke();
       }
     });
+  }
+  if (world.belts.length) {
+    // the Factory's conveyor belts
+    row('Conveyor belt', 'Carries robots and bombs along. When the alarm sounds and the lights flash, the belts stop, then run the other way.', drawBeltIcon);
   }
   row('Crown', 'The player in the lead', (g, s) => {
     const col = colorById(world.players[myIdx()]?.colorId ?? 'gold');
@@ -2231,7 +2244,7 @@ function onRound(w: World, s: Seat[], score: Score, fresh: boolean): void {
     redrawStatic();
     return;
   }
-  if (fresh && roundNo <= 1) angelTipShown = laptopTipShown = trainTipShown = iceTipShown = false; // a new match
+  if (fresh && roundNo <= 1) angelTipShown = laptopTipShown = trainTipShown = iceTipShown = beltTipShown = false; // a new match
   blastedBy = -1;
   hurried = false;
   overShown = false;

@@ -296,6 +296,8 @@ export class Predictor {
       case 'tnt':
       case 'bell':
       case 'train':
+      case 'alarm':
+      case 'reverse':
         return true;
       case 'pickup':
         return e.player === this.me;

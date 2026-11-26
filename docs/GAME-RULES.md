@@ -8,7 +8,7 @@ The game runs at a fixed 60 ticks a second. Times below are given in seconds wit
 
 *`createWorld` in sim.ts*
 
-- The usual arena (Classic) is 15 tiles wide and 13 tall. The outer ring is wall, leaving 13 by 11 to play in. The lobby also offers Compact (11 by 9 to play in) and Big (15 by 13): the same build in other sizes. It also offers three maps, Midnight (steel blocks and bricks), Wild West (red rock and wooden crates) and Frozen Lake (snowy boulders and blocks of ice on a frozen lake). Midnight is only a look. The Wild West also has a railway with trains and barrels of TNT (below, **The Wild West's railway and TNT**); Frozen Lake's floor is ice, where robots and bombs slide (below, **Frozen Lake's ice**). Every other rule here is the same on all three.
+- The usual arena (Classic) is 15 tiles wide and 13 tall. The outer ring is wall, leaving 13 by 11 to play in. The lobby also offers Compact (11 by 9 to play in) and Big (15 by 13): the same build in other sizes. It also offers four maps, Midnight (steel blocks and bricks), Wild West (red rock and wooden crates), Frozen Lake (snowy boulders and blocks of ice on a frozen lake) and Factory (machines and cardboard boxes on steel floor plates). Midnight is only a look. The Wild West also has a railway with trains and barrels of TNT (below, **The Wild West's railway and TNT**); Frozen Lake's floor is ice, where robots and bombs slide (below, **Frozen Lake's ice**); the Factory has conveyor belts that carry robots and bombs (below, **The Factory's conveyor belts**). Every other rule here is the same on all four.
 - **Solid blocks** never break. They are the outer wall plus a pillar on every second tile in both directions. The pillars turn the arena into a grid of lanes.
 - **Bricks** can be blasted away. At the start each open tile has an 80% chance of holding a brick (`SOFT_DENSITY`). The lobby's Brick density setting changes that, from 0% to 100% in steps of 5% (it was 78% until 19 November 2026).
 - Each player's starting tile and the tiles next to it are always left clear, so nobody starts boxed in.
@@ -19,7 +19,7 @@ The game runs at a fixed 60 ticks a second. Times below are given in seconds wit
 
 *`movePlayer` in sim.ts. The touch and keyboard side is in [CONTROLS.md](CONTROLS.md).*
 
-- A robot moves up, down, left or right, one direction at a time, and stops the moment no direction is held. It does not finish the step. (On Frozen Lake's ice it slides on first, further the faster it is: below, **Frozen Lake's ice**.)
+- A robot moves up, down, left or right, one direction at a time, and stops the moment no direction is held. It does not finish the step. (On Frozen Lake's ice it slides on first, further the faster it is: below, **Frozen Lake's ice**. On the Factory's belts a belt carries it: below, **The Factory's conveyor belts**.)
 - Robots start at 2.55 tiles a second. Each speed power-up adds 0.5 tiles a second, and up to six of them count, which brings a robot to 5.55 tiles a second, 2.18 times its starting speed. Collecting a speed power-up is the only thing that raises a robot's speed. The only thing that lowers it is a curse, for 8 seconds.
 - At the starting speed, getting clear of your own first bomb (two tiles along a lane) takes 0.78 seconds of the bomb's 2.55.
 - The tile a robot **counts as standing on** is the one whose middle it is nearest to. The game draws a ring on yours. That tile decides where your bomb is dropped, whether a blast catches you and which power-up you pick up.
@@ -280,6 +280,38 @@ A curse (85% of the starting speed) slides about a quarter of a tile.
 | `ICE_BOUNCE_MIN` | 0.05 | The least speed a bomb bounces at (`ICE_CRAWL` / `ICE_BOUNCE`) |
 
 The numbers are Claude's, to be play-tested. They were made more slippery on 26 November 2026 at the owner's ask ("more slippery at normal conditions, and every speed boost you slide even more; the bombs should slide more as well"). At first a robot kept 0.84 of its speed each tick (`ICE_DRAG`, stopping under `ICE_STILL` 0.004): a fifth of a tile at the starting speed and under half a tile at top speed, so a robot let go in the middle of a tile never slid off it; a thrown bomb landed at 0.065 and went about two tiles; bombs lost 0.001 a tick, so a kick went about nine tiles.
+
+## The Factory's conveyor belts
+
+*`beltLines`, `beltClock`, `beltDir`, `beltCarry` and `beltBomb` in sim.ts; drawn in factory.ts; the CPU players' side in `beltStepTimes`, `beltsThen` and `slid` in bot.ts. The owner's design, 26 November 2026.*
+
+On the Factory map, on every size (`belts` in the round's config, set by `worldConfig` for that map; online too, `PROTOCOL` 16):
+
+**The belts.** Four conveyor belts cross the arena, two along rows and two down columns, on the same lines as the Wild West's railway: the third row from the top and from the bottom, the third column from the left and from the right (`beltLines`), so no robot starts on one, on any size or number of players. They cross at four points, each a table of rolling balls. Each runs from a drive in the outer wall to one in the wall opposite. At the start they run round the arena the way a clock's hands go: right along the top one, down the right one, left along the bottom one, up the left one. Boxes sit on them as anywhere else (drawn on the tread, between the belt's frame); they do not ride, and a belt stops at one as at a wall.
+
+**What they carry.** Robots and bombs, not power-ups (the owner's pick):
+
+- A robot on a belt is carried along it at **1.3 tiles a second** (`BELT_SPEED`), standing or walking: walking with it, it goes its speed and the belt's (3.9 tiles a second at the start); against it, its speed less the belt's (1.2 at the start, about half). Walking across a belt it is not dragged sideways, and lined up with an opening it has asked to go through, the belt lets it go, so it can always step off to the side.
+- A belt carries a robot along the lane it is in. Through a crossing it rides on the way it came; standing still in the middle of one, it rides the belt that last carried it.
+- A block, a box or a bomb ahead stops it in the middle of its tile, as walking would; at the end of a belt it stops against the wall.
+- A bomb on a belt rides it the same way, at the same speed: one dropped on it, one thrown onto it, and one kicked along that comes to rest on it. At the middle of each tile it looks at the tile ahead: a block, a box, a bomb or a robot there and it waits until the way is clear.
+- A robot flying a laptop's plane is carried too, standing at its laptop.
+
+**Turning round.** Now and then the belts all turn round:
+
+- The first time 15 to 20 seconds into the round (`BELT_FIRST`), then 15 to 20 seconds after the last (`BELT_GAP`). When comes from the round's seed, the same on every copy of an online round.
+- **The warning:** for 2 seconds before (`BELT_WARN_TICKS`) the amber beacons on the belts' drives flash in turn, the belts' arrows flash amber and an alarm buzzes twice a second (`BELT_ALARM_TICKS`). In the last half second the belts stand still (`BELT_STOP_TICKS`); then they run the other way.
+- They keep turning while the blocks fall. Once the round is decided they stop.
+
+| Constant | Value | Meaning |
+|---|---|---|
+| `BELT_SPEED` | 0.021875 tiles a tick | 1.31 tiles a second (a robot starts at 2.55) |
+| `BELT_FIRST`, `BELT_GAP` | 15 to 20 s, 15 to 20 s | When they first turn round, and the next time after the last |
+| `BELT_WARN_TICKS` | 120 (2 s) | The beacons and the alarm, before they turn |
+| `BELT_STOP_TICKS` | 30 (0.5 s) | The belts stand still for the end of the warning |
+| `BELT_ALARM_TICKS` | 30 | The alarm buzzes every half second |
+
+The numbers are Claude's, to be play-tested.
 
 ## Winning
 

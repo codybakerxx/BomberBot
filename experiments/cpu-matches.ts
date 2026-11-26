@@ -15,8 +15,11 @@
  * counted apart ('train'), and a barrel's blast counts as the blast of whoever set it off (so one a robot set
  * off itself is under "blasted itself").
  *
- * With ICE=1 in front, every arena is Frozen Lake's ice: robots slide a little when they let go or turn back,
+ * With ICE=1 in front, every arena is Frozen Lake's ice: robots slide when they let go or turn back,
  * and bombs slide on after a throw, slow down, and bounce back off what stops them when they hit it fast.
+ *
+ * With BELTS=1 in front, every arena is the Factory's: four conveyor belts carry robots and bombs, and turn
+ * round now and then after an alarm.
  *
  * These are the real CPU players and the real rules, so unlike the thumb
  * experiments this is a measurement, not a model. What it cannot tell you is
@@ -29,6 +32,8 @@ const wrap = (v: number, n: number): number => ((v % n) + n) % n;
 const WEST = process.env.WEST === '1';
 /** ICE=1: Frozen Lake's ice in every arena */
 const ICE = process.env.ICE === '1';
+/** BELTS=1: the Factory's conveyor belts in every arena */
+const BELTS = process.env.BELTS === '1';
 /** robots a train hit, over the whole run */
 let ranOver = 0;
 
@@ -67,7 +72,7 @@ export interface Use {
  * blocks fall.
  */
 export function playMatch(seed: number, levels: (BotLevel | null)[], maxTicks: number, stopWhenDecided = true, timer = true): Outcome {
-  const world: World = createWorld({ seed, players: levels.map((_, i) => ({ colorId: String(i) })), roundTicks: timer ? undefined : 0, rails: WEST, tnt: WEST, ice: ICE });
+  const world: World = createWorld({ seed, players: levels.map((_, i) => ({ colorId: String(i) })), roundTicks: timer ? undefined : 0, rails: WEST, tnt: WEST, ice: ICE, belts: BELTS });
   const bots: (Bot | null)[] = levels.map((lv, i) => (lv ? createBot(i, lv, seed * 31 + 7) : null));
   const fate: Outcome['fate'] = levels.map(() => 'alive');
   const when = levels.map(() => -1);

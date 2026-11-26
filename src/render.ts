@@ -13,6 +13,7 @@ import { danceFrame, danceSamples, type DanceId } from './dances';
 import { TEAMS, type MapId } from './setup';
 export { warmRobots } from './robot';
 import { drawBarrel, drawCrossing, drawLitTnt, drawRails, drawTrain, railWalls } from './railway';
+import { drawFactory, drawFactoryLive, drawMachine, drawBox, drawPlate, boxOnBelt } from './factory';
 import { World, FLOOR, HARD, SOFT, TNT, FLAME_TICKS, DEATH_TICKS, GHOST_TICKS, SHIELD_GRACE_TICKS, FALL_TICKS, TICK_HZ, ItemKind, Player, Bomb, FLY_TICKS_PER_TILE, THROW_TILES, FUSE_TICKS, CARRY_FUSE_TICKS, DX, DY, DROP_TICKS, TURN_STEPS, allies, angelAim, angelReach, perimeterAt } from './sim';
 
 export interface BotColor {
@@ -178,7 +179,8 @@ export function setMap(id: MapId): void {
 
 /** Solid block: fills its whole tile. `joined`: another solid block is right below it (its front is hidden). `deco`: see drawRock. */
 export function drawHard(ctx: Ctx, px: number, py: number, T: number, map: MapId = mapNow, joined = false, deco = 1): void {
-  if (map === 'western') drawRock(ctx, px, py, T, joined, deco);
+  if (map === 'factory') drawMachine(ctx, px, py, T, joined, deco >= 1 ? 0.3 : deco);
+  else if (map === 'western') drawRock(ctx, px, py, T, joined, deco);
   else if (map === 'ice') drawSnowRock(ctx, px, py, T, joined, deco);
   else drawSteel(ctx, px, py, T);
 }
@@ -189,6 +191,7 @@ export function drawSoft(ctx: Ctx, px: number, py: number, T: number, map: MapId
   if (Number.isInteger(T) && T <= 200) ctx.drawImage(softSprite(map, T, variant & 3), px, py);
   else if (map === 'western') drawCrate(ctx, px, py, T);
   else if (map === 'ice') drawIceBlock(ctx, px, py, T, variant & 3);
+  else if (map === 'factory') drawBox(ctx, px, py, T, variant & 3);
   else drawBricks(ctx, px, py, T, variant & 3);
 }
 
@@ -200,6 +203,10 @@ export function drawFloor(ctx: Ctx, x: number, y: number, px: number, py: number
   }
   if (map === 'ice') {
     drawLakeIce(ctx, x, y, px, py, T);
+    return;
+  }
+  if (map === 'factory') {
+    drawPlate(ctx, x, y, px, py, T);
     return;
   }
   ctx.fillStyle = '#0e1220';
@@ -775,6 +782,7 @@ function softSprite(map: MapId, T: number, variant = 0): HTMLCanvasElement {
     const g = c.getContext('2d')!;
     if (map === 'western') drawCrate(g, 0, 0, T);
     else if (map === 'ice') drawIceBlock(g, 0, 0, T, v);
+    else if (map === 'factory') drawBox(g, 0, 0, T, v);
     else drawBricks(g, 0, 0, T, v);
     softs.set(key, c);
   }
@@ -798,6 +806,8 @@ export function drawStatic(ctx: Ctx, world: World, T: number): void {
     }
   }
   drawRails(ctx, world, T);
+  // the Factory's belts at rest, their drives and the furnaces (factory.ts)
+  drawFactory(ctx, world, T);
 }
 
 /** The solid block at (x, y), as drawStatic draws it. */
@@ -1022,7 +1032,7 @@ function drawCrumble(ctx: Ctx, b: { cx: number; cy: number; ttl: number }, T: nu
     const dy = Math.round(Math.cos(time * 77 + seed) * j);
     if (img) ctx.drawImage(img, x0 + dx, y0 + dy);
     else drawSoft(ctx, x0 + dx, y0 + dy, T, mapNow, v);
-    ctx.strokeStyle = west ? 'rgba(40,20,6,0.85)' : ice ? 'rgba(235,250,255,0.9)' : 'rgba(12,14,30,0.85)';
+    ctx.strokeStyle = west ? 'rgba(40,20,6,0.85)' : ice ? 'rgba(235,250,255,0.9)' : mapNow === 'factory' ? 'rgba(52,30,10,0.85)' : 'rgba(12,14,30,0.85)';
     ctx.lineWidth = Math.max(1, T * 0.03);
     ctx.lineCap = 'round';
     const grow = Math.min(1, e / CRACK + 0.25);
@@ -1041,7 +1051,7 @@ function drawCrumble(ctx: Ctx, b: { cx: number; cy: number; ttl: number }, T: nu
   }
   const u = (e - CRACK) / (1 - CRACK); // 0 as it bursts, 1 as the last of it fades
   // dust rolling out from where it stood
-  const dust = west ? [196, 160, 110] : ice ? [205, 232, 252] : [128, 140, 182];
+  const dust = west ? [196, 160, 110] : ice ? [205, 232, 252] : mapNow === 'factory' ? [170, 136, 96] : [128, 140, 182];
   for (let d = 0; d < 4; d++) {
     const a = (d / 4) * Math.PI * 2 + scatter(seed + d * 3) * 1.4;
     const r = T * (0.1 + 0.25 * Math.sqrt(u));
@@ -1476,7 +1486,7 @@ function drawFire(ctx: Ctx, world: World, T: number, time: number, west: boolean
  * bricks alone were over two thousand rectangles.
  */
 export function drawGround(ctx: Ctx, world: World, T: number): void {
-  ctx.fillStyle = mapNow === 'western' ? 'rgba(38,14,4,0.42)' : mapNow === 'ice' ? 'rgba(2,8,20,0.42)' : 'rgba(0,0,0,0.38)';
+  ctx.fillStyle = mapNow === 'western' ? 'rgba(38,14,4,0.42)' : mapNow === 'ice' ? 'rgba(2,8,20,0.42)' : 'rgba(0,0,0,0.38)'; // (the Factory's is the last: factory.ts puts it back over a moving belt)
   for (let y = 0; y < world.h - 1; y++) {
     for (let x = 0; x < world.w; x++) {
       if (world.tiles[y * world.w + x] !== FLOOR && world.tiles[(y + 1) * world.w + x] === FLOOR) {
@@ -1491,9 +1501,22 @@ export function drawGround(ctx: Ctx, world: World, T: number): void {
       if (t !== SOFT) continue;
       // (a block that is breaking is drawn every frame instead, crumbling: drawCrumble)
       if (world.burning.some((b) => b.cx === x && b.cy === y)) continue;
-      drawSoft(ctx, x * T, y * T, T, mapNow, softVariant(x, y));
+      // (the Factory: a box on a belt sits between the belt's frame, so the belt still shows)
+      const squeeze = boxOnBelt(world, x, y);
+      if (squeeze) {
+        ctx.save();
+        squeezeAbout(ctx, x, y, T, squeeze);
+        drawSoft(ctx, x * T, y * T, T, mapNow, softVariant(x, y));
+        ctx.restore();
+      } else drawSoft(ctx, x * T, y * T, T, mapNow, softVariant(x, y));
     }
   }
+}
+/** Scale what is drawn next by [sx, sy] about the middle of tile (x, y). */
+function squeezeAbout(ctx: Ctx, x: number, y: number, T: number, [sx, sy]: [number, number]): void {
+  ctx.translate((x + 0.5) * T, (y + 0.5) * T);
+  ctx.scale(sx, sy);
+  ctx.translate(-(x + 0.5) * T, -(y + 0.5) * T);
 }
 /** Which of the four looks a breakable block at (x, y) has, so neighbours differ. */
 export function softVariant(x: number, y: number): number {
@@ -1519,6 +1542,8 @@ const NO_CROWN = (): boolean => false;
 export function drawDynamic(ctx: Ctx, world: World, T: number, time: number, focusId = 0, celebrate?: Celebration, crowned: (id: number) => boolean = NO_CROWN, grounded = false): void {
   const west = mapNow === 'western';
   if (!grounded) drawGround(ctx, world, T);
+  // the Factory: the belts moving, the alarm's beacons, the machines' lights, the furnaces flickering
+  drawFactoryLive(ctx, world, T, time);
 
   // power-ups: a square of solid colour that pulses, with a dark icon. It is a little smaller
   // than its tile and hovers: it bobs slowly up and down over a shadow that stays on the floor.
@@ -1547,7 +1572,13 @@ export function drawDynamic(ctx: Ctx, world: World, T: number, time: number, foc
   }
 
   // breakable blocks that are burning flash as they go
-  for (const b of world.burning) drawCrumble(ctx, b, T, time);
+  for (const b of world.burning) {
+    const squeeze = boxOnBelt(world, b.cx, b.cy);
+    ctx.save();
+    if (squeeze) squeezeAbout(ctx, b.cx, b.cy, T, squeeze);
+    drawCrumble(ctx, b, T, time);
+    ctx.restore();
+  }
   // barrels of TNT about to go off, and a train coming: its line's signals flashing, the gates coming down
   drawLitTnt(ctx, world, T, time);
   const plain = world.rails.length ? railWalls(world) : null;
