@@ -1079,13 +1079,16 @@ export function createLobby(host: LobbyHost): {
     };
     return pickRow(`tp-${who}`, 'Team', TEAMS[t].short, canEdit() ? step : null, TEAMS[t].color);
   }
-  /** The Level row on a CPU player's card. */
+  /**
+   * The Level row on a CPU player's card. It goes round (the owner's ask, 26 November 2026): past Hard is
+   * Beginner again, and before Beginner is Hard. (It stopped at each end.)
+   */
   function levelRow(i: number): HTMLElement {
     const c = s().cpus[i];
     if (s().randLevels) return pickRow(`lv-c${i}`, 'Level', 'Random', null);
     const step = (d: number): void => {
-      const at = BOT_LEVELS.indexOf(s().cpus[i].level) + d;
-      if (at < 0 || at >= BOT_LEVELS.length) return;
+      const n = BOT_LEVELS.length;
+      const at = (((BOT_LEVELS.indexOf(s().cpus[i].level) + d) % n) + n) % n;
       s().cpus[i].level = BOT_LEVELS[at];
       changed();
     };
