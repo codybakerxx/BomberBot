@@ -14,7 +14,7 @@ import { TEAMS, type MapId } from './setup';
 export { warmRobots } from './robot';
 import { drawBarrel, drawCrossing, drawLitTnt, drawRails, drawTrain, railWalls } from './railway';
 import { drawFactory, drawFactoryLive, drawMachine, drawBox, drawPlate, boxOnBelt } from './factory';
-import { drawCheck, drawStud, drawSpeaker, drawDark } from './blackout';
+import { drawCheck, drawStud, drawMarble, drawDark } from './blackout';
 import { World, FLOOR, HARD, SOFT, TNT, FLAME_TICKS, DEATH_TICKS, GHOST_TICKS, SHIELD_GRACE_TICKS, FALL_TICKS, TICK_HZ, ItemKind, Player, Bomb, FLY_TICKS_PER_TILE, THROW_TILES, FUSE_TICKS, CARRY_FUSE_TICKS, DX, DY, DROP_TICKS, TURN_STEPS, allies, angelAim, angelReach, perimeterAt, POOF_TICKS, wireSpot, type Decoy, type Wire } from './sim';
 
 export interface BotColor {
@@ -194,7 +194,7 @@ export function drawSoft(ctx: Ctx, px: number, py: number, T: number, map: MapId
   else if (map === 'western') drawCrate(ctx, px, py, T);
   else if (map === 'ice') drawIceBlock(ctx, px, py, T, variant & 3);
   else if (map === 'factory') drawBox(ctx, px, py, T, variant & 3);
-  else if (map === 'blackout') drawSpeaker(ctx, px, py, T, variant & 3);
+  else if (map === 'blackout') drawMarble(ctx, px, py, T, variant & 3);
   else drawBricks(ctx, px, py, T, variant & 3);
 }
 
@@ -790,7 +790,7 @@ function softSprite(map: MapId, T: number, variant = 0): HTMLCanvasElement {
     if (map === 'western') drawCrate(g, 0, 0, T);
     else if (map === 'ice') drawIceBlock(g, 0, 0, T, v);
     else if (map === 'factory') drawBox(g, 0, 0, T, v);
-    else if (map === 'blackout') drawSpeaker(g, 0, 0, T, v);
+    else if (map === 'blackout') drawMarble(g, 0, 0, T, v);
     else drawBricks(g, 0, 0, T, v);
     softs.set(key, c);
   }

@@ -72,7 +72,7 @@ export const MAPS = [
   { id: 'western', name: 'Wild West', solid: 'red rock', soft: 'wooden crates' },
   { id: 'ice', name: 'Frozen Lake', solid: 'snowy rock', soft: 'ice blocks' },
   { id: 'factory', name: 'Factory', solid: 'machines', soft: 'cardboard boxes' },
-  { id: 'blackout', name: 'Blackout', solid: 'chrome spikes', soft: 'speaker stacks' },
+  { id: 'blackout', name: 'Blackout', solid: 'chrome studs', soft: 'black marble' },
 ] as const;
 export type MapId = (typeof MAPS)[number]['id'];
 export function mapOf(s: MatchSetup): (typeof MAPS)[number] {
