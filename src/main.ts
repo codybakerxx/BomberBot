@@ -1978,7 +1978,7 @@ function showKey(): void {
   }
   if (world.dark) {
     // Blackout
-    row('Flash', 'Every 8 seconds a flash lights the whole arena for half a second. Otherwise only bombs, blasts and flashlights light it.', (g, s) => {
+    row('Flash', 'Every 5 seconds a flash lights the whole arena for a moment. Otherwise only bombs, blasts and flashlights light it.', (g, s) => {
       const glow = g.createRadialGradient(s / 2, s / 2, 0, s / 2, s / 2, s * 0.5);
       glow.addColorStop(0, '#ffffff');
       glow.addColorStop(0.35, 'rgba(230,240,255,0.85)');

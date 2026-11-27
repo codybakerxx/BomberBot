@@ -21,9 +21,9 @@ const arena = (seed = 3, extra = {}): World => createWorld({ seed, players: [{ c
   w.tick = FLASH_EVERY + 10;
   assert.equal(flashLight(w), 1, 'the flash');
   w.tick = FLASH_EVERY + FLASH_TICKS;
-  assert.equal(flashLight(w), 0, 'half a second, then dark');
-  assert.equal(FLASH_EVERY, 8 * TICK_HZ, 'every 8 s (the owner)');
-  assert.equal(FLASH_TICKS, TICK_HZ / 2, 'half a second (the owner)');
+  assert.equal(flashLight(w), 0, 'then dark');
+  assert.equal(FLASH_EVERY, 5 * TICK_HZ, 'every 5 s (the owner; it was 8)');
+  assert.ok(FLASH_TICKS > TICK_HZ / 2 && FLASH_TICKS <= TICK_HZ, 'a little longer than half a second (the owner)');
   const lit = createWorld({ seed: 3, players: [{ colorId: 'gold' }, { colorId: 'blue' }], roundTicks: 0 });
   lit.tick = 1000;
   assert.equal(flashLight(lit), 1, 'every other map is always lit');

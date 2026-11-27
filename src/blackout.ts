@@ -2,8 +2,8 @@
  * Blackout, drawn (the owner's design, 27 November 2026: a pitch black map, a flash of light now and then, a
  * flashlight power-up; black and white tiles, solid blocks as triangular chrome spikes, reflective like a mirror,
  * a punk rock look). Reads the world, never changes it; render.ts calls these:
- * - drawCheck, drawSpike, drawSpeaker: one tile of floor (black and white checks), a solid block (a chrome spike
- *   on a studded black plate), a breakable block (a battered speaker cabinet with studs, tape and stickers)
+ * - drawCheck, drawChrome, drawSpeaker: one tile of floor (black and white checks), a solid block (a sleek
+ *   mirror-chrome block), a breakable block (a battered speaker cabinet with studs, tape and stickers)
  * - drawDark (every frame, over the round, under the planes): the dark itself. Nothing shows but what is lit:
  *   the whole arena while the flash is on (sim.ts `flashLight`), and round each light (`lights`): a flashlight's
  *   3 tiles, a bomb and its burning fuse, a blast, a flashlight lying on the floor. No robot glows, yours
@@ -55,80 +55,37 @@ export function drawCheck(ctx: Ctx, x: number, y: number, px: number, py: number
 // ---------------------------------------------------------------- the solid blocks
 
 /**
- * A chrome spike: a tall three-sided pyramid seen a little from the front, standing on a studded black plate.
- * Mirror chrome is hard-edged bands of near white and near black (it reflects the checks and the dark), so each
- * face is a gradient with sharp stops, the lit face light, the shaded face dark, a hot white edge down the ridge.
+ * A sleek chrome block (the owner's ask, 27 November 2026: the spikes he first had were too busy). Mirror chrome
+ * is a few smooth bands with one sharp horizon: bright sky reflected above, a dark band below it, the floor's
+ * grey at the foot; a thin bright bevel on the top and left edges, a dark one on the bottom and right, and one
+ * soft diagonal glint. Nothing else on it.
  */
-export function drawSpike(ctx: Ctx, px: number, py: number, T: number, joined: boolean, deco: number): void {
-  // the plate
-  ctx.fillStyle = '#0b0b0e';
+export function drawChrome(ctx: Ctx, px: number, py: number, T: number, joined: boolean, deco: number): void {
+  const face = ctx.createLinearGradient(px, py, px, py + T);
+  const h = 0.46 + (deco - 0.5) * 0.04; // (each block's horizon a hair higher or lower)
+  face.addColorStop(0, '#fbfcfe');
+  face.addColorStop(h - 0.12, '#d3d9e3');
+  face.addColorStop(h - 0.005, '#aeb6c3');
+  face.addColorStop(h, '#3a3f4a');
+  face.addColorStop(h + 0.14, '#585e6b');
+  face.addColorStop(1, joined ? '#6c7280' : '#9aa1ae');
+  ctx.fillStyle = face;
   ctx.fillRect(px, py, T, T);
-  ctx.fillStyle = '#1d1d23';
-  ctx.fillRect(px + T * 0.05, py + T * 0.05, T * 0.9, T * 0.9);
-  // studs round the plate
-  for (const [sx, sy] of [[0.13, 0.13], [0.87, 0.13], [0.13, 0.87], [0.87, 0.87]]) {
-    const g = ctx.createRadialGradient(px + sx * T - T * 0.015, py + sy * T - T * 0.015, 0, px + sx * T, py + sy * T, T * 0.05);
-    g.addColorStop(0, '#ffffff');
-    g.addColorStop(0.4, '#9a9aa6');
-    g.addColorStop(1, '#25252c');
-    ctx.fillStyle = g;
-    ctx.beginPath();
-    ctx.arc(px + sx * T, py + sy * T, T * 0.045, 0, Math.PI * 2);
-    ctx.fill();
-  }
-  // the pyramid: apex near the top of the tile, base along the lower part, a little to one side for a front face
-  const lean = (deco - 0.5) * 0.06; // (each spike leans a hair differently)
-  const ax = px + T * (0.5 + lean);
-  const ay = py + T * (joined ? 0.04 : -0.06);
-  const bl = [px + T * 0.12, py + T * 0.84];
-  const br = [px + T * 0.88, py + T * 0.84];
-  const bf = [px + T * (0.56 + lean * 0.5), py + T * 0.96]; // the front corner of the base
-  // shadow on the plate
-  ctx.fillStyle = 'rgba(0,0,0,0.45)';
-  ctx.beginPath();
-  ctx.ellipse(px + T * 0.55, py + T * 0.88, T * 0.42, T * 0.1, 0, 0, Math.PI * 2);
-  ctx.fill();
-  // left face: lit, bands of sky and checks
-  const left = ctx.createLinearGradient(bl[0], bl[1], ax, ay);
-  for (const [o, c] of [[0, '#23262e'], [0.3, '#4c5260'], [0.31, '#f2f5fa'], [0.5, '#bcc4d1'], [0.72, '#ffffff'], [1, '#dfe5ee']] as [number, string][]) left.addColorStop(o, c);
-  ctx.fillStyle = left;
-  ctx.beginPath();
-  ctx.moveTo(ax, ay);
-  ctx.lineTo(bl[0], bl[1]);
-  ctx.lineTo(bf[0], bf[1]);
-  ctx.closePath();
-  ctx.fill();
-  // right face: in shade, darker bands with one sharp highlight
-  const right = ctx.createLinearGradient(br[0], br[1], ax, ay);
-  for (const [o, c] of [[0, '#06070a'], [0.32, '#15171c'], [0.33, '#6f7584'], [0.41, '#1a1c22'], [0.78, '#383c46'], [1, '#9298a5']] as [number, string][]) right.addColorStop(o, c);
-  ctx.fillStyle = right;
-  ctx.beginPath();
-  ctx.moveTo(ax, ay);
-  ctx.lineTo(bf[0], bf[1]);
-  ctx.lineTo(br[0], br[1]);
-  ctx.closePath();
-  ctx.fill();
-  // the hot edge down the front ridge, and a glint at the tip
-  ctx.strokeStyle = 'rgba(255,255,255,0.95)';
-  ctx.lineWidth = Math.max(1, T * 0.022);
-  ctx.beginPath();
-  ctx.moveTo(ax, ay + T * 0.02);
-  ctx.lineTo(bf[0], bf[1] - T * 0.02);
-  ctx.stroke();
-  ctx.strokeStyle = 'rgba(0,0,0,0.6)';
-  ctx.lineWidth = Math.max(1, T * 0.012);
-  ctx.beginPath();
-  ctx.moveTo(ax, ay);
-  ctx.lineTo(bl[0], bl[1]);
-  ctx.lineTo(bf[0], bf[1]);
-  ctx.lineTo(br[0], br[1]);
-  ctx.closePath();
-  ctx.stroke();
-  const tip = ctx.createRadialGradient(ax, ay + T * 0.05, 0, ax, ay + T * 0.05, T * 0.12);
-  tip.addColorStop(0, 'rgba(255,255,255,0.9)');
-  tip.addColorStop(1, 'rgba(255,255,255,0)');
-  ctx.fillStyle = tip;
-  ctx.fillRect(ax - T * 0.12, ay - T * 0.07, T * 0.24, T * 0.24);
+  // a soft glint across it, top left to bottom right
+  const glint = ctx.createLinearGradient(px, py + T * 0.1, px + T, py + T * 0.9);
+  glint.addColorStop(0.3, 'rgba(255,255,255,0)');
+  glint.addColorStop(0.42, 'rgba(255,255,255,0.4)');
+  glint.addColorStop(0.5, 'rgba(255,255,255,0)');
+  ctx.fillStyle = glint;
+  ctx.fillRect(px, py, T, T);
+  // the bevel
+  const e = Math.max(1, Math.round(T * 0.05));
+  ctx.fillStyle = 'rgba(255,255,255,0.9)';
+  ctx.fillRect(px, py, T, e);
+  ctx.fillRect(px, py, e, T);
+  ctx.fillStyle = 'rgba(10,12,18,0.75)';
+  ctx.fillRect(px, py + T - e, T, e);
+  ctx.fillRect(px + T - e, py, e, T);
 }
 
 // ---------------------------------------------------------------- the breakable blocks

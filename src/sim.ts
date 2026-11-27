@@ -621,11 +621,12 @@ export const SHRINK_TICKS = 50 * TICK_HZ; // once the timer reaches 0 the blocks
 export const FALL_TICKS = 32; // a falling block is in the air, over its shadow, for 0.53 s before it lands (0.75 s at first; made 20% faster to 0.63 s, then 20% faster again, 23 November 2026)
 export const START_FIRE = 1; // a blast reaches one tile each way until a flame power-up is picked up (it was 2)
 
-// ---- Blackout (the owner's design, 27 November 2026; his picks asked: every 8 s for half a second; 15 s and 3 tiles)
-/** the flash comes every 8 s... */
-export const FLASH_EVERY = 8 * TICK_HZ;
-/** ...and lights the whole arena for half a second (rising in FLASH_RISE ticks, fading over FLASH_FADE at its end) */
-export const FLASH_TICKS = 30;
+// ---- Blackout (the owner's design, 27 November 2026; his picks asked: 15 s and 3 tiles; the flash every 8 s for half a
+// second at first, then every 5 s and a little longer, his ask the same afternoon)
+/** the flash comes every 5 s... */
+export const FLASH_EVERY = 5 * TICK_HZ;
+/** ...and lights the whole arena for 0.7 s (rising in FLASH_RISE ticks, fading over FLASH_FADE at its end) */
+export const FLASH_TICKS = 42;
 export const FLASH_RISE = 3;
 export const FLASH_FADE = 12;
 /** at the start of a round the lights are on, and go out over the last LIGHTS_FADE of these ticks */
