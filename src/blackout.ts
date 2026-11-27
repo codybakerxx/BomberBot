@@ -2,8 +2,8 @@
  * Blackout, drawn (the owner's design, 27 November 2026: a pitch black map, a flash of light now and then, a
  * flashlight power-up; black and white tiles, solid blocks as triangular chrome spikes, reflective like a mirror,
  * a punk rock look). Reads the world, never changes it; render.ts calls these:
- * - drawCheck, drawChrome, drawSpeaker: one tile of floor (black and white checks), a solid block (a sleek
- *   mirror-chrome block), a breakable block (a battered speaker cabinet with studs, tape and stickers)
+ * - drawCheck, drawStud, drawSpeaker: one tile of floor (black and white checks), a solid block (a
+ *   mirror-chrome pyramid stud), a breakable block (a battered speaker cabinet with studs, tape and stickers)
  * - drawDark (every frame, over the round, under the planes): the dark itself. Nothing shows but what is lit:
  *   the whole arena while the flash is on (sim.ts `flashLight`), and round each light (`lights`): a flashlight's
  *   3 tiles, a bomb and its burning fuse, a blast, a flashlight lying on the floor. No robot glows, yours
@@ -55,37 +55,68 @@ export function drawCheck(ctx: Ctx, x: number, y: number, px: number, py: number
 // ---------------------------------------------------------------- the solid blocks
 
 /**
- * A sleek chrome block (the owner's ask, 27 November 2026: the spikes he first had were too busy). Mirror chrome
- * is a few smooth bands with one sharp horizon: bright sky reflected above, a dark band below it, the floor's
- * grey at the foot; a thin bright bevel on the top and left edges, a dark one on the bottom and right, and one
- * soft diagonal glint. Nothing else on it.
+ * A chrome pyramid stud (the owner's design, from his reference photo of pyramid studs, 27 November 2026): the
+ * whole block is a square pyramid seen from above, four triangular faces meeting at a point in the middle,
+ * mirror chrome. The light comes from the top left, so the top face is brightest, the left next, the right
+ * dark and the bottom darkest; each face has the hard-edged bands of a mirror (a dark horizon across it), the
+ * ridges up from the lit corners catch a thin white line, and the point has a glint. (A triangle standing on a
+ * studded plate came first, and a flat chrome block for an hour: neither read as a block.)
  */
-export function drawChrome(ctx: Ctx, px: number, py: number, T: number, joined: boolean, deco: number): void {
-  const face = ctx.createLinearGradient(px, py, px, py + T);
-  const h = 0.46 + (deco - 0.5) * 0.04; // (each block's horizon a hair higher or lower)
-  face.addColorStop(0, '#fbfcfe');
-  face.addColorStop(h - 0.12, '#d3d9e3');
-  face.addColorStop(h - 0.005, '#aeb6c3');
-  face.addColorStop(h, '#3a3f4a');
-  face.addColorStop(h + 0.14, '#585e6b');
-  face.addColorStop(1, joined ? '#6c7280' : '#9aa1ae');
-  ctx.fillStyle = face;
+export function drawStud(ctx: Ctx, px: number, py: number, T: number, joined: boolean, deco: number): void {
+  const g = Math.max(1, T * 0.02); // a hairline gap round each stud, so neighbours read as separate blocks
+  const x0 = px + g;
+  const y0 = py + g;
+  const x1 = px + T - g;
+  const y1 = py + T - g;
+  const ax = px + T * (0.5 + (deco - 0.5) * 0.03);
+  const ay = py + T * (0.5 + (deco - 0.5) * 0.03);
+  ctx.fillStyle = '#050506';
   ctx.fillRect(px, py, T, T);
-  // a soft glint across it, top left to bottom right
-  const glint = ctx.createLinearGradient(px, py + T * 0.1, px + T, py + T * 0.9);
-  glint.addColorStop(0.3, 'rgba(255,255,255,0)');
-  glint.addColorStop(0.42, 'rgba(255,255,255,0.4)');
-  glint.addColorStop(0.5, 'rgba(255,255,255,0)');
-  ctx.fillStyle = glint;
-  ctx.fillRect(px, py, T, T);
-  // the bevel
-  const e = Math.max(1, Math.round(T * 0.05));
-  ctx.fillStyle = 'rgba(255,255,255,0.9)';
-  ctx.fillRect(px, py, T, e);
-  ctx.fillRect(px, py, e, T);
-  ctx.fillStyle = 'rgba(10,12,18,0.75)';
-  ctx.fillRect(px, py + T - e, T, e);
-  ctx.fillRect(px + T - e, py, e, T);
+  /** one face, from the middle of its base edge (bx, by) up to the point, banded like a mirror */
+  const face = (pts: number[][], bx: number, by: number, stops: [number, string][]): void => {
+    const grad = ctx.createLinearGradient(bx, by, ax, ay);
+    for (const [o, c] of stops) grad.addColorStop(o, c);
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.moveTo(pts[0][0], pts[0][1]);
+    for (const q of pts.slice(1)) ctx.lineTo(q[0], q[1]);
+    ctx.closePath();
+    ctx.fill();
+  };
+  // top: brightest, sky with a sharp dark horizon low down
+  face([[x0, y0], [x1, y0], [ax, ay]], (x0 + x1) / 2, y0, [[0, '#cfd6e1'], [0.22, '#f6f8fc'], [0.23, '#4a505c'], [0.4, '#8a919e'], [0.41, '#ffffff'], [1, '#e8edf4']]);
+  // left: lit, a little darker
+  face([[x0, y0], [ax, ay], [x0, y1]], x0, (y0 + y1) / 2, [[0, '#8f96a3'], [0.3, '#c6cdd8'], [0.31, '#353a44'], [0.48, '#6b7280'], [0.49, '#dfe4ec'], [1, '#aeb5c1']]);
+  // right: in shade, one bright streak
+  face([[x1, y0], [x1, y1], [ax, ay]], x1, (y0 + y1) / 2, [[0, '#0c0d11'], [0.36, '#23262e'], [0.37, '#9aa1ae'], [0.45, '#2c3039'], [1, '#5a606c']]);
+  // bottom: darkest
+  face([[x0, y1], [ax, ay], [x1, y1]], (x0 + x1) / 2, y1, [[0, '#050608'], [0.5, '#15171c'], [0.51, '#4b505b'], [0.6, '#16181d'], [1, joined ? '#2a2d35' : '#3b3f49']]);
+  // the ridges: white up from the lit corner, dark down to the shaded one
+  ctx.lineCap = 'round';
+  ctx.lineWidth = Math.max(1, T * 0.018);
+  ctx.strokeStyle = 'rgba(255,255,255,0.95)';
+  ctx.beginPath();
+  ctx.moveTo(x0, y0);
+  ctx.lineTo(ax, ay);
+  ctx.stroke();
+  ctx.strokeStyle = 'rgba(255,255,255,0.45)';
+  ctx.beginPath();
+  ctx.moveTo(x1, y0);
+  ctx.lineTo(ax, ay);
+  ctx.moveTo(x0, y1);
+  ctx.lineTo(ax, ay);
+  ctx.stroke();
+  ctx.strokeStyle = 'rgba(0,0,0,0.55)';
+  ctx.beginPath();
+  ctx.moveTo(x1, y1);
+  ctx.lineTo(ax, ay);
+  ctx.stroke();
+  // the point's glint
+  const tip = ctx.createRadialGradient(ax, ay, 0, ax, ay, T * 0.1);
+  tip.addColorStop(0, 'rgba(255,255,255,0.85)');
+  tip.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = tip;
+  ctx.fillRect(ax - T * 0.1, ay - T * 0.1, T * 0.2, T * 0.2);
 }
 
 // ---------------------------------------------------------------- the breakable blocks

@@ -14,7 +14,7 @@ import { TEAMS, type MapId } from './setup';
 export { warmRobots } from './robot';
 import { drawBarrel, drawCrossing, drawLitTnt, drawRails, drawTrain, railWalls } from './railway';
 import { drawFactory, drawFactoryLive, drawMachine, drawBox, drawPlate, boxOnBelt } from './factory';
-import { drawCheck, drawChrome, drawSpeaker, drawDark } from './blackout';
+import { drawCheck, drawStud, drawSpeaker, drawDark } from './blackout';
 import { World, FLOOR, HARD, SOFT, TNT, FLAME_TICKS, DEATH_TICKS, GHOST_TICKS, SHIELD_GRACE_TICKS, FALL_TICKS, TICK_HZ, ItemKind, Player, Bomb, FLY_TICKS_PER_TILE, THROW_TILES, FUSE_TICKS, CARRY_FUSE_TICKS, DX, DY, DROP_TICKS, TURN_STEPS, allies, angelAim, angelReach, perimeterAt, POOF_TICKS, wireSpot, type Decoy, type Wire } from './sim';
 
 export interface BotColor {
@@ -181,7 +181,7 @@ export function setMap(id: MapId): void {
 /** Solid block: fills its whole tile. `joined`: another solid block is right below it (its front is hidden). `deco`: see drawRock. */
 export function drawHard(ctx: Ctx, px: number, py: number, T: number, map: MapId = mapNow, joined = false, deco = 1): void {
   if (map === 'factory') drawMachine(ctx, px, py, T, joined, deco >= 1 ? 0.3 : deco);
-  else if (map === 'blackout') drawChrome(ctx, px, py, T, joined, deco >= 1 ? 0.5 : deco);
+  else if (map === 'blackout') drawStud(ctx, px, py, T, joined, deco >= 1 ? 0.5 : deco);
   else if (map === 'western') drawRock(ctx, px, py, T, joined, deco);
   else if (map === 'ice') drawSnowRock(ctx, px, py, T, joined, deco);
   else drawSteel(ctx, px, py, T);
