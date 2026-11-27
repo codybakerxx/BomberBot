@@ -21,8 +21,6 @@ import type { Dir } from './sim';
 export const HAIL_SECONDS = 4.6;
 /** The fade at the end (and after a skip), seconds. */
 const FADE = 0.3;
-/** The two lines of letters. */
-const LINES = ['ALL HAIL', 'THE HUMAN'];
 /** The first letter lands this long after the start; each next one this much later; the second line a little after the first. */
 const FIRST = 0.18;
 const EVERY = 0.07;
@@ -39,14 +37,54 @@ const HOP_IN = 0.75;
 const BOW_AT = 1.95;
 const BOW_TIME = 1.1;
 const BOW_DEEP = 0.55;
-/** Fireworks: from, until, and about how often a rocket goes up. */
-const FIRE_FROM = 1.15;
-const FIRE_UNTIL = 4.0;
-const FIRE_EVERY = 0.26;
-/** The line under the robots, and when it comes up. */
-const TAGLINE = 'Hard mode CPUs have been… humbled.';
-const TAG_AT = 2.25;
-const TAP_AT = 3.0;
+
+/**
+ * What plays: ALL HAIL THE HUMAN, or the plain YOU WON! (the owner's ask, 27 November 2026: a normal win
+ * animation for every other match won, not special like the first). Fireworks run from `fireFrom` to
+ * `fireUntil`, a rocket about every `fireEvery` seconds.
+ */
+export interface Show {
+  lines: string[];
+  seconds: number;
+  fireFrom: number;
+  fireUntil: number;
+  fireEvery: number;
+  /** the line under the robots, when it comes up, and when "Tap to continue" does (none: no such lines) */
+  tagline?: string;
+  tagAt: number;
+  tapAt: number;
+  /** how dark the screen behind goes */
+  backdrop: number;
+  /** your robot and the CPU players bowing (ALL HAIL THE HUMAN only) */
+  stage: boolean;
+}
+export const HAIL: Show = {
+  lines: ['ALL HAIL', 'THE HUMAN'],
+  seconds: HAIL_SECONDS,
+  fireFrom: 1.15,
+  fireUntil: 4.0,
+  fireEvery: 0.26,
+  tagline: 'Hard mode CPUs have been… humbled.',
+  tagAt: 2.25,
+  tapAt: 3.0,
+  backdrop: 0.9,
+  stage: true,
+};
+/**
+ * YOU WON!: every match you win but the special one. Shorter and lighter: the letters and a few fireworks
+ * over the arena, darkened only a little so your robot's victory dance shows through. No robots of its own.
+ */
+export const YOU_WON: Show = {
+  lines: ['YOU WON!'],
+  seconds: 2.6,
+  fireFrom: 0.5,
+  fireUntil: 2.2,
+  fireEvery: 0.3,
+  tagAt: 99,
+  tapAt: 99,
+  backdrop: 0.5,
+  stage: false,
+};
 
 export interface HailCast {
   /** your robot's colour */
@@ -101,9 +139,9 @@ function rand(seed: number): () => number {
 const ease = (k: number): number => 1 - Math.pow(1 - Math.max(0, Math.min(1, k)), 3);
 
 /** When each letter lands, line by line (spaces get none). */
-function landings(): number[][] {
+function landings(lines: string[]): number[][] {
   let t = FIRST;
-  return LINES.map((line, li) => {
+  return lines.map((line, li) => {
     if (li > 0) t += LINE_GAP;
     return [...line].map((ch) => {
       if (ch === ' ') return -1;
@@ -114,10 +152,10 @@ function landings(): number[][] {
   });
 }
 /** When each word's last letter lands: one thud a word. */
-function thuds(): number[] {
+function thuds(lines: string[]): number[] {
   const out: number[] = [];
-  const at = landings();
-  LINES.forEach((line, li) => {
+  const at = landings(lines);
+  lines.forEach((line, li) => {
     [...line].forEach((ch, i) => {
       if (ch !== ' ' && (i === line.length - 1 || line[i + 1] === ' ')) out.push(at[li][i]);
     });
@@ -125,7 +163,7 @@ function thuds(): number[] {
   return out;
 }
 /** The time the last letter lands. */
-export const LETTERS_DONE = Math.max(...landings().flat());
+export const lettersDone = (show: Show): number => Math.max(...landings(show.lines).flat());
 
 /**
  * Where the CPU players stand: a half circle round your robot, those on the left facing right and those on
@@ -149,21 +187,30 @@ export function ring(n: number): { x: number; y: number; facing: Dir; from: numb
   return out;
 }
 
-/** Play it over the whole screen. Returns a function that skips it. */
+/** ALL HAIL THE HUMAN over the whole screen. Returns a function that skips it. */
 export function playHail(cast: HailCast, hooks: HailHooks): () => void {
+  return playShow(HAIL, cast, hooks);
+}
+/** YOU WON! over the whole screen (`cast.cpus` is not used). Returns a function that skips it. */
+export function playWon(hero: BotColor, hooks: HailHooks): () => void {
+  return playShow(YOU_WON, { hero, cpus: [] }, hooks);
+}
+
+function playShow(show: Show, cast: HailCast, hooks: HailHooks): () => void {
+  const LINES = show.lines;
   const box = document.getElementById('hail') as HTMLDivElement;
   const cv = document.getElementById('hailCv') as HTMLCanvasElement;
   const ctx = cv.getContext('2d')!;
   const r = rand((Date.now() & 0xffff) * 2654435761);
   const spots = ring(cast.cpus.length);
-  const lands = landings();
-  const thudAt = thuds();
+  const lands = landings(LINES);
+  const thudAt = thuds(LINES);
   let thudNext = 0;
   const rockets: Rocket[] = [];
   const sparks: Spark[] = [];
-  let nextRocket = FIRE_FROM;
+  let nextRocket = show.fireFrom;
   let start = -1;
-  let endAt = HAIL_SECONDS; // when the fade starts (sooner after a skip)
+  let endAt = show.seconds; // when the fade starts (sooner after a skip)
   let raf = 0;
   let gone = false;
   let shakeAt = -1;
@@ -239,7 +286,7 @@ export function playHail(cast: HailCast, hooks: HailHooks): () => void {
     ctx.globalAlpha = fade;
 
     // the backdrop: the round darkened behind, a warm glow rising from the stage
-    ctx.fillStyle = `rgba(5, 7, 16, ${0.9 * ease(t / 0.25)})`;
+    ctx.fillStyle = `rgba(5, 7, 16, ${show.backdrop * ease(t / 0.25)})`;
     ctx.fillRect(0, 0, W, H);
 
     // the stage: sizes from the screen
@@ -247,7 +294,7 @@ export function playHail(cast: HailCast, hooks: HailHooks): () => void {
     const feetY = H * (W > H ? 0.8 : 0.62);
     const cx = W / 2;
     const glow = ctx.createRadialGradient(cx, feetY, 0, cx, feetY, Math.max(W, H) * 0.55);
-    glow.addColorStop(0, hexA(cast.hero.glow, 0.28 * ease((t - HERO_AT) / 0.6)));
+    glow.addColorStop(0, hexA(cast.hero.glow, (show.stage ? 0.28 : 0.12) * ease((t - (show.stage ? HERO_AT : 0.3)) / 0.6)));
     glow.addColorStop(1, 'rgba(0,0,0,0)');
     ctx.fillStyle = glow;
     ctx.fillRect(0, 0, W, H);
@@ -274,7 +321,7 @@ export function playHail(cast: HailCast, hooks: HailHooks): () => void {
 
     // the robots: made one a frame while the letters land, so none is made mid-animation
     px = Math.max(4, Math.round(tile * d));
-    if (warmed <= cast.cpus.length) {
+    if (show.stage && warmed <= cast.cpus.length) {
       ctx.save();
       ctx.globalAlpha = 0;
       if (warmed === 0) {
@@ -286,15 +333,15 @@ export function playHail(cast: HailCast, hooks: HailHooks): () => void {
       warmed++;
       ctx.restore();
     }
-    drawStage(t, tile, cx, feetY, W);
+    if (show.stage) drawStage(t, tile, cx, feetY, W);
 
     // the letters
     drawLetters(t, W, H);
     ctx.restore();
 
     // the line under, and how to go on
-    if (t >= TAG_AT) {
-      const k = ease((t - TAG_AT) / 0.4);
+    if (show.tagline && t >= show.tagAt) {
+      const k = ease((t - show.tagAt) / 0.4);
       ctx.save();
       ctx.globalAlpha = fade * k;
       ctx.textAlign = 'center';
@@ -305,9 +352,9 @@ export function playHail(cast: HailCast, hooks: HailHooks): () => void {
       ctx.shadowColor = 'rgba(0,0,0,0.8)';
       ctx.shadowBlur = 6;
       const y = Math.min(H - fs * 2.2, feetY + tile * 0.55 + (1 - k) * 8);
-      fitText(TAGLINE, cx, y, W * 0.92);
-      if (t >= TAP_AT) {
-        ctx.globalAlpha = fade * ease((t - TAP_AT) / 0.4) * (0.55 + 0.25 * Math.sin(t * 5));
+      fitText(show.tagline, cx, y, W * 0.92);
+      if (t >= show.tapAt) {
+        ctx.globalAlpha = fade * ease((t - show.tapAt) / 0.4) * (0.55 + 0.25 * Math.sin(t * 5));
         ctx.font = `500 ${fs * 0.72}px "Chakra Petch", system-ui, sans-serif`;
         ctx.fillStyle = '#c9cfe0';
         ctx.fillText('Tap to continue', cx, Math.min(H - fs, y + fs * 1.5));
@@ -337,11 +384,12 @@ export function playHail(cast: HailCast, hooks: HailHooks): () => void {
     const at = (px: number): string => `700 ${px}px "Chakra Petch", "Trebuchet MS", system-ui, sans-serif`;
     ctx.font = at(100);
     const widest = Math.max(...LINES.map((l) => ctx.measureText(l).width * (1 + 0.04 * l.length / 4)));
-    const fs = Math.round(Math.min((100 * W * 0.92) / widest, H * (wide ? 0.15 : 0.11), 120));
+    const fs = Math.round(Math.min((100 * W * (show.stage ? 0.92 : 0.8)) / widest, H * (wide ? 0.15 : 0.11), 120));
     ctx.font = at(fs);
     ctx.textBaseline = 'alphabetic';
     ctx.textAlign = 'left';
-    const top = H * (wide ? 0.05 : 0.1) + fs * 0.85;
+    // (YOU WON! sits lower, over the middle of the arena)
+    const top = H * (show.stage ? (wide ? 0.05 : 0.1) : wide ? 0.32 : 0.2) + fs * 0.85;
     LINES.forEach((line, li) => {
       const track = fs * 0.04; // a little room between letters
       const widths = [...line].map((ch) => ctx.measureText(ch).width + track);
@@ -455,8 +503,8 @@ export function playHail(cast: HailCast, hooks: HailHooks): () => void {
 
   /** Rockets going up and bursting in your colour and gold, with a little gravity on the sparks. */
   function fireworks(t: number, W: number, H: number, feetY: number, fade: number): void {
-    const every = hooks.calm ? FIRE_EVERY * 2 : FIRE_EVERY;
-    while (t >= nextRocket && nextRocket < FIRE_UNTIL) {
+    const every = hooks.calm ? show.fireEvery * 2 : show.fireEvery;
+    while (t >= nextRocket && nextRocket < show.fireUntil) {
       rockets.push({ x: W * (0.12 + r() * 0.76), y: feetY, toY: H * (0.12 + r() * 0.38), born: nextRocket, rise: 0.45 + r() * 0.2, col: colours[Math.floor(r() * colours.length)], burst: false });
       nextRocket += every * (0.6 + r() * 0.8);
     }

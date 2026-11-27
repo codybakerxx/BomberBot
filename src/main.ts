@@ -26,7 +26,7 @@ import { CpuSlot, Guest, ITEM_NAMES, MatchSetup, Prefs, SHARPNESS, SOUND_GROUPS,
 import { BOMB_ICON, Opt, answerConfirm, choice, confirmFirst, confirmOpen, group, heading, mount, note, slider, toggle, wireConfirm, wireFlash } from './ui';
 import { Hand, DEFAULT_SENS, OLD_SENS, SENS_DEG, SENS_MAX, STRAIGHT, sensTilt, standardAims } from './swipe';
 import { Online } from './online';
-import { playHail } from './hail';
+import { playHail, playWon } from './hail';
 import { BUBBLE_TAIL, createBubbles, createChat, createQuickMenu } from './quick';
 import { canInstall, howToAdd, install, isApple, myEndpoint, onWebsite, pushOff, pushOn, pushRefresh, pushState, pushTest, type PushState } from './app';
 import { decodeWorld, packInput, readCode, unpackInput, type BellAnswer, type Score, type Seat, type ServerMsg } from './net';
@@ -1102,25 +1102,36 @@ function hailWorthy(): boolean {
   return onSide(mi, matchWinner) && bots.every((b) => b.level === 'hard' && !onSide(b.id, matchWinner));
 }
 let hailing = false;
+/** The sounds and settings the win animations need, and `then` once one has gone. */
+function showHooks(then: () => void) {
+  hailing = true;
+  return {
+    slam: sfx.slam,
+    firework: sfx.firework,
+    density,
+    calm: prefs.calm,
+    done: () => {
+      hailing = false;
+      then();
+    },
+  };
+}
 /** Play ALL HAIL THE HUMAN over the screen, then `then` (the result panel). */
 function hail(then: () => void): void {
-  hailing = true;
   playHail(
     {
       hero: colorById(world.players[myIdx()].colorId),
       cpus: bots.map((b) => colorById(world.players[b.id].colorId)),
     },
-    {
-      slam: sfx.slam,
-      firework: sfx.firework,
-      density,
-      calm: prefs.calm,
-      done: () => {
-        hailing = false;
-        then();
-      },
-    },
+    showHooks(then),
   );
+}
+/**
+ * YOU WON! (the owner's ask, 27 November 2026): every match you or your team win but the special one,
+ * on this screen and online (not with other people on this screen, where the panel names the winner), then `then`.
+ */
+function won(then: () => void): void {
+  playWon(colorById(world.players[myIdx()].colorId), showHooks(then));
 }
 
 /** The result panel for a decided round (the score already counted). */
@@ -1145,8 +1156,10 @@ function announce(): void {
   } else if (matchWinner >= 0 && onSide(mi, matchWinner)) {
     const title = teams ? 'Your team wins the match' : 'You win the match';
     const text = `${teams ? `${sideName(matchWinner)}. ` : ''}First to ${setup.firstTo}. Final score ${scoreLine()}.`;
-    if (hailWorthy()) hail(() => finish(title, text));
-    else finish(title, text);
+    const menuUp = mode === 'pause' || mode === 'settings'; // (online the menu may be open: no animation then)
+    if (menuUp) finish(title, text);
+    else if (hailWorthy()) hail(() => finish(title, text));
+    else won(() => finish(title, text));
   }
   else if (matchWinner >= 0) finish(`${sideName(matchWinner)} wins the match`, `First to ${setup.firstTo}. Final score ${scoreLine()}.${me.alive ? '' : ' ' + how}`);
   else if (winner >= 0 && onSide(mi, winner)) finish(teams ? 'Your team wins the round' : 'You win the round', `${teams ? `${sideName(winner)}, last side standing.` : 'Last bot standing.'} ${wins[mi]} of ${setup.firstTo} to win the match.`);
@@ -3186,6 +3199,10 @@ requestAnimationFrame(frame);
   /** play ALL HAIL THE HUMAN now with the round's robots, whatever the score (tools/screenshots.py) */
   hail(): void {
     hail(() => {});
+  },
+  /** play YOU WON! now (tools) */
+  won(): void {
+    won(() => {});
   },
   get hailing() {
     return hailing;

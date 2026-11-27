@@ -3,7 +3,7 @@
  * before the robots come in. The animation itself has to be seen on a phone.
  */
 import assert from 'node:assert/strict';
-import { ring, HAIL_SECONDS, LETTERS_DONE } from '../src/hail';
+import { ring, HAIL, HAIL_SECONDS, YOU_WON, lettersDone } from '../src/hail';
 import { SOUND_GROUPS, SOUND_NAMES } from '../src/setup';
 
 for (let n = 1; n <= 7; n++) {
@@ -18,7 +18,8 @@ for (let n = 1; n <= 7; n++) {
   // no two in the same place
   for (let i = 0; i < n; i++) for (let j = i + 1; j < n; j++) assert.ok(Math.hypot(r[i].x - r[j].x, r[i].y - r[j].y) > 0.25, `${n}: ${i} and ${j} apart`);
 }
-assert.ok(LETTERS_DONE < 1.6 && LETTERS_DONE < HAIL_SECONDS - 2, 'the letters are down well before the end');
+assert.ok(lettersDone(HAIL) < 1.6 && lettersDone(HAIL) < HAIL_SECONDS - 2, 'the letters are down well before the end');
+assert.ok(lettersDone(YOU_WON) < 1 && YOU_WON.seconds < HAIL_SECONDS && !YOU_WON.stage, 'YOU WON! is quicker and plainer');
 for (const id of ['slam', 'firework']) {
   assert.ok(SOUND_NAMES.some(([s]) => s === id), `a sound switch for ${id}`);
   assert.ok(SOUND_GROUPS.some(([, ids]) => ids.includes(id)), `${id} in a group`);

@@ -351,6 +351,10 @@ The numbers are Claude's, to be play-tested.
 - Once a round is decided, nothing more can happen to the winner, no more blocks start to fall, and nobody moves.
 - The other bots are CPU players, each at the level the lobby gave it. Be the last one in and the round is won.
 
+### You won!
+
+- Every other match you (or your team) win, on your own screen or online, **YOU WON!** slams down in gold over the arena with a few fireworks, about 2.6 seconds, before the result panel. A tap skips it. Your robot's victory dance shows through behind it.
+
 ### All hail the human
 
 *src/hail.ts, `hailWorthy` in main.ts (the owner's design, 27 November 2026)*
