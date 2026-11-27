@@ -65,6 +65,8 @@ import {
   FLAME_TICKS,
   FALL_TICKS,
   TICK_HZ,
+  lights,
+  isLit,
   keptOpen,
   blockLandTick,
   CHAIN_TICKS,
@@ -341,6 +343,8 @@ export interface Bot {
   aimOff: [number, number];
   aimCarry: number;
   aimFor: number;
+  /** Blackout: where it last saw each rival, and when (`inView`) */
+  seen: Map<number, { x: number; y: number; at: number }>;
   /** running from a blast: the tile it last looked for a bomb to drop on the way out from (combos), -1 none */
   shotFrom: number;
   /** holding a trip wire: the tile it last thought about stringing it on as it went through (`wireBehind`), -1 none */
@@ -371,6 +375,7 @@ export function createBot(id: number, level: BotLevel, seed: number): Bot {
     aimOff: [0, 0],
     aimCarry: 0,
     aimFor: -1,
+    seen: new Map(),
   };
 }
 
@@ -1713,7 +1718,8 @@ function kickShot(c: Ctx): PlayerInput | null {
   if (!me.canKick || me.carrying) return null;
   const sx = S % world.w;
   const sy = (S - sx) / world.w;
-  const enemies = world.players.filter((p) => p.alive && p.id !== me.id && !(me.zombie && p.zombie) && !allies(me, p));
+  // (on Blackout only the rivals it can see: elsewhere every robot, as before)
+  const enemies = (world.dark ? inView(world, bot) : world.players).filter((p) => p.alive && p.id !== me.id && !(me.zombie && p.zombie) && !allies(me, p));
   for (const d of shuffled(bot.rng)) {
     const b = groundBombAt(world, sx + DX[d], sy + DY[d]);
     if (!b || b.slide || !enemyAlong(c, enemies, sx + DX[d], sy + DY[d], d)) continue;
@@ -1837,7 +1843,7 @@ function runShot(c: Ctx): PlayerInput | null {
   if (me.carrying || me.activeBombs >= Math.min(me.bombsMax, spec.maxBombs) || groundBombAt(world, sx, sy)) return null;
   if ((bot.avoid.get(S) ?? 0) > world.tick) return null;
   const what = [{ cx: sx, cy: sy, range: me.fire, fuse: FUSE_TICKS }];
-  for (const e of world.players) {
+  for (const e of world.dark ? inView(world, bot) : world.players) {
     if (!e.alive || e.id === me.id || allies(me, e) || (me.zombie && e.zombie)) continue;
     if (Math.abs(Math.round(e.x) - sx) + Math.abs(Math.round(e.y) - sy) > me.fire + 3) continue;
     if (!boxedIn(c, e, what, S)) continue;
@@ -1907,7 +1913,7 @@ function wireBehind(c: Ctx, d: Dir): boolean {
   const off = d <= 2 ? (me.y - sy) * DY[d] : (me.x - sx) * DX[d];
   if (off > 0.2) return false;
   bot.wireTile = S; // (one go at each tile it crosses)
-  const rivals = inView(world).filter((e) => e.alive && e.id !== me.id && !allies(me, e));
+  const rivals = inView(world, bot).filter((e) => e.alive && e.id !== me.id && !allies(me, e));
   const from = (t: number): number => {
     const x = t % world.w;
     const y = (t - x) / world.w;
@@ -1987,7 +1993,7 @@ function pilot(c: Ctx): PlayerInput {
   bot.goal = 'none';
   // (a press must be fresh: B is let go for a tick first if it was held)
   if (urgent(D, S, Math.min(spec.blockSight, BLOCK_URGENT))) return { dir: 0, a: false, b: !me.prevB };
-  const rivals = inView(world).filter((p) => p.alive && p.id !== me.id && !p.zombie && !allies(me, p));
+  const rivals = inView(world, bot).filter((p) => p.alive && p.id !== me.id && !p.zombie && !allies(me, p));
   if (!rivals.length || me.planeBombs <= 0) return NONE; // (it comes home by itself)
   let target = rivals[0];
   let best = Infinity;
@@ -2054,9 +2060,35 @@ function pilot(c: Ctx): PlayerInput {
  * The robots it can see in the arena: every player, and every decoy that is up. A decoy looks just like its
  * robot (it is its owner's copy, with its id), so a CPU player cannot tell them apart and goes after decoys too.
  */
-function inView(world: World): Player[] {
-  return world.decoys.length ? [...world.players, ...world.decoys.filter((d) => d.popped < 0)] : world.players;
+function inView(world: World, bot?: Bot): Player[] {
+  const all = world.decoys.length ? [...world.players, ...world.decoys.filter((d) => d.popped < 0)] : world.players;
+  if (!world.dark || !bot) return all;
+  // Blackout (the owner's pick, 27 November 2026: CPU players blind like you): a rival is seen only while it is
+  // lit (a flash, a flashlight's reach, a bomb's or a blast's glow: sim.ts `isLit`); one seen in the last
+  // SEEN_FOR ticks is still gone after where it was last seen; one not seen for longer is not known of at all.
+  // They still know the map and every bomb (a bomb's fuse lights it).
+  const ls = lights(world);
+  const out: Player[] = [];
+  let k = 0;
+  for (const p of all) {
+    const decoy = 'popped' in p;
+    if (!decoy && p.id === bot.id) {
+      out.push(p);
+      continue;
+    }
+    const key = decoy ? 1000 + k++ : p.id;
+    if (isLit(world, p.x, p.y, ls)) {
+      bot.seen.set(key, { x: p.x, y: p.y, at: world.tick });
+      out.push(p);
+      continue;
+    }
+    const m = bot.seen.get(key);
+    if (m && world.tick - m.at <= SEEN_FOR) out.push({ ...p, x: m.x, y: m.y });
+  }
+  return out;
 }
+/** Blackout: how long a CPU player remembers where it last saw a rival in the dark (3 s) */
+const SEEN_FOR = 3 * TICK_HZ;
 
 function shuffled(rng: () => number): Dir[] {
   const out: Dir[] = [1, 2, 3, 4];
@@ -2075,7 +2107,7 @@ function decide(c: Ctx): PlayerInput | null {
   const sy = (S - sx) / world.w;
   // (a zombie goes after the robots still in the round, not other zombies; nobody goes after a teammate; a decoy
   // looks just like its robot, so it is gone after too)
-  const enemies = inView(world).filter((p) => p.alive && p.id !== me.id && !(me.zombie && p.zombie) && !allies(me, p));
+  const enemies = inView(world, bot).filter((p) => p.alive && p.id !== me.id && !(me.zombie && p.zombie) && !allies(me, p));
   const wasIdle = bot.path.length === 0;
   // (holding a trip wire between two solid blocks, B strings it: not the moment to fly a plane)
   const strings = me.wires > 0 && !me.carrying ? wireSpot(world, sx, sy) : null;
@@ -2620,8 +2652,8 @@ function angelInput(world: World, bot: Bot, me: Player): PlayerInput {
   // the robot to go for: the nearest one still standing
   let target: Player | null = null;
   let bestD = Infinity;
-  for (const p of world.players) {
-    if (!p.alive || p.id === me.id || allies(me, p)) continue;
+  for (const p of inView(world, bot)) {
+    if (!p.alive || p.id === me.id || allies(me, p) || 'popped' in p) continue;
     const d = Math.abs(p.x - here.x) + Math.abs(p.y - here.y);
     if (d < bestD) {
       bestD = d;

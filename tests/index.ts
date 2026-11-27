@@ -15,6 +15,7 @@ import './ice.test';
 import './factory.test';
 import './decoy.test';
 import './hail.test';
+import './dark.test';
 import './room.test';
 import './predict.test';
 import './push.test';

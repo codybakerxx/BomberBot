@@ -135,6 +135,7 @@ let laptopTipShown = false;
 /** the tip that a train is coming has been shown this match (the first time its bell rings) */
 /** the first decoy, and the first trip wire, picked up here in a match get a tip saying what they do */
 let decoyTipShown = false;
+let torchTipShown = false;
 let wireTipShown = false;
 const playTip = $('playTip');
 /** The bubbles over the robots: what each said in the quick chat (quick.ts) */
@@ -919,6 +920,7 @@ function soundOf(e: GameEvent): void {
   else if (e.type === 'train') sfx.train();
   else if (e.type === 'alarm') sfx.alarm();
   else if (e.type === 'reverse') sfx.reverse();
+  else if (e.type === 'flash') sfx.flash();
   else if (e.type === 'pickup') e.kind === 'curse' ? sfx.curse() : sfx.pickup();
   else if (e.type === 'shield') sfx.shield();
   else if (e.type === 'kick' || e.type === 'throw') sfx.kick();
@@ -996,13 +998,15 @@ function advance(inputs: (PlayerInput | undefined)[]): void {
     }
   }
   for (const [kind, tip] of [
+    ['torch', 'flashlight! It lights 3 tiles round you for 15 s'],
     ['decoy', 'decoy! Two copies of you copy your moves for 15 s'],
     ['wire', 'trip wire! Between two blocks, B strings it. Walk into it and the lane blows'],
   ] as const) {
-    if (kind === 'decoy' ? decoyTipShown : wireTipShown) continue;
+    if (kind === 'decoy' ? decoyTipShown : kind === 'torch' ? torchTipShown : wireTipShown) continue;
     const got = world.events.find((e) => e.type === 'pickup' && e.kind === kind && (net ? e.player === mi : human(e.player)));
     if (got && got.type === 'pickup') {
       if (kind === 'decoy') decoyTipShown = true;
+      else if (kind === 'torch') torchTipShown = true;
       else wireTipShown = true;
       showTip(`${couch() ? `${nameOf(got.player)}: a` : 'A'} ${tip}`);
     }
@@ -1829,6 +1833,7 @@ function fillHero(): void {
   if (decoys.length) list.push(item('decoy', `${Math.ceil(Math.max(...decoys.map((d) => d.until - world.tick)) / TICK_HZ)}s`, 'Decoys: seconds left'));
   if (me.shieldTicks > 0) list.push(item('shield', `${Math.ceil(me.shieldTicks / TICK_HZ)}s`, 'Shield: seconds left'));
   if (me.curseTicks > 0) list.push(item('curse', `${Math.ceil(me.curseTicks / TICK_HZ)}s`, 'Cursed: seconds left', true));
+  if (me.torchTicks > 0) list.push(item('torch', `${Math.ceil(me.torchTicks / TICK_HZ)}s`, 'Flashlight: seconds left'));
   if (list.length > 6) list.shift(); // (a full kit: the label gives up its room, so the kit stays on one line)
   kit.replaceChildren(...list);
 }
@@ -1970,6 +1975,20 @@ function showKey(): void {
         g.stroke();
       }
     });
+  }
+  if (world.dark) {
+    // Blackout
+    row('Flash', 'Every 8 seconds a flash lights the whole arena for half a second. Otherwise only bombs, blasts and flashlights light it.', (g, s) => {
+      const glow = g.createRadialGradient(s / 2, s / 2, 0, s / 2, s / 2, s * 0.5);
+      glow.addColorStop(0, '#ffffff');
+      glow.addColorStop(0.35, 'rgba(230,240,255,0.85)');
+      glow.addColorStop(1, 'rgba(230,240,255,0)');
+      g.fillStyle = '#000';
+      g.fillRect(0, 0, s, s);
+      g.fillStyle = glow;
+      g.fillRect(0, 0, s, s);
+    });
+    row('Flashlight', 'Lights 3 tiles round you for 15 seconds. Another one starts the 15 seconds again.', (g, s) => drawItemTile(g, 'torch', s * 0.08, s * 0.08, s * 0.84));
   }
   if (world.belts.length) {
     // the Factory's conveyor belts
@@ -2322,7 +2341,7 @@ function onRound(w: World, s: Seat[], score: Score, fresh: boolean): void {
     redrawStatic();
     return;
   }
-  if (fresh && roundNo <= 1) angelTipShown = laptopTipShown = decoyTipShown = wireTipShown = false; // a new match
+  if (fresh && roundNo <= 1) angelTipShown = laptopTipShown = decoyTipShown = wireTipShown = torchTipShown = false; // a new match
   blastedBy = -1;
   hurried = false;
   overShown = false;
@@ -2583,6 +2602,7 @@ const SOUND_ICONS: Record<string, string> = {
   'Power-ups': '<path d="M12 3.2l2.5 5.4 5.9.6-4.4 4 1.3 5.8L12 16.1 6.7 19l1.3-5.8-4.4-4 5.9-.6z"/>',
   'Falling blocks': '<rect x="5.5" y="13" width="13" height="8" rx="1.5"/><path d="M12 2.5v7M8.8 6.5 12 9.7l3.2-3.2"/>',
   'Knockouts and wins': '<path d="M5.5 21V3.5M5.5 4.5h11l-2.2 4 2.2 4h-11"/>',
+  Blackout: '<path d="M13 2.5 5.5 13.5h5.5l-1 8 7.5-11h-5.5z"/>',
 };
 
 function soundRow(id: string, name: string): Opt {

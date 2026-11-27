@@ -72,6 +72,7 @@ export const MAPS = [
   { id: 'western', name: 'Wild West', solid: 'red rock', soft: 'wooden crates' },
   { id: 'ice', name: 'Frozen Lake', solid: 'snowy rock', soft: 'ice blocks' },
   { id: 'factory', name: 'Factory', solid: 'machines', soft: 'cardboard boxes' },
+  { id: 'blackout', name: 'Blackout', solid: 'chrome spikes', soft: 'speaker stacks' },
 ] as const;
 export type MapId = (typeof MAPS)[number]['id'];
 export function mapOf(s: MatchSetup): (typeof MAPS)[number] {
@@ -638,8 +639,8 @@ export function defaultSetup(myColor: string): MatchSetup {
     startSpeed: 0,
     itemShare: ITEM_SHARE_DEFAULT,
     itemsOn: false,
-    items: { bomb: ITEM_NORMAL, fire: ITEM_NORMAL, speed: ITEM_NORMAL, kick: ITEM_NORMAL, grab: ITEM_NORMAL, shield: ITEM_NORMAL, curse: ITEM_NORMAL, laptop: ITEM_NORMAL, decoy: ITEM_NORMAL, wire: ITEM_NORMAL },
-    itemOn: { bomb: true, fire: true, speed: true, kick: true, grab: true, shield: true, curse: true, laptop: true, decoy: true, wire: true },
+    items: { bomb: ITEM_NORMAL, fire: ITEM_NORMAL, speed: ITEM_NORMAL, kick: ITEM_NORMAL, grab: ITEM_NORMAL, shield: ITEM_NORMAL, curse: ITEM_NORMAL, laptop: ITEM_NORMAL, decoy: ITEM_NORMAL, wire: ITEM_NORMAL, torch: ITEM_NORMAL }, // (the flashlight: Blackout's own, not in Custom power-ups)
+    itemOn: { bomb: true, fire: true, speed: true, kick: true, grab: true, shield: true, curse: true, laptop: true, decoy: true, wire: true, torch: true },
     lives: 1,
     afterlife: 'watch', // watching is the standard: Post-Mortem Behavior off (the owner's call)
     postMortem: false,
@@ -898,6 +899,8 @@ export function worldConfig(s: MatchSetup, myColor: string, seed: number, guests
     ...(s.map === 'ice' ? { ice: true } : {}),
     // the Factory's conveyor belts (the owner's design, 26 November 2026)
     ...(s.map === 'factory' ? { belts: true } : {}),
+    // Blackout: pitch black, with the flash and the flashlight (the owner's design, 27 November 2026)
+    ...(s.map === 'blackout' ? { dark: true } : {}),
   };
 }
 
@@ -1045,6 +1048,7 @@ export const SOUND_NAMES: [string, string][] = [
   ['death', 'Knocked out'],
   ['win', 'Round won'],
   ['slam', 'All hail: letters landing'],
+  ['flash', 'Flash of light'],
   ['firework', 'All hail: fireworks'],
   ['bell', 'Crossing bell'],
   ['train', 'Train'],
@@ -1069,6 +1073,7 @@ export const SOUND_GROUPS: [string, string[]][] = [
   ['Trains and TNT', ['bell', 'train', 'tnt']],
   ['Factory belts', ['alarm', 'reverse']],
   ['Decoys and trip wires', ['decoy', 'poof', 'wire', 'trip']],
+  ['Blackout', ['flash']],
 ];
 
 /**

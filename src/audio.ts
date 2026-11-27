@@ -238,6 +238,12 @@ const sounds = {
     voice({ type: 'square', from: 1047, dur: 0.7, vol: 0.06, at: 0.36, lp: 2400, lpTo: 900, wobble: [6, 6] });
     hiss({ kind: 'highpass', from: 6000, dur: 0.5, vol: 0.04, at: 0.36, attack: 0.05 });
   },
+  /** Blackout: the flash, an electric crack and a buzzing hum as the light dies */
+  flash: (): void => {
+    hiss({ kind: 'highpass', from: 3000, dur: 0.12, vol: 0.28, grit: true });
+    voice({ type: 'sawtooth', from: 120, to: 100, dur: 0.5, vol: 0.06, lp: 900, wobble: [50, 6] });
+    voice({ type: 'square', from: 1800, to: 600, dur: 0.08, vol: 0.05 });
+  },
   /** ALL HAIL THE HUMAN: a word of gold letters slamming down, a deep thud with a metal ring */
   slam: (): void => {
     voice({ type: 'sine', from: 120, to: 42, dur: 0.32, vol: 0.5 });

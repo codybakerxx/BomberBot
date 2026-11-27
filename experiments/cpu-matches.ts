@@ -34,6 +34,8 @@ const WEST = process.env.WEST === '1';
 const ICE = process.env.ICE === '1';
 /** BELTS=1: the Factory's conveyor belts in every arena */
 const BELTS = process.env.BELTS === '1';
+/** DARK=1: the same runs on Blackout (pitch black; CPU players see only what is lit) */
+const DARK = process.env.DARK === '1';
 /** robots a train hit, over the whole run */
 let ranOver = 0;
 /** over the whole run: trip wires strung, robots that walked into one (anyone's), decoys made */
@@ -76,7 +78,7 @@ export interface Use {
  * blocks fall.
  */
 export function playMatch(seed: number, levels: (BotLevel | null)[], maxTicks: number, stopWhenDecided = true, timer = true): Outcome {
-  const world: World = createWorld({ seed, players: levels.map((_, i) => ({ colorId: String(i) })), roundTicks: timer ? undefined : 0, rails: WEST, tnt: WEST, ice: ICE, belts: BELTS });
+  const world: World = createWorld({ seed, players: levels.map((_, i) => ({ colorId: String(i) })), roundTicks: timer ? undefined : 0, rails: WEST, tnt: WEST, ice: ICE, belts: BELTS, dark: DARK });
   const bots: (Bot | null)[] = levels.map((lv, i) => (lv ? createBot(i, lv, seed * 31 + 7) : null));
   const fate: Outcome['fate'] = levels.map(() => 'alive');
   const when = levels.map(() => -1);

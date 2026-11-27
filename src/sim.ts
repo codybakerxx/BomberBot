@@ -46,7 +46,7 @@ export const TNT = 3;
  * that walk when it walks: `makeDecoys`) and the trip wire (B strings it across a gap between two solid blocks;
  * a robot walking into it sets off a blast the length of the lane: `tripWire`).
  */
-export type ItemKind = 'bomb' | 'fire' | 'speed' | 'kick' | 'grab' | 'shield' | 'curse' | 'laptop' | 'decoy' | 'wire';
+export type ItemKind = 'bomb' | 'fire' | 'speed' | 'kick' | 'grab' | 'shield' | 'curse' | 'laptop' | 'decoy' | 'wire' | 'torch';
 
 /**
  * What one player is asking for on one tick. Buttons are sent as "held or
@@ -110,6 +110,8 @@ export interface Player {
   graceTicks: number;
   /** ticks of curse left: while above 0 the robot walks at CURSE_SPEED times the starting speed */
   curseTicks: number;
+  /** ticks of flashlight left (Blackout): while above 0 it lights the arena round it, TORCH_REACH tiles */
+  torchTicks: number;
   /** button states on the previous tick, to notice a fresh press */
   prevA: boolean;
   prevB: boolean;
@@ -329,6 +331,8 @@ export type GameEvent =
   | { type: 'alarm' }
   /** the Factory's belts have turned round */
   | { type: 'reverse' }
+  /** Blackout: the flash of light (every FLASH_EVERY ticks) */
+  | { type: 'flash' }
   /** a player who lost a life is back, at their starting place (or the nearest free tile to it) */
   | { type: 'respawn'; player: number }
   /** an angel's bomb knocked a robot out and, with Angels come back on, the angel took its place */
@@ -491,6 +495,12 @@ export interface World {
   decoys: Decoy[];
   /** the trip wires strung */
   wires: Wire[];
+  /**
+   * Pitch black (the Blackout map; the owner's design, 27 November 2026): nothing is seen but what is lit, by the
+   * flash that comes every FLASH_EVERY ticks (`flashLight`), a flashlight (`torchTicks`) and bombs and blasts
+   * (`lights`). The rules play as anywhere else; what is lit decides what is drawn and what the CPU players see.
+   */
+  dark: boolean;
 }
 
 /** Knocked-out players as angels: off, on (they throw bombs in), or on and able to come back (`revive`). */
@@ -556,6 +566,8 @@ export interface WorldConfig {
   ice?: boolean;
   /** Conveyor belts (World.belts; the Factory map). Default false. */
   belts?: boolean;
+  /** Pitch black (World.dark; the Blackout map), with the flashlight power-up. Default false. */
+  dark?: boolean;
 }
 
 // ---------------------------------------------------------------- constants
@@ -608,6 +620,78 @@ export const ROUND_TICKS = 90 * TICK_HZ; // the timer counts down 1 minute 30 un
 export const SHRINK_TICKS = 50 * TICK_HZ; // once the timer reaches 0 the blocks take 50 seconds to fall (a minute at first; made 20% faster)
 export const FALL_TICKS = 32; // a falling block is in the air, over its shadow, for 0.53 s before it lands (0.75 s at first; made 20% faster to 0.63 s, then 20% faster again, 23 November 2026)
 export const START_FIRE = 1; // a blast reaches one tile each way until a flame power-up is picked up (it was 2)
+
+// ---- Blackout (the owner's design, 27 November 2026; his picks asked: every 8 s for half a second; 15 s and 3 tiles)
+/** the flash comes every 8 s... */
+export const FLASH_EVERY = 8 * TICK_HZ;
+/** ...and lights the whole arena for half a second (rising in FLASH_RISE ticks, fading over FLASH_FADE at its end) */
+export const FLASH_TICKS = 30;
+export const FLASH_RISE = 3;
+export const FLASH_FADE = 12;
+/** at the start of a round the lights are on, and go out over the last LIGHTS_FADE of these ticks */
+export const LIGHTS_OUT = 90;
+export const LIGHTS_FADE = 45;
+/** a flashlight lasts 15 s and lights 3 tiles round its robot */
+export const TORCH_TICKS = 15 * TICK_HZ;
+export const TORCH_REACH = 3;
+/** the chance a brick hides a flashlight (Blackout only, on top of the usual mix), and how many every arena is sure of */
+export const TORCH_CHANCE = 0.04;
+export const TORCH_SURE = 2;
+/** how far round them a bomb (its burning fuse) and a blast light the dark, in tiles */
+export const BOMB_GLOW = 1.2;
+export const FLAME_GLOW = 1.6;
+/** a flashlight lying on the floor glows a little, so it can be found */
+export const TORCH_ITEM_GLOW = 0.7;
+
+/** The usual mix with flashlights added for Blackout: on top of the others, as far as there is room under 1. */
+export function withTorches(chances: [ItemKind, number][]): [ItemKind, number][] {
+  const total = chances.reduce((n, [, c]) => n + c, 0);
+  if (total <= 0) return chances; // (Power-up density 0%: nothing at all)
+  return [...chances.filter(([k]) => k !== 'torch'), ['torch', Math.max(0, Math.min(TORCH_CHANCE, 1 - total))]];
+}
+
+/**
+ * How much of the whole arena the light shows on Blackout, 0 (pitch black) to 1: on at the start and going out,
+ * the flash every FLASH_EVERY ticks, and on again once the round is decided. Sums only, from the tick, so
+ * every copy of an online round and the CPU players agree. 1 on every other map.
+ */
+export function flashLight(world: World): number {
+  if (!world.dark) return 1;
+  if (world.over) return 1;
+  const t = world.tick;
+  if (t < LIGHTS_OUT) return t < LIGHTS_OUT - LIGHTS_FADE ? 1 : (LIGHTS_OUT - t) / LIGHTS_FADE;
+  const k = t % FLASH_EVERY;
+  if (k >= FLASH_TICKS || t < FLASH_EVERY) return 0;
+  if (k < FLASH_RISE) return (k + 1) / FLASH_RISE;
+  if (k >= FLASH_TICKS - FLASH_FADE) return (FLASH_TICKS - k) / FLASH_FADE;
+  return 1;
+}
+
+/** One light in the dark: centred on (x, y) in tiles, lighting `r` tiles round it. */
+export interface Light {
+  x: number;
+  y: number;
+  r: number;
+}
+/** What lights the dark on Blackout besides the flash: flashlights, bombs and their fuses, blasts, and flashlights on the floor. */
+export function lights(world: World): Light[] {
+  const out: Light[] = [];
+  for (const p of world.players) if (p.alive && p.torchTicks > 0) out.push({ x: p.x, y: p.y, r: TORCH_REACH });
+  for (const b of world.bombs) out.push({ x: b.x, y: b.y, r: BOMB_GLOW });
+  for (const f of world.flames) out.push({ x: f.cx, y: f.cy, r: FLAME_GLOW });
+  for (const it of world.items) if (it.kind === 'torch') out.push({ x: it.cx, y: it.cy, r: TORCH_ITEM_GLOW });
+  return out;
+}
+/** Is (x, y) lit on Blackout (always, elsewhere)? Within a light's reach, or in a flash. */
+export function isLit(world: World, x: number, y: number, ls: Light[] = lights(world)): boolean {
+  if (flashLight(world) > 0.5) return true;
+  for (const l of ls) {
+    const dx = x - l.x;
+    const dy = y - l.y;
+    if (dx * dx + dy * dy <= l.r * l.r) return true;
+  }
+  return false;
+}
 export const MAX_FIRE = 8;
 /**
  * The falling blocks leave a rectangle open in the middle of the arena, for whoever is left to fight it out in:
@@ -881,7 +965,7 @@ export function createWorld(cfg: WorldConfig): World {
   const rails = cfg.rails ? railLines(w, h) : [];
 
   const hidden = new Map<number, ItemKind>();
-  const chances = cfg.itemChance ?? ITEM_CHANCE;
+  const chances = cfg.dark ? withTorches(cfg.itemChance ?? ITEM_CHANCE) : cfg.itemChance ?? ITEM_CHANCE;
   const density = cfg.softDensity ?? SOFT_DENSITY;
   for (let y = 0; y < h; y++) {
     for (let x = 0; x < w; x++) {
@@ -906,9 +990,13 @@ export function createWorld(cfg: WorldConfig): World {
   // every arena has at least one kick, one grab, one laptop, one decoy and one trip wire power-up somewhere (unless
   // the lobby has switched them off; the laptop since 18 November 2026, the owner's ask; the decoy and the trip
   // wire since they came, 26 November 2026)
-  for (const kind of cfg.sure ?? SURE_KINDS) {
+  // (on Blackout, at least TORCH_SURE flashlights: each 'torch' in the list is one more made sure of)
+  const wanted = new Map<ItemKind, number>();
+  for (const kind of cfg.dark ? [...(cfg.sure ?? SURE_KINDS), ...Array<ItemKind>(TORCH_SURE).fill('torch')] : cfg.sure ?? SURE_KINDS) {
     if (!chances.some(([k, c]) => k === kind && c > 0)) continue;
-    if ([...hidden.values()].includes(kind)) continue;
+    const need = (wanted.get(kind) ?? 0) + 1;
+    wanted.set(kind, need);
+    if ([...hidden.values()].filter((k) => k === kind).length >= need) continue;
     const empty: number[] = [];
     for (let i = 0; i < tiles.length; i++) if (tiles[i] === SOFT && !hidden.has(i)) empty.push(i);
     if (empty.length) hidden.set(empty[Math.floor(rng() * empty.length)], kind);
@@ -965,6 +1053,7 @@ export function createWorld(cfg: WorldConfig): World {
     shieldTicks: 0,
     graceTicks: 0,
     curseTicks: 0,
+    torchTicks: 0,
     prevA: false,
     prevB: false,
     carrying: 0,
@@ -1033,6 +1122,7 @@ export function createWorld(cfg: WorldConfig): World {
     beltRun: 0,
     decoys: [],
     wires: [],
+    dark: !!cfg.dark,
   };
   if (world.belts.length) world.beltFlip = BELT_FIRST[0] + Math.floor(beltRand(world) * (BELT_FIRST[1] - BELT_FIRST[0] + 1));
   if (rails.length) world.train = trainFrom(world, TRAIN_FIRST[0] + Math.floor(trainRand(world) * (TRAIN_FIRST[1] - TRAIN_FIRST[0] + 1)));
@@ -2024,6 +2114,7 @@ function applyItem(p: Player, kind: ItemKind): void {
   else if (kind === 'laptop') p.laptop = true; // (one at a time: a second one is just picked up)
   else if (kind === 'wire') p.wires = Math.min(MAX_WIRES, p.wires + 1);
   else if (kind === 'decoy') return; // (makeDecoys, from step: it needs the world)
+  else if (kind === 'torch') p.torchTicks = TORCH_TICKS; // a second one only starts the 15 s again
   else p.speed = Math.min(MAX_SPEED_ITEMS, p.speed + 1);
 }
 
@@ -2471,6 +2562,7 @@ function bringBack(world: World, p: Player, x: number, y: number): void {
     shieldTicks: 0,
     graceTicks: 0,
     curseTicks: 0,
+    torchTicks: 0,
     prevA: true,
     prevB: true,
     carrying: 0,
@@ -2749,6 +2841,7 @@ export function step(world: World, inputs: (PlayerInput | undefined)[]): void {
   world.tick++;
   // the Factory's belts: the alarm, and turning round
   beltClock(world);
+  if (world.dark && !world.over && world.tick >= FLASH_EVERY && world.tick % FLASH_EVERY === 0) world.events.push({ type: 'flash' });
 
   for (const p of world.players) {
     if (!p.alive) {
@@ -2773,6 +2866,7 @@ export function step(world: World, inputs: (PlayerInput | undefined)[]): void {
     if (p.shieldTicks > 0) p.shieldTicks--;
     if (p.graceTicks > 0) p.graceTicks--;
     if (p.curseTicks > 0) p.curseTicks--;
+    if (p.torchTicks > 0) p.torchTicks--;
     const inp = inputs[p.id];
     if (p.flying > 0) {
       // at its laptop: the direction and buttons fly the plane, and the robot stays where it is (a belt under it
