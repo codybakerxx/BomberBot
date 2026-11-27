@@ -177,6 +177,12 @@
   body.menu-open #playTip { visibility: hidden; }
   body.menu-open #ghosts { visibility: hidden; }
   /* the result of a round: a panel that leaves the arena in view. layout() places it. */
+  /* ALL HAIL THE HUMAN (src/hail.ts): the whole screen, over everything, a tap skips it. Its canvas is not
+     position: fixed itself (the box is), and is only sized once shown. */
+  #hail { position: fixed; inset: 0; z-index: 70; touch-action: none; cursor: pointer; }
+  #hail[hidden] { display: none; }
+  #hail canvas { position: absolute; top: 0; left: 0; display: block; }
+  body.hail-open #touch, body.hail-open #menuBtn, body.hail-open #chatBtn { visibility: hidden; }
   #result { position: fixed; inset: 0; pointer-events: none; }
   #result[hidden] { display: none; }
   #resultCard {
@@ -1445,6 +1451,8 @@
   </section>
 </div>
 
+<!-- ALL HAIL THE HUMAN: the special victory over Hard CPU players (src/hail.ts), over everything, before the result panel -->
+<div id="hail" hidden><canvas id="hailCv" aria-label="You won: all hail the human"></canvas></div>
 <div id="result" hidden>
   <div class="card" id="resultCard">
     <h2 id="resultTitle"></h2>

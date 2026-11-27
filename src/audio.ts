@@ -238,6 +238,17 @@ const sounds = {
     voice({ type: 'square', from: 1047, dur: 0.7, vol: 0.06, at: 0.36, lp: 2400, lpTo: 900, wobble: [6, 6] });
     hiss({ kind: 'highpass', from: 6000, dur: 0.5, vol: 0.04, at: 0.36, attack: 0.05 });
   },
+  /** ALL HAIL THE HUMAN: a word of gold letters slamming down, a deep thud with a metal ring */
+  slam: (): void => {
+    voice({ type: 'sine', from: 120, to: 42, dur: 0.32, vol: 0.5 });
+    voice({ type: 'triangle', from: 880, to: 840, dur: 0.4, vol: 0.05, at: 0.01 });
+    hiss({ kind: 'lowpass', from: 900, to: 120, dur: 0.22, vol: 0.32, grit: true });
+  },
+  /** ALL HAIL THE HUMAN: a firework bursting, a pop and a crackle */
+  firework: (): void => {
+    hiss({ kind: 'bandpass', from: 1800, to: 400, dur: 0.18, vol: 0.22, q: 0.7 });
+    for (let i = 0; i < 6; i++) hiss({ kind: 'highpass', from: 5000, dur: 0.03, vol: 0.06, at: 0.12 + i * 0.05 + Math.random() * 0.04 });
+  },
   /** a level-crossing bell (Wild West): one bright metal strike, ringing on; it comes twice a second while the lamps flash */
   bell: (): void => {
     for (const [f, v, d] of [

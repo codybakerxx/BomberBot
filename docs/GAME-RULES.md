@@ -351,6 +351,15 @@ The numbers are Claude's, to be play-tested.
 - Once a round is decided, nothing more can happen to the winner, no more blocks start to fall, and nobody moves.
 - The other bots are CPU players, each at the level the lobby gave it. Be the last one in and the round is won.
 
+### All hail the human
+
+*src/hail.ts, `hailWorthy` in main.ts (the owner's design, 27 November 2026)*
+
+- Win the whole match on your own against CPU players who are **all on Hard** (Randomize CPUs giving them all Hard counts) and, before the result panel, the screen goes dark: **ALL HAIL / THE HUMAN** slams down in gold letters, your robot hops up wearing the crown, the CPU players hop in from both sides and bow to it in a half circle, and fireworks go off in your colour. Then: *Hard mode CPUs have been… humbled.*
+- About 4.6 seconds; a tap, a key or a controller button skips it. Not online, not with other people on the screen, and not if a CPU player is on your team.
+
+<img src="screenshots/all-hail.png" width="390" alt="ALL HAIL THE HUMAN in gold letters over the darkened arena; a gold robot in a crown with its arms up, three CPU robots bowing to it in a half circle, fireworks, and the line Hard mode CPUs have been… humbled.">
+
 ## Teams
 
 *`teams` and `friendlyFire` in `WorldConfig`, `allies`, `blastHurts`, `winnersOf` in sim.ts; `teamsFor`, `splitTeams` in setup.ts*

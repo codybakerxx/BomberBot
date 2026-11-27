@@ -26,6 +26,7 @@ import { CpuSlot, Guest, ITEM_NAMES, MatchSetup, Prefs, SHARPNESS, SOUND_GROUPS,
 import { BOMB_ICON, Opt, answerConfirm, choice, confirmFirst, confirmOpen, group, heading, mount, note, slider, toggle, wireConfirm, wireFlash } from './ui';
 import { Hand, DEFAULT_SENS, OLD_SENS, SENS_DEG, SENS_MAX, STRAIGHT, sensTilt, standardAims } from './swipe';
 import { Online } from './online';
+import { playHail } from './hail';
 import { BUBBLE_TAIL, createBubbles, createChat, createQuickMenu } from './quick';
 import { canInstall, howToAdd, install, isApple, myEndpoint, onWebsite, pushOff, pushOn, pushRefresh, pushState, pushTest, type PushState } from './app';
 import { decodeWorld, packInput, readCode, unpackInput, type BellAnswer, type Score, type Seat, type ServerMsg } from './net';
@@ -1090,6 +1091,38 @@ function howOut(): string {
   return blastedBy === CRUSHED ? 'A falling block landed on you.' : !who || who === me ? 'Caught in your own blast.' : `Caught in ${nameOf(blastedBy) === 'You' ? botName(colorById(who.colorId)) : nameOf(blastedBy)}'s blast.`;
 }
 
+/**
+ * ALL HAIL THE HUMAN (src/hail.ts; the owner's design, 27 November 2026): you, alone on this screen, have won
+ * the match, and every CPU player in it was on Hard (Randomize CPUs giving them all Hard counts too), and none
+ * of them was on your side. Not online, not with other people here.
+ */
+function hailWorthy(): boolean {
+  if (net || couch() || world.coop || matchWinner < 0 || !bots.length) return false;
+  const mi = myIdx();
+  return onSide(mi, matchWinner) && bots.every((b) => b.level === 'hard' && !onSide(b.id, matchWinner));
+}
+let hailing = false;
+/** Play ALL HAIL THE HUMAN over the screen, then `then` (the result panel). */
+function hail(then: () => void): void {
+  hailing = true;
+  playHail(
+    {
+      hero: colorById(world.players[myIdx()].colorId),
+      cpus: bots.map((b) => colorById(world.players[b.id].colorId)),
+    },
+    {
+      slam: sfx.slam,
+      firework: sfx.firework,
+      density,
+      calm: prefs.calm,
+      done: () => {
+        hailing = false;
+        then();
+      },
+    },
+  );
+}
+
 /** The result panel for a decided round (the score already counted). */
 function announce(): void {
   const mi = myIdx();
@@ -1109,7 +1142,12 @@ function announce(): void {
     if (matchWinner >= 0) finish(`${sideName(matchWinner)} wins the match`, `First to ${setup.firstTo}. Final score ${scoreLine()}.`);
     else if (winner >= 0) finish(`${sideName(winner)} wins the round`, `${wins[winner]} of ${setup.firstTo} to win the match.`);
     else finish('Draw', 'Nobody was left standing.');
-  } else if (matchWinner >= 0 && onSide(mi, matchWinner)) finish(teams ? 'Your team wins the match' : 'You win the match', `${teams ? `${sideName(matchWinner)}. ` : ''}First to ${setup.firstTo}. Final score ${scoreLine()}.`);
+  } else if (matchWinner >= 0 && onSide(mi, matchWinner)) {
+    const title = teams ? 'Your team wins the match' : 'You win the match';
+    const text = `${teams ? `${sideName(matchWinner)}. ` : ''}First to ${setup.firstTo}. Final score ${scoreLine()}.`;
+    if (hailWorthy()) hail(() => finish(title, text));
+    else finish(title, text);
+  }
   else if (matchWinner >= 0) finish(`${sideName(matchWinner)} wins the match`, `First to ${setup.firstTo}. Final score ${scoreLine()}.${me.alive ? '' : ' ' + how}`);
   else if (winner >= 0 && onSide(mi, winner)) finish(teams ? 'Your team wins the round' : 'You win the round', `${teams ? `${sideName(winner)}, last side standing.` : 'Last bot standing.'} ${wins[mi]} of ${setup.firstTo} to win the match.`);
   else if (winner >= 0) finish(`${sideName(winner)} wins the round`, me.alive ? '' : how);
@@ -1619,6 +1657,7 @@ function watch(): void {
  * again, from 0: the owner's call, in place of restarting only the round) or leave to the lobby. Both ask first.
  */
 function openPause(): void {
+  if (hailing) return; // (ALL HAIL THE HUMAN is playing: a tap skips it, and the result panel follows)
   if (mode !== 'playing' && mode !== 'over') return;
   showPause();
 }
@@ -3143,6 +3182,13 @@ requestAnimationFrame(frame);
   /** the icon at a size, as a PNG data URL (tools/icons.py saves them for the home screen) */
   icon(size: number): string {
     return drawIcon(size).toDataURL('image/png');
+  },
+  /** play ALL HAIL THE HUMAN now with the round's robots, whatever the score (tools/screenshots.py) */
+  hail(): void {
+    hail(() => {});
+  },
+  get hailing() {
+    return hailing;
   },
   /** the world that is drawn (online: the picture ahead of the server's world) */
   get view() {
