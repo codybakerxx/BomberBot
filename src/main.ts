@@ -132,9 +132,6 @@ let angelTipShown = false;
 /** the first laptop picked up here in a match gets a tip saying what it does */
 let laptopTipShown = false;
 /** the tip that a train is coming has been shown this match (the first time its bell rings) */
-let trainTipShown = false;
-let iceTipShown = false;
-let beltTipShown = false;
 /** the first decoy, and the first trip wire, picked up here in a match get a tip saying what they do */
 let decoyTipShown = false;
 let wireTipShown = false;
@@ -988,18 +985,6 @@ function advance(inputs: (PlayerInput | undefined)[]): void {
     angelTipShown = true;
     showTip(couch() ? `${nameOf(firstZombie)}: a zombie! Small bombs only` : 'You are a zombie! Drop small bombs in their way');
   }
-  if (!iceTipShown && world.ice && world.tick >= TICK_HZ) {
-    iceTipShown = true;
-    showTip('Ice! You slide, more the faster you go. Bombs slide too');
-  }
-  if (!beltTipShown && world.belts.length && world.tick >= TICK_HZ) {
-    beltTipShown = true;
-    showTip('Belts carry you and bombs. At the alarm, they turn round');
-  }
-  if (!trainTipShown && world.events.some((e) => e.type === 'bell')) {
-    trainTipShown = true;
-    showTip('Train coming! Get off the line with the flashing lights');
-  }
   if (!laptopTipShown) {
     const got = world.events.find((e) => e.type === 'pickup' && e.kind === 'laptop' && (net ? e.player === mi : human(e.player)));
     if (got && got.type === 'pickup') {
@@ -1592,9 +1577,6 @@ function newMatch(again = true): void {
   matchWinner = -1;
   angelTipShown = false;
   laptopTipShown = false;
-  trainTipShown = false;
-  iceTipShown = false;
-  beltTipShown = false;
   start();
 }
 /** Start the next round of the match in a fresh arena. */
@@ -2286,7 +2268,7 @@ function onRound(w: World, s: Seat[], score: Score, fresh: boolean): void {
     redrawStatic();
     return;
   }
-  if (fresh && roundNo <= 1) angelTipShown = laptopTipShown = trainTipShown = iceTipShown = beltTipShown = decoyTipShown = wireTipShown = false; // a new match
+  if (fresh && roundNo <= 1) angelTipShown = laptopTipShown = decoyTipShown = wireTipShown = false; // a new match
   blastedBy = -1;
   hurried = false;
   overShown = false;
