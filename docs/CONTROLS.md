@@ -156,6 +156,18 @@ Things the pad deliberately ignores while your thumb is resting on it:
 - **Slow drift.** If your thumb creeps across the pad, the zone creeps with it.
 - **Bounce-back.** The small rebound at the end of a quick swipe does not turn you round.
 
+## Fingers the phone loses track of
+
+*`dropTouches`, `staleTouches`, `reset` in input.ts (27 November 2026, the owner's two reports)*
+
+A phone does not always say a finger was lifted: the menu opening over the controls while a finger is on them, the app going to the background, a system swipe. Until then the pad believed the old thumb was still down and ignored every new touch, so the robot kept pushing the last way swiped (stopped against a bomb, it looked stuck between two bombs), and A stayed held into the next round, where its first tick read it as a fresh press and dropped a bomb. Now:
+
+- a finger coming down when it is the only one on the screen (the browser's own list of touches) lets go of any other finger the pad, A or B still think is down, and the new finger steers at once;
+- starting a round, Restart, Resume and closing the menu let go of every finger and key held, so A and B count only once pressed afresh (a held key's auto-repeat no longer counts as a press);
+- losing a finger's capture ends its touch.
+
+Two fingers really down (thumb on the pad, A tapped) are not affected. `experiments/stuck-fuzz.ts` plays rounds pressing at random on every map and found no way in the rules to be shut between two bombs side by side.
+
 ## How the pad reads a thumb
 
 The pad answers two separate questions.

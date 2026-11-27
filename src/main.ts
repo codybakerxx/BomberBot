@@ -277,6 +277,8 @@ input.attachKeyboard(window);
 input.attachDpad($('dzone'), $('dpad'));
 input.attachButton($('btnA'), 'a');
 input.attachButton($('btnB'), 'b');
+// a finger that is the only one on the screen: any other the controls think is down was lifted unheard
+window.addEventListener('touchstart', (e) => input.staleTouches(e), { capture: true, passive: true });
 
 /** The on-screen controls appear on touch devices only (body gets the class "touch"). */
 function showTouch(): void {

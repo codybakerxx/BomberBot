@@ -173,6 +173,16 @@ export class Input {
   private latchDir: Dir = 0;
   private latchA = false;
   private latchB = false;
+  /**
+   * The touch controls' own record of which fingers are down, cleared by `dropTouches`. A phone can lose a
+   * finger's lift (the menu opening over the controls while a finger is on them, the app going to the
+   * background, a system swipe): the pad then believed the old thumb was still down and ignored every new
+   * touch, and A stayed held into the next round, where it read as a fresh press and dropped a bomb
+   * (the owner's two reports, 27 November 2026).
+   */
+  private touchClears: ((keep: number) => void)[] = [];
+  /** the finger that last came down on the touch controls (see `staleTouches`) */
+  private lastDown = -1;
   /** Called on every touch or key press; main.ts uses it to switch sound on (browsers need a gesture first). */
   onFirstGesture: (() => void) | null = null;
   /** Called when a key or button given to Pause is pressed (main.ts opens or closes the menu). */
@@ -307,12 +317,33 @@ export class Input {
     return out;
   }
 
-  /** Forget anything pressed before the round started. */
+  /**
+   * Forget anything pressed before the round started (or before the menu closed). A and B count again only
+   * once pressed afresh: a key held through it, or a finger the phone never said was lifted, would otherwise
+   * read as a press on the round's first tick and drop a bomb.
+   */
   reset(): void {
     this.latchDir = 0;
     this.latchA = this.latchB = false;
+    this.keyA = this.keyB = false;
+    this.dropTouches(-1);
     // controller buttons held now (the A that pressed Start) count only once they have been let go
     for (const r of this.readers.values()) r.reset();
+  }
+
+  /** Let go of every finger the touch controls think is down, but `keep`. */
+  private dropTouches(keep: number): void {
+    for (const clear of this.touchClears) clear(keep);
+  }
+
+  /**
+   * A finger has come down and it is the only one on the screen (`e.touches`, the browser's own list): any
+   * other finger the touch controls still think is down was lifted without their hearing of it. Let go of
+   * those, so the new touch works at once. (Pointer events come before touch events, so the new finger's
+   * pointerdown has been seen: `lastDown`.)
+   */
+  staleTouches(e: TouchEvent): void {
+    if (e.touches.length === 1) this.dropTouches(this.lastDown);
   }
 
   /**
@@ -342,12 +373,11 @@ export class Input {
           }
           e.preventDefault();
         } else if (act === 'bomb') {
-          if (!e.repeat) this.latchA = true;
-          this.keyA = true;
+          // (only a real press: a key held since before the round's reset, repeating, does not count)
+          if (!e.repeat) this.latchA = this.keyA = true;
           if (e.code === 'Space') e.preventDefault();
         } else if (act === 'lift') {
-          if (!e.repeat) this.latchB = true;
-          this.keyB = true;
+          if (!e.repeat) this.latchB = this.keyB = true;
         } else if (act === 'pause' && !e.repeat) this.onPause?.();
         this.onFirstGesture?.();
       },
@@ -377,9 +407,38 @@ export class Input {
       if (pad.dir && pad.dir !== before) this.latchDir = pad.dir;
       glyph.dataset.dir = String(pad.dir);
     };
+    // a second finger landing while the thumb is on the pad is ignored; kept here in case the thumb turns out
+    // to have been lifted unheard (`staleTouches`), when this finger takes over at once
+    let waiting: { id: number; x: number; y: number } | null = null;
+    const startStroke = (id: number, x: number, y: number): void => {
+      pointer = id;
+      waiting = null;
+      pad.press(x, y, performance.now());
+      sync(0);
+      zone.classList.add('on');
+      try {
+        zone.setPointerCapture(id);
+      } catch {
+        /* capture is a nicety */
+      }
+    };
+    this.touchClears.push((keep) => {
+      if (pointer !== -1 && pointer !== keep) {
+        pointer = -1;
+        pad.release();
+        sync(0);
+        zone.classList.remove('on');
+        if (waiting && waiting.id === keep) startStroke(waiting.id, waiting.x, waiting.y);
+      }
+      if (keep === -1) waiting = null;
+    });
     zone.addEventListener('pointerdown', (e) => {
       e.preventDefault();
-      if (pointer !== -1) return;
+      this.lastDown = e.pointerId;
+      if (pointer !== -1) {
+        waiting = { id: e.pointerId, x: e.clientX, y: e.clientY };
+        return;
+      }
       pointer = e.pointerId;
       pad.press(e.clientX, e.clientY, performance.now());
       sync(0);
@@ -402,6 +461,7 @@ export class Input {
       sync(before);
     });
     const end = (e: PointerEvent): void => {
+      if (waiting && e.pointerId === waiting.id) waiting = null;
       if (e.pointerId !== pointer) return;
       pointer = -1;
       pad.release();
@@ -410,6 +470,7 @@ export class Input {
     };
     zone.addEventListener('pointerup', end);
     zone.addEventListener('pointercancel', end);
+    zone.addEventListener('lostpointercapture', end);
   }
 
   /** Wire one of the two on-screen buttons. It counts as held while any finger is on it. */
@@ -421,8 +482,13 @@ export class Input {
       else this.touchB = on;
       el.classList.toggle('on', on);
     };
+    this.touchClears.push((keep) => {
+      for (const id of [...pointers]) if (id !== keep) pointers.delete(id);
+      sync();
+    });
     el.addEventListener('pointerdown', (e) => {
       e.preventDefault();
+      this.lastDown = e.pointerId;
       pointers.add(e.pointerId);
       if (which === 'a') this.latchA = true;
       else this.latchB = true;
@@ -440,5 +506,6 @@ export class Input {
     };
     el.addEventListener('pointerup', up);
     el.addEventListener('pointercancel', up);
+    el.addEventListener('lostpointercapture', up);
   }
 }
