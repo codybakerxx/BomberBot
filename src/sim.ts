@@ -561,7 +561,7 @@ export interface WorldConfig {
 // ---------------------------------------------------------------- constants
 // Times are in ticks (60 a second), distances in tiles.
 
-export const FUSE_TICKS = 153; // a dropped bomb goes off after 2.55 s (the owner's ask, 18 November 2026; it was 150, 2.5 s)
+export const FUSE_TICKS = 155; // a dropped bomb goes off after 2.58 s (the owner's ask, 27 November 2026: 2.58 s, the nearest whole tick; it was 153, 2.55 s, and 150, 2.5 s, before that)
 export const FLAME_TICKS = 27; // a blast stays for 0.45 s (was 30: shortened a little in play-testing)
 export const CHAIN_TICKS = 5; // a bomb caught in a blast goes off this soon after
 export const BASE_SPEED = 0.04250390625; // starting walking speed, tiles per tick (2.55 tiles a second)

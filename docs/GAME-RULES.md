@@ -21,7 +21,7 @@ The game runs at a fixed 60 ticks a second. Times below are given in seconds wit
 
 - A robot moves up, down, left or right, one direction at a time, and stops the moment no direction is held. It does not finish the step. (On Frozen Lake's ice it slides on first, further the faster it is: below, **Frozen Lake's ice**. On the Factory's belts a belt carries it: below, **The Factory's conveyor belts**.)
 - Robots start at 2.55 tiles a second. Each speed power-up adds 0.5 tiles a second, and up to six of them count, which brings a robot to 5.55 tiles a second, 2.18 times its starting speed. Collecting a speed power-up is the only thing that raises a robot's speed. The only thing that lowers it is a curse, for 8 seconds.
-- At the starting speed, getting clear of your own first bomb (two tiles along a lane) takes 0.78 seconds of the bomb's 2.55.
+- At the starting speed, getting clear of your own first bomb (two tiles along a lane) takes 0.78 seconds of the bomb's 2.58.
 - The tile a robot **counts as standing on** is the one whose middle it is nearest to. The game draws a ring on yours. That tile decides where your bomb is dropped, whether a blast catches you and which power-up you pick up.
 - A robot fills its lane, so it can only go sideways where there is an opening beside it. Bricks and solid blocks block it. So does a bomb, with one exception: a bomb on the tile the robot counts as standing on (the one it just dropped, or one thrown onto it) does not hold it in. It can move about on that tile and walk off. The moment it counts as standing on the next tile, that bomb is solid to it like any other, so there is no walking back through.
 
@@ -49,7 +49,7 @@ It matters for more than looks: a lifted bomb is thrown the way the robot is loo
 *`placeBomb` and `step` in sim.ts*
 
 - **A** drops a bomb on the tile you are standing on. You start able to have one bomb out at a time.
-- A bomb goes off 2.55 seconds (153 ticks) after it is dropped (the owner's choice, 18 November 2026; it was 2.5 s).
+- A bomb goes off 2.58 seconds (155 ticks) after it is dropped (the owner's choice, 27 November 2026; it was 2.55 s from 18 November, and 2.5 s before).
 - Its blast length is fixed when it is dropped. Picking up a flame afterwards does not lengthen bombs already out.
 - You cannot drop a bomb on a tile that already has one, or while you are carrying one.
 
@@ -155,7 +155,7 @@ Each brick hides at most one power-up. You pick one up by standing on its tile. 
 - They **walk whenever you walk**: the nearer one the way you are asked to go, the other the **opposite** way. They move by the same rules as a robot (lining up for turns, sliding on ice, carried by belts) and stand still when you do, or while you fly a laptop's plane. They show your shield, curse and laptop too, so nothing gives them away. They do not drop bombs, pick up power-ups, kick bombs or set off trip wires, and robots and bombs pass through them.
 - Any **blast**, whoever's, pops one in a puff of smoke, and so does a **falling block** or the **train**. Otherwise they vanish after **15 seconds** (`DECOY_TICKS`; the owner's pick). They go when you are knocked out.
 - Another decoy replaces the two you have: two at a time.
-- On your own screen your decoys are drawn a little see-through, so you can tell which one is you. Everyone else sees them exactly as they see you, and the CPU players cannot tell them apart either: they go after decoys too.
+- Decoys look exactly like their robot, on your own screen too (the owner's ask, 27 November 2026: they used to be a little see-through for you). Everyone sees them exactly as they see you, and the CPU players cannot tell them apart either: they go after decoys too.
 
 ### Trip wire
 
@@ -169,7 +169,7 @@ Each brick hides at most one power-up. You pick one up by standing on its tile. 
 - Not strung, trip wires go down with the rest of the kit in Item Drop. A robot coming back with a new life has none.
 - CPU players string them now and then, and never walk into one (see `docs/CPU-PLAYERS.md`).
 
-<img src="screenshots/decoy-wire.png" width="390" alt="Your gold robot in the middle of the arena with its two decoys either side of it, a little see-through on your screen; two trip wires strung across lanes between pillars, a white wire between two small steel plates with lights; and down the right a pink blast running the whole length of a column, where a wire was set off">
+<img src="screenshots/decoy-wire.png" width="390" alt="Your gold robot in the middle of the arena with its two decoys either side of it; two trip wires strung across lanes between pillars, a white wire between two small steel plates with lights; and down the right a pink blast running the whole length of a column, where a wire was set off">
 
 ## Kicking
 
@@ -455,7 +455,7 @@ All of these are named constants near the top of `src/sim.ts`. Changing one chan
 | `START_FIRE` | 1 | How long a blast is, in tiles each way, before any flame power-up |
 | `MAX_FIRE` | 8 | Longest blast, in tiles |
 | `KEEP_OPEN_W`, `KEEP_OPEN_H` | 7, 5 | The least the falling blocks leave open in the middle; `keptSize` makes it 9 by 7 where a 7 by 5 would have pillars on its edges (it was a 5 by 5 square, `KEEP_OPEN`) |
-| `FUSE_TICKS` | 153 | Fuse of a dropped bomb (2.55 s; it was 150, 2.5 s) |
+| `FUSE_TICKS` | 155 | Fuse of a dropped bomb (2.58 s; it was 153, 2.55 s, and 150, 2.5 s) |
 | `FLAME_TICKS` | 27 | How long a blast and a burning brick last (0.45 s) |
 | `CHAIN_TICKS` | 5 | Delay before a bomb caught in a blast goes off |
 | `CARRY_FUSE_TICKS` | 180 | Fuse set by the first lift (3 s) |

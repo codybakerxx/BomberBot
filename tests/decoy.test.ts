@@ -322,6 +322,9 @@ assert.ok(PROTOCOL >= 17, 'online pages from before them cannot join a room with
 
 for (const level of BOT_LEVELS) {
   // a CPU player holding trip wires strings them now and then, and never walks into one, its own included
+  // (Beginner strings at only 5% of gaps, so one arena of three can go without by luck: it is counted over the
+  // three; 27 November 2026, the 2.58 s fuse left arena 3 at 0, arenas 1 to 12 at 13 against 15 before)
+  let all = 0;
   for (let seed = 1; seed <= 3; seed++) {
     const w = createWorld({ roundTicks: 0, seed, players: [{ colorId: 'gold' }, { colorId: 'blue' }] });
     const bot = createBot(0, level, seed * 17 + 3);
@@ -333,8 +336,10 @@ for (const level of BOT_LEVELS) {
       strung += w.events.filter((e) => e.type === 'wire').length;
     }
     assert.ok(w.players[0].alive, `${level}, arena ${seed}: still in`);
-    assert.ok(strung > 0, `${level}, arena ${seed}: strung some (${strung})`);
+    all += strung;
+    if (level !== 'beginner') assert.ok(strung > 0, `${level}, arena ${seed}: strung some (${strung})`);
   }
+  assert.ok(all > 0, `${level}: strung some over three arenas (${all})`);
 }
 
 // ---------------------------------------------------------------- online

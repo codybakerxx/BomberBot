@@ -1673,7 +1673,7 @@ export function drawDynamic(ctx: Ctx, world: World, T: number, time: number, foc
 
   // robots, back to front; a train along a row among them, in front of those behind its line and behind those in
   // front of it; a train down a column over them all
-  // (decoys among them, drawn just like their robots; yours a little see-through, so only you can tell)
+  // (decoys among them, drawn just like their robots, yours too)
   const order: Player[] = [...world.players, ...world.decoys.filter((d) => d.popped < 0)].sort((a, b) => a.y - b.y);
   const tr = world.train;
   const row = tr && world.rails[tr.line].dir === 'h' ? world.rails[tr.line].at : -1;
@@ -1683,7 +1683,7 @@ export function drawDynamic(ctx: Ctx, world: World, T: number, time: number, foc
       drawTrain(ctx, world, T, world.tick, time);
       train = true;
     }
-    if ('popped' in p) drawDecoy(ctx, world, p as Decoy, T, time, celebrate, crowned, p.id === focusId);
+    if ('popped' in p) drawDecoy(ctx, world, p as Decoy, T, time, celebrate, crowned);
     else drawPlayer(ctx, world, p, T, time, celebrate, crowned);
   }
   // decoys appearing and popping: puffs of smoke
@@ -2045,7 +2045,7 @@ const CAP_TILT = Math.atan2(FUSE_CURVE[0][0], -FUSE_CURVE[0][1]); // the cap lea
  * burning down the fuse. (cx, cy) is the middle of the ball.
  *
  * The fuse is a clock. The length of rope left is the share of the bomb's time that is left, so the spark
- * reaches the cap as the bomb goes off: 2.55 seconds from being dropped (FUSE_TICKS); a bomb that has been picked up was
+ * reaches the cap as the bomb goes off: 2.58 seconds from being dropped (FUSE_TICKS); a bomb that has been picked up was
  * given 3 seconds then, so its fuse is measured against that (it grows back at the first lift, because the
  * bomb really does get more time). A bomb caught in a blast has a few ticks left, so its spark jumps to
  * the cap. In the last three quarters of a second the ball throbs faster and flashes red-hot.
@@ -2362,15 +2362,12 @@ function drawFrost(ctx: Ctx, p: Player, x: number, y: number, T: number, time: n
 }
 
 /**
- * A decoy: drawn as its robot is (drawPlayer), fading in as it appears. Your own (`mine`) are a little see-through,
- * so you can tell which one is you; to everyone else they look just like you.
+ * A decoy: drawn exactly as its robot is (drawPlayer), at full strength from the moment it appears, inside its puff
+ * of smoke. Not see-through, even your own (the owner's ask, 27 November 2026: it was half see-through on your
+ * screen and faded in).
  */
-function drawDecoy(ctx: Ctx, world: World, d: Decoy, T: number, time: number, celebrate: Celebration | undefined, crowned: (id: number) => boolean, mine: boolean): void {
-  const grow = Math.min(1, (world.tick - d.born) / (POOF_TICKS * 0.6));
-  ctx.save();
-  ctx.globalAlpha = (mine ? 0.5 : 1) * grow;
+function drawDecoy(ctx: Ctx, world: World, d: Decoy, T: number, time: number, celebrate: Celebration | undefined, crowned: (id: number) => boolean): void {
   drawPlayer(ctx, world, d, T, time, celebrate, crowned);
-  ctx.restore();
 }
 
 /**

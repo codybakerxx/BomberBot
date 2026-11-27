@@ -339,8 +339,10 @@ for (const level of ['hard'] as BotLevel[]) {
   // Over 24 arenas, not one: a single arena passed or failed by luck (a fuse 3 ticks longer, 18 November 2026,
   // turned this arena's 27 s into a stall, while over 40 arenas the share settled within 90 s stayed the same,
   // 22 and 21 of 40). Measured then, with the 7 by 5 and the 2.55 s fuse: Hard settles 21 of 24 within 90 s,
-  // Normal 11 (Normal presses, but carefully: two of them can circle a long time).
-  for (const [level, least] of [['normal', 8], ['hard', 18]] as [BotLevel, number][]) {
+  // Normal 11 (Normal presses, but carefully: two of them can circle a long time). With the 2.58 s fuse
+  // (27 November 2026) Hard settles 17 of these 24, but 60 of 80 arenas against 55 of 80 with the 2.55 s fuse
+  // (`experiments/square-fuse.ts`): the 24 moved by luck, so its floor is 16.
+  for (const [level, least] of [['normal', 8], ['hard', 16]] as [BotLevel, number][]) {
     let decided = 0;
     for (let seed = 1; seed <= 24; seed++) {
       const w = square(seed);
