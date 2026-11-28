@@ -10,7 +10,7 @@
  *
  * It holds no game rules. Those are all in sim.ts.
  */
-import { createWorld, step, ticksLeft, wireSpot, World, PlayerInput, type Player, Dir, TICK_HZ, DEATH_TICKS, type GameEvent, type ItemKind } from './sim';
+import { createWorld, step, ticksLeft, wireSpot, World, PlayerInput, type Player, Dir, TICK_HZ, DEATH_TICKS, type GameEvent } from './sim';
 import { Bot, BotLevel, BOT_LEVELS, LEVELS, createBot, botInput } from './bot';
 import { COLORS, NOBODY, botName, colorById, drawAngels, drawBarrel, drawFloor, drawSignalIcon, drawGround, drawHead, drawItemTile, drawStatic, drawDynamic, drawGhosts, drawWireIcon, groundKey, setMap, setOrangeFire, warmSprites } from './render';
 import { drawBeltIcon } from './factory';
@@ -1771,15 +1771,15 @@ function bit(text: string, cls = ''): HTMLSpanElement {
   return Object.assign(document.createElement('span'), { textContent: text, className: cls });
 }
 /**
- * The top of the menu during a match, under its chips: the round, small, and your own kit, each power-up drawn as
- * in the arena (the owner's design, 18 November 2026; a big round box with the rules under the name, a clock for
- * the falling blocks and a bar for the round were tried that day and turned down). Online: the ping, in its chip
+ * The top of the menu during a match, under its chips: the round, small (the owner's design, 18 November 2026; a big
+ * round box with the rules under the name, a clock for the falling blocks and a bar for the round were tried that
+ * day and turned down; Your kit, each power-up you had, was under it until the owner had it taken out, 28 November
+ * 2026: not very helpful). Online: the ping, in its chip
  * beside the room's code (or at the end of the round's line on the narrowest phones). Online the round goes on
  * behind the menu, so this is filled again a few times a second (`keepHero`); the standings only when something
  * happens.
  */
 function fillHero(): void {
-  const done = matchWinner >= 0;
   // online: the round trip to the server, so a slow connection can be told from a fault: signal bars lit by how
   // good it is, and the milliseconds; until the first one, a dash. (On a narrow phone a copy at the end of the
   // round's line is shown in its place: page.html.)
@@ -1799,43 +1799,6 @@ function fillHero(): void {
     copy.setAttribute('aria-hidden', 'true');
     slot.append(copy);
   }
-  // your kit, while you are in the round (not out, an angel or a zombie)
-  const kit = $('pauseKit');
-  const me = world.players[myIdx()];
-  const inIt = !!me && !done && !world.over && !me.angel && !me.zombie && (me.alive || me.respawnAt >= 0);
-  kit.hidden = !inIt;
-  if (!inIt) return;
-  const dpr = density();
-  const item = (kind: ItemKind, text: string, label: string, bad = false): HTMLElement => {
-    const el = bit('', `item${bad ? ' bad' : ''}${text ? '' : ' only'}`);
-    const cv = document.createElement('canvas');
-    cv.width = cv.height = Math.round(18 * dpr); // (drawn at the size it shows, so it stays sharp)
-    drawItemTile(cv.getContext('2d')!, kind, 0, 0, cv.width);
-    el.append(cv, document.createTextNode(text));
-    el.setAttribute('aria-label', label);
-    el.title = label;
-    return el;
-  };
-  const list: HTMLElement[] = [
-    bit('Your kit', 'kit-label'),
-    item('bomb', String(me.bombsMax), `${me.bombsMax} ${me.bombsMax === 1 ? 'bomb' : 'bombs'} at a time`),
-    item('fire', String(me.fire), `Blasts ${me.fire} ${me.fire === 1 ? 'tile' : 'tiles'} long`),
-    item('speed', me.speed ? `+${me.speed}` : '0', me.speed ? `${me.speed} speed ${me.speed === 1 ? 'power-up' : 'power-ups'}` : 'Starting speed'),
-  ];
-  if (me.canKick) list.push(item('kick', '', 'Boot: kick bombs'));
-  if (me.canGrab) list.push(item('grab', '', 'Glove: lift and throw bombs'));
-  if (me.laptop) {
-    const left = me.planeBombs;
-    list.push(me.flying ? item('laptop', String(left), `Flying the plane: ${left} ${left === 1 ? 'bomb' : 'bombs'} left`) : item('laptop', '', 'Laptop: B flies a plane'));
-  }
-  if (me.wires > 0) list.push(item('wire', String(me.wires), `${me.wires} trip ${me.wires === 1 ? 'wire' : 'wires'}: B between two blocks strings one`));
-  const decoys = world.decoys.filter((d) => d.id === me.id && d.popped < 0);
-  if (decoys.length) list.push(item('decoy', `${Math.ceil(Math.max(...decoys.map((d) => d.until - world.tick)) / TICK_HZ)}s`, 'Decoys: seconds left'));
-  if (me.shieldTicks > 0) list.push(item('shield', `${Math.ceil(me.shieldTicks / TICK_HZ)}s`, 'Shield: seconds left'));
-  if (me.curseTicks > 0) list.push(item('curse', `${Math.ceil(me.curseTicks / TICK_HZ)}s`, 'Cursed: seconds left', true));
-  if (me.torchTicks > 0) list.push(item('torch', `${Math.ceil(me.torchTicks / TICK_HZ)}s`, 'Flashlight: seconds left'));
-  if (list.length > 6) list.shift(); // (a full kit: the label gives up its room, so the kit stays on one line)
-  kit.replaceChildren(...list);
 }
 /** Online the round goes on behind the menu: its top is kept up to date while it is open. */
 let heroTimer = 0;
