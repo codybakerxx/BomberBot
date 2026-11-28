@@ -18,6 +18,7 @@ import {
   SOFT,
   HARD,
   FUSE_TICKS,
+  THROW_GAP_TICKS,
   FLAME_TICKS,
   BASE_SPEED,
   SPEED_STEP,
@@ -319,6 +320,29 @@ const mk = (density = 0): World =>
   run(w3, 40, none);
   assert.equal(w3.players[0].alive, false);
   assert.equal(w3.bombs.length, 0);
+}
+
+// 8b. a very slight pause after a throw (the owner's ask, 28 November 2026): 0.25 s before the glove lifts again
+{
+  assert.equal(THROW_GAP_TICKS, 15, '0.25 s');
+  const w = mk();
+  const p = w.players[0];
+  p.canGrab = true;
+  p.bombsMax = 2;
+  step(w, [{ dir: 0, a: true, b: false }]);
+  step(w, [{ dir: 0, a: false, b: true }]);
+  step(w, [none]);
+  step(w, [{ dir: 0, a: false, b: true }]); // thrown
+  assert.equal(p.carrying, 0);
+  step(w, [{ dir: 0, a: true, b: false }]); // a second bomb at your feet
+  step(w, [{ dir: 0, a: false, b: true }]);
+  assert.equal(p.carrying, 0, 'no lift in the pause after a throw');
+  run(w, THROW_GAP_TICKS - 4, none); // (the press below is the 14th tick after the throw)
+  step(w, [{ dir: 0, a: false, b: true }]);
+  assert.equal(p.carrying, 0, 'still in the pause');
+  step(w, [none]);
+  step(w, [{ dir: 0, a: false, b: true }]);
+  assert.ok(p.carrying, 'lifted once the 0.25 s is up');
 }
 
 // 9. every arena hides at least one kick and one grab

@@ -112,6 +112,8 @@ export interface Player {
   curseTicks: number;
   /** ticks of flashlight left (Blackout): while above 0 it lights the arena round it, TORCH_REACH tiles */
   torchTicks: number;
+  /** ticks left, after a throw, before the glove can lift or throw again (THROW_GAP_TICKS) */
+  throwWait: number;
   /** button states on the previous tick, to notice a fresh press */
   prevA: boolean;
   prevB: boolean;
@@ -731,6 +733,7 @@ export const ICE_BOUNCE = 0.5;
 /** it bounces only when it hits at this speed or faster: fast enough to go back at least a tile (ICE_CRAWL) */
 export const ICE_BOUNCE_MIN = ICE_CRAWL / ICE_BOUNCE;
 export const THROW_TILES = 3; // a thrown bomb lands this many tiles away
+export const THROW_GAP_TICKS = 15; // after a throw, 0.25 s before the glove can lift or throw again (the owner's ask, 28 November 2026: a very slight pause between throws)
 export const FLY_TICKS_PER_TILE = 7; // how long a thrown bomb takes over each tile
 
 // lives
@@ -1055,6 +1058,7 @@ export function createWorld(cfg: WorldConfig): World {
     graceTicks: 0,
     curseTicks: 0,
     torchTicks: 0,
+    throwWait: 0,
     prevA: false,
     prevB: false,
     carrying: 0,
@@ -1856,6 +1860,7 @@ function useAction(world: World, p: Player): void {
   const cx = Math.round(p.x);
   const cy = Math.round(p.y);
   if (p.carrying) {
+    if (p.throwWait > 0) return; // (a bomb lifted in the pause after a throw waits for it to end)
     const b = world.bombs.find((o) => o.id === p.carrying);
     p.carrying = 0;
     if (!b) return;
@@ -1866,6 +1871,7 @@ function useAction(world: World, p: Player): void {
     b.flyDir = p.facing || 2;
     b.flyDist = THROW_TILES;
     b.flyT = 0;
+    p.throwWait = THROW_GAP_TICKS;
     world.events.push({ type: 'throw' });
     return;
   }
@@ -1884,7 +1890,7 @@ function useAction(world: World, p: Player): void {
     launch(world, p);
     return;
   }
-  if (!p.canGrab) return;
+  if (!p.canGrab || p.throwWait > 0) return; // (no lifting in the pause after a throw)
   // own tile first, then the tile you face, then the other neighbours
   const spots: [number, number][] = [[cx, cy], [cx + DX[p.facing], cy + DY[p.facing]]];
   for (let d = 1; d <= 4; d++) spots.push([cx + DX[d], cy + DY[d]]);
@@ -2564,6 +2570,7 @@ function bringBack(world: World, p: Player, x: number, y: number): void {
     graceTicks: 0,
     curseTicks: 0,
     torchTicks: 0,
+    throwWait: 0,
     prevA: true,
     prevB: true,
     carrying: 0,
@@ -2868,6 +2875,7 @@ export function step(world: World, inputs: (PlayerInput | undefined)[]): void {
     if (p.graceTicks > 0) p.graceTicks--;
     if (p.curseTicks > 0) p.curseTicks--;
     if (p.torchTicks > 0) p.torchTicks--;
+    if (p.throwWait > 0) p.throwWait--;
     const inp = inputs[p.id];
     if (p.flying > 0) {
       // at its laptop: the direction and buttons fly the plane, and the robot stays where it is (a belt under it

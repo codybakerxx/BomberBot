@@ -190,6 +190,7 @@ Each brick hides at most one power-up. You pick one up by standing on its tile. 
 - The first time a bomb is lifted its fuse is set to **3 seconds** (180 ticks), and it keeps counting down in your hands. Lifting the same bomb again later does not reset it.
 - While carrying you cannot drop another bomb.
 - **B** again throws it the way you are facing. It lands 3 tiles away.
+- After a throw there is a **very slight pause, 0.25 seconds** (`THROW_GAP_TICKS`, 15 ticks), before the glove can lift or throw again (the owner's ask, 28 November 2026). Dropping a bomb with A is not held up.
 - If the landing tile is a block, a brick or another bomb, it bounces on one tile at a time until it finds free floor. A robot does not stop it landing.
 - Thrown off the edge of the arena, it comes back in on the opposite side.
 - On Frozen Lake's ice it does not stay where it lands: it slides on the way it was thrown (below).
@@ -486,6 +487,7 @@ All of these are named constants near the top of `src/sim.ts`. Changing one chan
 | `CARRY_FUSE_TICKS` | 180 | Fuse set by the first lift (3 s) |
 | `KICK_SPEED` | 0.14 | Sliding speed of a kicked bomb in tiles per tick (8.4 a second) |
 | `THROW_TILES` | 3 | How far a throw goes |
+| `THROW_GAP_TICKS` | 15 | After a throw, how long before the glove can lift or throw again (0.25 s) |
 | `FLY_TICKS_PER_TILE` | 7 | Time a thrown bomb takes over each tile |
 | `BACK_TOLERANCE` | 0.5 | How far past an opening a turn will still step back to it, in tiles |
 | `LOOK_TICKS` | 9 | Standing between two blocks, how long a direction must be held before the robot sets off for the next opening (0.15 s). Shorter than that only turns it to look. |

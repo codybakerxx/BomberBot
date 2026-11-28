@@ -480,7 +480,8 @@ for (const level of ['hard', 'normal', 'beginner'] as const) {
 
 // CPU players all holding laptops, a few rounds: they fly, drop, and none is knocked out by its own bomb, unless
 // a rival's falling bomb set that bomb off early (a Beginner never notices one in time, and cannot allow for it:
-// experiments/cpu-matches.ts tells these apart the same way). The arenas hide the power-ups there were when
+// experiments/cpu-matches.ts tells these apart the same way), or a rival's thrown bomb landed beside it while its
+// own was down ("shut in by a rival" there: seed 6 once the pause after a throw came, 28 November 2026). The arenas hide the power-ups there were when
 // this was written, so it stays about the laptop (a trip wire a CPU player strings is a wall to it, and one shut
 // in behind its own by a rival is "shut in by a rival" in experiments/cpu-matches.ts, which this cannot tell)
 {
@@ -492,6 +493,7 @@ for (const level of ['hard', 'normal', 'beginner'] as const) {
     const bots = w.players.map((p, i) => createBot(i, (['hard', 'normal', 'beginner', 'hard'] as const)[i], seed * 10 + i));
     for (const p of w.players) p.laptop = true;
     const rushed = new Map<number, number>(); // player -> the last tick a rival's falling bomb set one of theirs off early
+    const shut = new Map<number, number>(); // player -> the last tick a rival's thrown bomb landed beside it, its own down
     for (let t = 0; t < 60 * 60 && !w.over; t++) {
       // the falling bombs landing on this tick, and where (on a brick: no blast)
       const landing = w.drops
@@ -499,17 +501,27 @@ for (const level of ['hard', 'normal', 'beginner'] as const) {
         .map((d) => ({ owner: d.owner, ...dropLanding(w, d.x, d.y, d.vx, d.vy, 1) }))
         .filter((l) => tileAt(w, l.cx, l.cy) !== SOFT);
       const fuses = new Map(w.bombs.map((b) => [b.id, b.fuse]));
+      const flying = w.bombs.filter((b) => b.state === 'air').map((b) => b.id);
       step(w, bots.map((b) => botInput(w, b)));
       for (const b of w.bombs) {
         const was = fuses.get(b.id);
         if (was === undefined || was - b.fuse <= 1) continue;
         if (landing.some((l) => l.owner !== b.owner && Math.abs(l.cx - b.cx) + Math.abs(l.cy - b.cy) <= DROP_FIRE)) rushed.set(b.owner, w.tick);
       }
+      // a rival's thrown bomb that landed this tick next to a robot with a bomb of its own down
+      for (const b of w.bombs) {
+        if (!flying.includes(b.id) || b.state === 'air') continue;
+        for (const p of w.players) {
+          if (p.id === b.owner || !p.alive || !w.bombs.some((o) => o.owner === p.id && o.state === 'ground')) continue;
+          if (Math.abs(Math.round(p.x) - b.cx) + Math.abs(Math.round(p.y) - b.cy) <= 2) shut.set(p.id, w.tick);
+        }
+      }
       for (const e of w.events) {
         if (e.type === 'launch') flights++;
         if (e.type === 'drop') drops++;
         if (e.type === 'death' && e.by === e.player) {
-          assert.ok(w.tick - (rushed.get(e.player) ?? -999) <= 60, `seed ${seed}: robot ${e.player} blasted itself`);
+          const excused = w.tick - (rushed.get(e.player) ?? -999) <= 60 || w.tick - (shut.get(e.player) ?? -999) <= 160;
+          assert.ok(excused, `seed ${seed}: robot ${e.player} blasted itself`);
         }
       }
     }
