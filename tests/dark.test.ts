@@ -10,7 +10,7 @@ import { defaultSetup, worldConfig } from '../src/setup';
 const none: PlayerInput = { dir: 0, a: false, b: false };
 const arena = (seed = 3, extra = {}): World => createWorld({ seed, players: [{ colorId: 'gold' }, { colorId: 'blue' }], roundTicks: 0, dark: true, ...extra });
 
-// the light: on at the start, out by LIGHTS_OUT, a flash every 8 s for half a second, on once the round is decided
+// the light: on at the start, out by LIGHTS_OUT, a flash every 3 s for 0.8 s, on once the round is decided
 {
   const w = arena();
   assert.equal(flashLight(w), 1, 'lights on at the start');
@@ -22,8 +22,9 @@ const arena = (seed = 3, extra = {}): World => createWorld({ seed, players: [{ c
   assert.equal(flashLight(w), 1, 'the flash');
   w.tick = FLASH_EVERY + FLASH_TICKS;
   assert.equal(flashLight(w), 0, 'then dark');
-  assert.equal(FLASH_EVERY, 5 * TICK_HZ, 'every 5 s (the owner; it was 8)');
-  assert.ok(FLASH_TICKS > TICK_HZ / 2 && FLASH_TICKS <= TICK_HZ, 'a little longer than half a second (the owner)');
+  assert.equal(FLASH_EVERY, 3 * TICK_HZ, 'every 3 s (the owner, 28 November 2026; it was 8, then 5)');
+  assert.equal(FLASH_TICKS, 48, 'for 0.8 s (the owner, 28 November 2026; it was 0.5 s, then 0.7 s)');
+  assert.ok(FLASH_TICKS > TICK_HZ / 2 && FLASH_TICKS <= TICK_HZ, 'between half a second and a second');
   const lit = createWorld({ seed: 3, players: [{ colorId: 'gold' }, { colorId: 'blue' }], roundTicks: 0 });
   lit.tick = 1000;
   assert.equal(flashLight(lit), 1, 'every other map is always lit');

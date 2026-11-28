@@ -622,11 +622,11 @@ export const FALL_TICKS = 32; // a falling block is in the air, over its shadow,
 export const START_FIRE = 1; // a blast reaches one tile each way until a flame power-up is picked up (it was 2)
 
 // ---- Blackout (the owner's design, 27 November 2026; his picks asked: 15 s and 3 tiles; the flash every 8 s for half a
-// second at first, then every 5 s and a little longer, his ask the same afternoon)
-/** the flash comes every 5 s... */
-export const FLASH_EVERY = 5 * TICK_HZ;
-/** ...and lights the whole arena for 0.7 s (rising in FLASH_RISE ticks, fading over FLASH_FADE at its end) */
-export const FLASH_TICKS = 42;
+// second at first, then every 5 s for 0.7 s, his ask the same afternoon, then every 3 s for 0.8 s, his ask, 28 November 2026)
+/** the flash comes every 3 s... */
+export const FLASH_EVERY = 3 * TICK_HZ;
+/** ...and lights the whole arena for 0.8 s (rising in FLASH_RISE ticks, fading over FLASH_FADE at its end) */
+export const FLASH_TICKS = 48;
 export const FLASH_RISE = 3;
 export const FLASH_FADE = 12;
 /** at the start of a round the lights are on, and go out over the last LIGHTS_FADE of these ticks */
